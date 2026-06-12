@@ -1,0 +1,1875 @@
+'use strict';
+
+/* =========================================================================
+   flowmap — 호출관계분석 중심 단일 뷰
+     • 진입(빈 상태): 서비스 → 경로(path) → 엔드포인트 드릴다운 브라우저.
+     • 노드(엔드포인트/검색결과) 선택 → 그 노드 기준 "호출관계분석"
+         (피호출 ← 기준 노드 → 호출, 깊이 조절).
+     • 기준 노드 "프로세스 상세보기" → 내부 controller→service→repository→infra
+         실행 흐름을 인라인으로 확장.
+   바닐라 JS, 의존성 없음.
+   ========================================================================= */
+
+const LAYER_CLASS = {
+  CONTROLLER: 'controller', SERVICE: 'service', REPOSITORY: 'repository',
+  COMPONENT: 'component', CONFIG: 'config', BATCH: 'batch',
+  EXTERNAL: 'external', RESOURCE: 'resource', OTHER: 'other',
+};
+const RES_ICON = { 'kafka-topic': '📨', 'redis': '🔴', 'db-table': '🗄️' };
+const HTTP_ORDER = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ANY'];
+function methodRank(m) { const i = HTTP_ORDER.indexOf(String(m || 'ANY').toUpperCase()); return i < 0 ? HTTP_ORDER.length : i; }
+const KIND_COLOR = {
+  internal: '#94a3b8', s2s: '#2563eb', external: '#dc2626', batch: '#7c3aed',
+  kafka: '#c026d3', redis: '#db2777', db: '#b45309',
+};
+
+// ---- 전역 데이터 / 인덱스 ----
+let NODES = [];
+let EDGES = [];
+let META = {};
+const nodeById = new Map();
+const outEdges = new Map();
+const inEdges = new Map();
+const cardEls = new Map();
+
+let currentEdges = [];
+const currentAdjOut = new Map();
+const currentAdjIn = new Map();
+
+const state = {
+  overview: false,           // 전체 서비스 지도 모드
+  service: null,             // 서비스 단위 보기(전체보기 → 서비스 드릴다운)
+  svcPick: null,             // 서비스 보기에서 선택한 노드(활성화된 연결 노드만 단계 필터)
+  infraType: null,           // 인프라/외부 타입 보기(전체보기 → 타입 노드 드릴다운)
+  fromService: null,         // 호출관계분석으로 들어온 출처 서비스(브레드크럼 체인용)
+  fromOverview: false,       // 전체보기(인프라/외부 노드)에서 드릴다운한 경우
+  focus: null,               // 호출관계분석 기준 노드 id (null → 브라우저)
+  browse: { svc: null, segs: [] },
+  sel: null,                 // 상세 패널 선택
+  expanded: false,           // 기준 노드 내부 프로세스 flow 인라인 확장
+  up: 2,
+  down: 2,
+  hideOther: true,           // OTHER 레이어 노이즈는 항상 숨김
+  hideOrphans: true,         // 호출/피호출 관계 없는 고아노드 숨김 (기본 켜짐)
+  zoom: 1,                   // 트랙패드 핀치 확대/축소 배율
+};
+const ZOOM_MIN = 0.3, ZOOM_MAX = 3;
+
+// =========================================================================
+// 부트
+// =========================================================================
+async function boot() {
+  const data = await fetch('data/graph.json').then(r => r.json());
+  NODES = data.nodes; EDGES = data.edges; META = data.meta;
+  for (const n of NODES) nodeById.set(n.id, n);
+  for (const id of nodeById.keys()) { outEdges.set(id, []); inEdges.set(id, []); }
+  for (const e of EDGES) {
+    if (outEdges.has(e.source)) outEdges.get(e.source).push(e);
+    if (inEdges.has(e.target)) inEdges.get(e.target).push(e);
+  }
+
+  parseUrl();
+  attachHandlers();
+  render();
+  renderDetail();
+
+  window.addEventListener('popstate', () => { parseUrl(); render(); renderDetail(); });
+}
+
+// =========================================================================
+// URL 동기화
+// =========================================================================
+function rawParam(name) {
+  const m = location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
+  return m ? m[1] : null;
+}
+function clampDepth(v) { v = parseInt(v, 10); return isNaN(v) ? 2 : Math.max(0, Math.min(6, v)); }
+
+function parseUrl() {
+  state.overview = rawParam('view') === 'overview';
+  const svcView = rawParam('service');
+  state.service = svcView && (META.projects || []).includes(decodeURIComponent(svcView)) ? decodeURIComponent(svcView) : null;
+  const infraView = rawParam('infra');
+  state.infraType = infraView && INFRA_LABEL[infraView] ? infraView : null;
+  if (state.service || state.infraType) state.overview = false;
+  const pick = rawParam('pick');
+  state.svcPick = state.service && pick && nodeById.has(decodeURIComponent(pick)) ? decodeURIComponent(pick) : null;
+  const focus = rawParam('focus');
+  state.focus = focus ? decodeURIComponent(focus) : null;
+  const from = rawParam('from');
+  state.fromService = from && (META.projects || []).includes(decodeURIComponent(from)) ? decodeURIComponent(from) : null;
+  state.fromOverview = rawParam('fo') === '1';
+  state.up = rawParam('up') != null ? clampDepth(rawParam('up')) : (state.service ? 1 : 2);
+  state.down = rawParam('down') != null ? clampDepth(rawParam('down')) : (state.service ? 1 : 2);
+  const sel = rawParam('sel');
+  state.sel = sel ? decodeURIComponent(sel) : (state.focus || null);
+  const svc = rawParam('svc');
+  state.browse = {
+    svc: svc ? decodeURIComponent(svc) : null,
+    segs: rawParam('path') ? decodeURIComponent(rawParam('path')).split('/').filter(Boolean) : [],
+  };
+  state.expanded = rawParam('exp') === '1';
+  if (state.focus && !nodeById.has(state.focus)) state.focus = null;
+}
+
+function pushUrl() {
+  const parts = [];
+  if (state.overview) {
+    parts.push('view=overview');
+    history.pushState({}, '', location.pathname + '?' + parts.join('&'));
+    return;
+  }
+  if (state.service || state.infraType) {
+    parts.push(state.service ? 'service=' + encodeURIComponent(state.service) : 'infra=' + encodeURIComponent(state.infraType));
+    parts.push('up=' + state.up, 'down=' + state.down);
+    if (state.service && state.svcPick) parts.push('pick=' + encodeURIComponent(state.svcPick));
+    if (state.sel) parts.push('sel=' + encodeURIComponent(state.sel));
+    history.pushState({}, '', location.pathname + '?' + parts.join('&'));
+    return;
+  }
+  if (state.focus) {
+    parts.push('focus=' + encodeURIComponent(state.focus));
+    if (state.fromService) parts.push('from=' + encodeURIComponent(state.fromService));
+    if (state.fromOverview) parts.push('fo=1');
+    parts.push('up=' + state.up, 'down=' + state.down);
+    if (state.expanded) parts.push('exp=1');
+  } else if (state.browse.svc) {
+    parts.push('svc=' + encodeURIComponent(state.browse.svc));
+    if (state.browse.segs.length) parts.push('path=' + encodeURIComponent(state.browse.segs.join('/')));
+  }
+  if (state.sel && state.sel !== state.focus) parts.push('sel=' + encodeURIComponent(state.sel));
+  history.pushState({}, '', location.pathname + (parts.length ? '?' + parts.join('&') : ''));
+}
+function shareUrl() { return location.origin + location.pathname + location.search; }
+
+// =========================================================================
+// 액션
+// =========================================================================
+function setOverview(on) {
+  state.overview = !!on;
+  if (on) { state.focus = null; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null; }
+  pushUrl(); render(); renderDetail();
+}
+function setServicePick(id) {                  // 서비스 보기: 노드 선택 → 활성화된 연결 노드만 단계 필터 (재클릭=해제)
+  if (!nodeById.has(id)) return;
+  state.svcPick = state.svcPick === id ? null : id;
+  state.sel = state.svcPick ? id : null;
+  pushUrl(); render(); renderDetail();
+}
+function setInfraType(type) {                  // 전체보기 → 인프라/외부 타입 노드 목록·관계 보기
+  if (!INFRA_LABEL[type]) return;
+  state.infraType = type; state.svcPick = null; state.overview = false; state.service = null; state.focus = null;
+  state.fromService = null; state.fromOverview = false; state.expanded = false;
+  state.up = 1; state.down = 1; state.sel = null;
+  pushUrl(); render(); renderDetail();
+}
+function setFocusFromOverview(id) {            // 전체보기 인프라/외부 노드 → 호출관계분석 (전체보기 › 노드)
+  if (!nodeById.has(id)) return;
+  state.fromOverview = true; state.fromService = null;
+  state.focus = id; state.sel = id; state.expanded = false; state.overview = false; state.service = null; state.infraType = null; state.svcPick = null;
+  const n = nodeById.get(id);
+  if (n.project) state.browse = { svc: n.project, segs: [] };
+  pushUrl(); render(); renderDetail();
+}
+function setService(svc) {                     // 전체보기 → 서비스 단위 API/관계 보기
+  if (!svc) return;
+  state.service = svc; state.overview = false; state.infraType = null; state.svcPick = null; state.focus = null; state.fromService = null; state.fromOverview = false; state.expanded = false;
+  state.up = 1; state.down = 1; state.sel = null;
+  state.browse = { svc, segs: [] };
+  pushUrl(); render(); renderDetail();
+}
+function setBrowse(svc, segs) {
+  state.browse = { svc: svc || null, segs: segs || [] };
+  state.focus = null; state.expanded = false; state.overview = false; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false;
+  state.sel = null;
+  pushUrl(); render(); renderDetail();
+}
+// origin: 생략 → 기존 출처 유지(분석 내 이동), 값/ null → 출처 설정
+function setFocus(id, origin) {                // 노드 기준 호출관계분석
+  if (!nodeById.has(id)) return;
+  if (origin !== undefined) { state.fromService = origin || null; state.fromOverview = false; }
+  state.focus = id; state.sel = id; state.expanded = false; state.overview = false; state.service = null; state.infraType = null; state.svcPick = null;
+  // 브라우저로 돌아갈 때 맥락 유지: 엔드포인트면 그 서비스/경로를 기억
+  const n = nodeById.get(id);
+  if (n.layer === 'CONTROLLER' && n.endpoint && n.project) {
+    state.browse = { svc: n.project, segs: segsOf(n) };
+  } else if (n.project) {
+    state.browse = { svc: n.project, segs: [] };
+  }
+  pushUrl(); render(); renderDetail();
+}
+function clearFocus() {
+  state.focus = null; state.expanded = false; state.overview = false; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false;
+  state.sel = null;
+  pushUrl(); render(); renderDetail();
+}
+function toggleExpand() {
+  state.expanded = !state.expanded;
+  pushUrl(); render(); renderDetail();
+}
+function setSel(id) { state.sel = id; pushUrl(); renderDetail(); renderProcessDock(); applyHighlight(); }
+
+// ---- 줌 (트랙패드 핀치 / 버튼) ----
+function applyZoom() {
+  document.getElementById('zoom-layer').style.zoom = state.zoom;
+  const pct = document.getElementById('zoom-pct');
+  if (pct) pct.textContent = Math.round(state.zoom * 100) + '%';
+  if (currentEdges.length) requestAnimationFrame(drawConnectors);
+}
+// cx,cy: 화면 좌표 기준 확대 중심(없으면 뷰포트 중앙)
+function setZoom(z, cx, cy) {
+  z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+  const old = state.zoom;
+  if (Math.abs(z - old) < 1e-4) return;
+  const flow = document.getElementById('flow');
+  const r = flow.getBoundingClientRect();
+  if (cx == null) { cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
+  // 커서 아래 콘텐츠 지점을 줌 전후 고정
+  const lx = (flow.scrollLeft + (cx - r.left)) / old;
+  const ly = (flow.scrollTop + (cy - r.top)) / old;
+  state.zoom = z;
+  applyZoom();
+  flow.scrollLeft = lx * z - (cx - r.left);
+  flow.scrollTop = ly * z - (cy - r.top);
+}
+function zoomBy(factor, cx, cy) { setZoom(state.zoom * factor, cx, cy); }
+function resetZoom() { setZoom(1); }
+function setDepth(which, dir) {
+  state[which] = Math.max(0, Math.min(6, state[which] + dir));
+  pushUrl(); render();
+}
+
+// =========================================================================
+// 공통 헬퍼
+// =========================================================================
+function byCallSite(a, b) {
+  return (a.callSiteLine == null ? 1e9 : a.callSiteLine) - (b.callSiteLine == null ? 1e9 : b.callSiteLine);
+}
+function passFilter(id) {
+  const n = nodeById.get(id);
+  if (!n) return false;
+  if (state.hideOther && n.layer === 'OTHER') return false;
+  return true;
+}
+function isInfra(id, n) {
+  n = n || nodeById.get(id);
+  if (!n) return /^(kafka:|db:|redis$|ext:)/.test(id);
+  return n.layer === 'RESOURCE' || n.layer === 'EXTERNAL';
+}
+function kindClass(e) {
+  if (e.kind === 'resource') {
+    if (e.relation && e.relation.startsWith('kafka')) return 'kafka';
+    if (e.relation && e.relation.startsWith('redis')) return 'redis';
+    if (e.relation && e.relation.startsWith('db')) return 'db';
+  }
+  return e.kind || 'internal';
+}
+function serviceEndpoints(svc) {
+  return NODES.filter(n => n.project === svc && n.layer === 'CONTROLLER' && n.endpoint);
+}
+function segsOf(ep) { return (ep.endpoint || '').split('/').filter(Boolean); }
+
+// =========================================================================
+// 라우팅
+// =========================================================================
+function render() {
+  cardEls.clear();
+  document.getElementById('grid-toolbar')?.remove();
+  if (!state.service && !state.infraType) {
+    document.getElementById('svc-filter-wrap')?.remove();
+    document.getElementById('analysis-bar').classList.remove('svc-mode');
+  }
+  document.getElementById('analysis-bar').classList.remove('no-depth');
+  document.getElementById('overview-btn').classList.toggle('active', state.overview);
+  if (state.overview) renderOverview();
+  else if (state.service) renderServiceView();
+  else if (state.infraType) renderInfraTypeView();
+  else if (state.focus && nodeById.has(state.focus)) renderAnalysis();
+  else renderBrowser();
+  renderProcessDock();
+}
+
+// 서비스 보기 선택 노드의 브레드크럼/독 표기: 엔드포인트는 "METHOD /path", 그 외는 메서드명
+function pickLabelOf(n) {
+  if (n.layer === 'CONTROLLER' && n.endpoint) return `${n.httpMethod || ''} ${n.endpoint}`.trim();
+  if (n.layer === 'RESOURCE') return (RES_ICON[n.resourceType] || '⬡') + ' ' + (n.method || n.id);
+  if (n.layer === 'EXTERNAL') return n.externalUrl || n.method || n.id;
+  return n.method || n.id;
+}
+
+// =========================================================================
+// 하단 프로세스 독 — 서비스 보기 3단계(노드 선택) 시 application 내부
+// controller→service→repository→infra 관계 전체 표시
+// =========================================================================
+// 3단계 체인 전체의 실행 그래프 수집 — 체인 시작점부터 경계(S2S/Kafka 등)를 넘어 끝까지.
+// 서비스가 바뀔 때마다 segment(컬럼 그룹)가 오른쪽으로 이어진다. 인프라 노드는 호출한 서비스의 segment 에 붙인다.
+function collectChainFlow(base) {
+  // 3단계 활성 체인 + 체인 방향 레벨 (피호출 음수 ← 기준 0 → 호출 양수)
+  const level = new Map([[base, 0]]);
+  for (const [adj, dir] of [[currentAdjOut, 1], [currentAdjIn, -1]]) {
+    let frontier = [base];
+    while (frontier.length) {
+      const next = [];
+      for (const id of frontier)
+        for (const o of adj.get(id) || [])
+          if (!level.has(o)) { level.set(o, level.get(id) + dir); next.push(o); }
+      frontier = next;
+    }
+  }
+  const active = [...level.keys()];
+
+  const segOfProject = new Map();   // project → segment index
+  const segOf = new Map();          // nodeId → segment index
+  const segFor = proj => {
+    if (!segOfProject.has(proj)) segOfProject.set(proj, segOfProject.size);
+    return segOfProject.get(proj);
+  };
+  // segment 순서 선등록: 체인 레벨이 낮은(왼쪽) 서비스부터
+  const projLevel = new Map();
+  for (const [id, lv] of level) {
+    const nn = nodeById.get(id);
+    if (!nn || isInfra(id, nn) || !nn.project) continue;
+    if (!projLevel.has(nn.project) || lv < projLevel.get(nn.project)) projLevel.set(nn.project, lv);
+  }
+  for (const proj of [...projLevel.keys()].sort((a, b) => projLevel.get(a) - projLevel.get(b))) segFor(proj);
+
+  const nodes = []; const nodeSet = new Set();
+  const edges = []; const eSeen = new Set();
+  let count = 0; const MAX = 200;
+  function place(id, callerSeg) {
+    const n = nodeById.get(id);
+    const seg = isInfra(id, n) ? callerSeg : segFor(n.project || '(unknown)');
+    if (nodeSet.has(id)) return;
+    nodeSet.add(id); nodes.push(id); segOf.set(id, seg);
+    if (count >= MAX) return;
+    for (const e of (outEdges.get(id) || []).slice().sort(byCallSite)) {
+      if (count >= MAX) break;
+      const t = e.target, tn = nodeById.get(t);
+      if (!tn || (state.hideOther && tn.layer === 'OTHER')) continue;
+      const k = id + '|' + t + '|' + (e.relation || e.kind) + '|' + (e.mode || '');   // 동기/비동기는 별개 엣지로 유지
+      if (!eSeen.has(k)) { eSeen.add(k); edges.push(e); count++; }
+      if (!nodeSet.has(t)) place(t, seg);   // 내부·경계 구분 없이 끝까지 이어감
+    }
+  }
+  // 체인 시작점(피호출 없는 노드)부터, 이어서 3단계의 모든 활성 노드를 빠짐없이 walk
+  const roots = active.filter(id => !(currentAdjIn.get(id) || []).some(s => level.has(s)));
+  const seeds = [...roots, ...active.sort((a, b) => level.get(a) - level.get(b))];
+  for (const id of seeds) {
+    if (nodeSet.has(id)) continue;
+    const n = nodeById.get(id);
+    if (!n) continue;
+    // 인프라 시드는 활성 호출자의 segment 에 붙임 (없으면 0)
+    const callerSeg = isInfra(id, n)
+      ? (segOf.get((currentAdjIn.get(id) || []).find(s => segOf.has(s))) ?? 0)
+      : 0;
+    place(id, callerSeg);
+  }
+  const segLabels = [];
+  for (const [proj, idx] of segOfProject) segLabels[idx] = proj;
+  return { nodes, edges, segOf, segLabels, truncated: count >= MAX };
+}
+
+const DOCK_COLS = [
+  ['CONTROLLER', 'Controller'], ['SERVICE', 'Service'], ['COMPONENT', 'Component'],
+  ['BATCH', 'Batch'], ['CONFIG', 'Config'], ['REPOSITORY', 'Repository'], ['INFRA', 'Infra / External'],
+];
+const DOCK_CHIP_COLOR = { Kafka: '--c-kafka', Redis: '--c-redis', DB: '--c-db' };
+
+// 독 미니 노드 카드 — 메서드/엔드포인트/클래스/설명/파일:라인까지 표시
+function dockCardEl(id, rootId) {
+  const n = nodeById.get(id);
+  const el = document.createElement('div');
+  el.className = 'dock-node' + (id === rootId ? ' root' : '');
+  el.dataset.node = id;
+  el.style.setProperty('--lc', (layerColor(n) || '#9ca3af').trim());
+  let badge, ep = '', sub = n.fqcn && n.fqcn !== n.id ? shortClass(n.fqcn) : '';
+  if (n.layer === 'CONTROLLER') {
+    badge = n.httpMethod ? `<span class="nc-badge http ${methodClass(n.httpMethod)}">${esc(n.httpMethod)}</span>` : `<span class="nc-badge">CTRL</span>`;
+    if (n.endpoint) ep = `<div class="dn-ep">${esc(n.endpoint)}</div>`;
+  } else if (n.layer === 'RESOURCE') {
+    badge = `<span class="nc-badge">${RES_ICON[n.resourceType] || '⬡'} ${esc(n.resourceType || 'resource')}</span>`;
+    sub = '';
+  } else if (n.layer === 'EXTERNAL') {
+    badge = `<span class="nc-badge">EXT</span>`;
+    if (n.externalUrl) ep = `<div class="dn-ep">${esc(n.externalUrl)}</div>`;
+  } else {
+    badge = `<span class="nc-badge">${esc((n.layer || '').slice(0, 4))}</span>`;
+  }
+  const file = n.file ? `<div class="dn-file">${esc(n.file.split('/').pop())}${n.line ? ':' + n.line : ''}</div>` : '';
+  const desc = n.description ? `<div class="dn-desc">${esc(n.description)}</div>` : '';
+  el.innerHTML = (id !== rootId ? '<button class="dn-act" title="이 노드 기준 호출관계분석">⟲</button>' : '')
+    + `<div class="dn-top">${badge}${n.async ? '<span class="nc-async">async</span>' : ''}</div>`
+    + `<div class="dn-name">${esc(n.method || id)}</div>` + ep
+    + (sub ? `<div class="dn-sub">${esc(sub)}</div>` : '') + desc + file;
+  el.title = [n.fqcn, n.file ? n.file + (n.line ? ':' + n.line : '') : null, n.description].filter(Boolean).join('\n');
+  // 핀(클릭 선택 고정) 없음 — ⟲ 버튼만 동작
+  el.querySelector('.dn-act')?.addEventListener('click', () => setFocus(id, state.service));
+  return el;
+}
+
+// 독 내부 SVG 연결선 — kind 색/화살표/sync·async 구분/relation 라벨 (hoverId: 연결선 강조)
+function drawDockConnectors(dock, edges, elOf, hoverId) {
+  const wrap = dock.querySelector('.dock-flow');
+  const svg = dock.querySelector('.dock-svg');
+  if (!wrap || !svg || !wrap.offsetParent) return;
+  const wr = wrap.getBoundingClientRect();
+  svg.setAttribute('width', wrap.scrollWidth);
+  svg.setAttribute('height', wrap.scrollHeight);
+  const used = new Set();
+  let paths = '', labels = '';
+  for (const e of edges) {
+    const sc = elOf.get(e.source), tc = elOf.get(e.target);
+    if (!sc || !tc) continue;
+    const sr = sc.getBoundingClientRect(), tr = tc.getBoundingClientRect();
+    const y1 = sr.top + sr.height / 2 - wr.top, y2 = tr.top + tr.height / 2 - wr.top;
+    let x1, x2;
+    if (tr.left >= sr.right - 1) { x1 = sr.right - wr.left; x2 = tr.left - wr.left; }
+    else if (tr.right <= sr.left + 1) { x1 = sr.left - wr.left; x2 = tr.right - wr.left; }
+    else { x1 = sr.right - wr.left; x2 = tr.left - wr.left; }
+    const fwd = x2 >= x1;
+    const dx = Math.max(24, Math.abs(x2 - x1) * 0.45);
+    const kc = kindClass(e); used.add(kc);
+    const isAsync = e.mode === 'async';
+    const stateCls = hoverId ? (e.source === hoverId || e.target === hoverId ? ' hot' : ' dim') : '';
+    paths += `<path class="edge-path k-${kc}${isAsync ? ' async' : ''}${stateCls}" `
+      + `d="M${x1.toFixed(1)},${y1.toFixed(1)} C${(x1 + (fwd ? dx : -dx)).toFixed(1)},${y1.toFixed(1)} ${(x2 - (fwd ? dx : -dx)).toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" `
+      + `marker-end="url(#dk-${kc})"/>`;
+    let rel = e.kind === 'resource' ? (e.relation || '') : e.kind === 's2s' ? 'S2S' : e.kind === 'external' ? 'EXT' : '';
+    if (isAsync) rel = rel ? rel + ' · async' : 'async';
+    if (rel) labels += `<text class="edge-label dock-el${stateCls}" x="${((x1 + x2) / 2).toFixed(1)}" y="${((y1 + y2) / 2 - 5).toFixed(1)}" fill="${KIND_COLOR[kc] || '#94a3b8'}">${esc(rel)}</text>`;
+  }
+  let defs = '<defs>';
+  for (const kc of used)
+    defs += `<marker id="dk-${kc}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${KIND_COLOR[kc] || '#94a3b8'}"/></marker>`;
+  svg.innerHTML = defs + '</defs>' + paths + labels;
+}
+
+let dockDraw = null;   // 창 크기 변경 시 재그리기용
+function renderProcessDock() {
+  const dock = document.getElementById('process-dock');
+  const base = state.service ? state.svcPick : null;
+  if (!base || !nodeById.has(base)) { dock.classList.add('hidden'); dock.innerHTML = ''; dockDraw = null; return; }
+  const n = nodeById.get(base);
+  const { nodes, edges, segOf, segLabels, truncated } = collectChainFlow(base);
+
+  // 레이어 구성 요약 칩
+  const counts = new Map();
+  for (const nid of nodes) {
+    const nn = nodeById.get(nid);
+    const key = nn.layer === 'RESOURCE'
+      ? (nn.resourceType === 'kafka-topic' ? 'Kafka' : nn.resourceType === 'db-table' ? 'DB' : 'Redis')
+      : nn.layer;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const cs = getComputedStyle(document.documentElement);
+  const chipOrder = ['CONTROLLER', 'SERVICE', 'COMPONENT', 'BATCH', 'CONFIG', 'REPOSITORY', 'EXTERNAL', 'Kafka', 'Redis', 'DB'];
+  const chips = chipOrder.filter(k => counts.has(k)).map(k => {
+    const color = cs.getPropertyValue(DOCK_CHIP_COLOR[k] || ('--c-' + (LAYER_CLASS[k] || 'other')));
+    return `<span class="dock-chip"><i style="background:${color}"></i>${esc(k)}${counts.get(k) > 1 ? ' ×' + counts.get(k) : ''}</span>`;
+  }).join('<span class="dock-arrow">→</span>');
+
+  dock.innerHTML = `
+    <div class="dock-resizer" title="드래그해서 높이 조절"></div>
+    <div class="dock-head">
+      <span class="dock-title">🧭 프로세스 흐름 <b>${esc(pickLabelOf(n))}</b><span class="ab-proj">체인 전체</span></span>
+      <span class="dock-path">${chips}</span>
+      <span class="ab-proj">노드 ${nodes.length} · 호출 ${edges.length}${truncated ? ' (일부만 표시)' : ''}</span>
+      <span class="dock-legend"><i class="dl-solid"></i>sync<i class="dl-dash"></i>async</span>
+      <button class="dock-close" title="선택 해제">✕</button>
+    </div>
+    ${n.description ? `<div class="dock-desc">${esc(n.description)}</div>` : ''}
+    <div class="dock-body"><div class="dock-flow"><svg class="dock-svg"></svg><div class="dock-cols"></div></div></div>`;
+
+  // segment(서비스)별로 레이어 컬럼을 오른쪽으로 이어 배치:
+  //   [svc A] controller → service → … → infra | [svc B] controller → … | …
+  const colsEl = dock.querySelector('.dock-cols');
+  const elOf = new Map();
+  const colKeyOf = nn => isInfra(nn.id, nn) ? 'INFRA' : (nn.layer || 'OTHER');
+  for (let s = 0; s < segLabels.length; s++) {
+    const segNodes = nodes.filter(nid => segOf.get(nid) === s);
+    if (!segNodes.length) continue;
+    const groups = new Map();
+    for (const nid of segNodes) {
+      const k = colKeyOf(nodeById.get(nid));
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(nid);
+    }
+    const segEl = document.createElement('div');
+    segEl.className = 'dock-seg';
+    segEl.innerHTML = `<div class="dock-seg-head">🧩 ${esc(segLabels[s])}</div><div class="dock-seg-cols"></div>`;
+    const segCols = segEl.querySelector('.dock-seg-cols');
+    const appendCol = (label, list) => {
+      const col = document.createElement('div');
+      col.className = 'dock-col';
+      col.innerHTML = `<div class="dock-col-head">${esc(label)} · ${list.length}</div>`;
+      for (const nid of list) { const card = dockCardEl(nid, base); col.appendChild(card); elOf.set(nid, card); }
+      segCols.appendChild(col);
+    };
+    for (const [key, label] of DOCK_COLS) if (groups.has(key)) { appendCol(label, groups.get(key)); groups.delete(key); }
+    for (const [key, list] of groups) appendCol(key, list);   // 정의 밖 레이어 잔여
+    colsEl.appendChild(segEl);
+  }
+
+  dock.querySelector('.dock-close').addEventListener('click', () => setServicePick(state.svcPick));
+  const savedH = parseInt(localStorage.getItem('fm.dockH'), 10);
+  if (savedH) dock.style.height = savedH + 'px';
+  dock.querySelector('.dock-resizer').addEventListener('mousedown', e => startDockResize(e, dock));
+  dock.classList.remove('hidden');
+
+  // hover 강조: 연결선을 노드 위로 올려(.overlay) hot/dim 으로 어디와 연결됐는지 표시
+  let hoverId = null;
+  const applyDockHover = id => {
+    hoverId = id;
+    const neighbors = new Set();
+    if (id) for (const e of edges) {
+      if (e.source === id) neighbors.add(e.target);
+      if (e.target === id) neighbors.add(e.source);
+    }
+    for (const [nid, el] of elOf) el.classList.toggle('dim', !!id && nid !== id && !neighbors.has(nid));
+    dock.querySelector('.dock-svg').classList.toggle('overlay', !!id);
+    drawDockConnectors(dock, edges, elOf, hoverId);
+  };
+  for (const [nid, el] of elOf) {
+    el.addEventListener('mouseenter', () => applyDockHover(nid));
+    el.addEventListener('mouseleave', () => applyDockHover(null));
+  }
+  dockDraw = () => drawDockConnectors(dock, edges, elOf, hoverId);
+  requestAnimationFrame(dockDraw);
+}
+
+// ---- 패널 크기 조절 (하단 독 높이 / 상세 패널 너비) ----
+function dragResize(e, handle, onMove, onEnd) {
+  e.preventDefault();
+  handle.classList.add('active');
+  const move = ev => {
+    onMove(ev);
+    if (currentEdges.length) requestAnimationFrame(drawConnectors);
+    if (dockDraw) requestAnimationFrame(dockDraw);
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    handle.classList.remove('active');
+    onEnd();
+  };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+function startDockResize(e, dock) {
+  const startY = e.clientY, startH = dock.getBoundingClientRect().height;
+  dragResize(e, e.target,
+    ev => {
+      const h = Math.max(140, Math.min(window.innerHeight * 0.8, startH + (startY - ev.clientY)));
+      dock.style.height = h + 'px';
+    },
+    () => localStorage.setItem('fm.dockH', Math.round(dock.getBoundingClientRect().height)));
+}
+function setupDetailResizer() {
+  const handle = document.getElementById('detail-resizer');
+  const detail = document.getElementById('detail');
+  const savedW = parseInt(localStorage.getItem('fm.detailW'), 10);
+  if (savedW) detail.style.width = savedW + 'px';
+  handle.addEventListener('mousedown', e => {
+    const startX = e.clientX, startW = detail.getBoundingClientRect().width;
+    dragResize(e, handle,
+      ev => {
+        const w = Math.max(240, Math.min(window.innerWidth * 0.6, startW + (startX - ev.clientX)));
+        detail.style.width = w + 'px';
+      },
+      () => localStorage.setItem('fm.detailW', Math.round(detail.getBoundingClientRect().width)));
+  });
+}
+
+// =========================================================================
+// 서비스 보기 — 전체보기 → 서비스의 모든 API + 호출/피호출 관계
+// =========================================================================
+const LAYER_FLOW = ['CONTROLLER', 'SERVICE', 'COMPONENT', 'REPOSITORY', 'CONFIG', 'BATCH', 'EXTERNAL', 'RESOURCE'];
+const byNodeName = (a, b) => String(a.endpoint || a.method || a.id).localeCompare(String(b.endpoint || b.method || b.id));
+
+function renderServiceView() {
+  const svc = state.service;
+  const eps = serviceEndpoints(svc);                 // 1단계 path로 그룹할 기준 API
+  const epIds = new Set(eps.map(n => n.id));
+  const onActivate = id => setFocus(id, svc);        // 중심 ⟲ 버튼 → 호출관계분석 드릴다운
+  const onPick = id => {                             // 카드 클릭 → 활성화된 연결 노드만 단계 필터
+    // 3단계(기준 노드 선택 후)에서는 어떤 노드를 클릭해도 기준 유지 — 선택만 이동(하단 흐름도 갱신)
+    // 해제는 브레드크럼 서비스명 / Esc / 독 ✕ 로만
+    if (state.svcPick) { setSel(id); return; }
+    setServicePick(id);
+  };
+
+  const bar = document.getElementById('analysis-bar');
+  bar.classList.remove('hidden');
+  bar.classList.add('svc-mode', 'no-depth');
+  document.getElementById('back-to-browse').textContent = '⟵ 전체보기';
+  const pickNode = state.svcPick ? nodeById.get(state.svcPick) : null;
+  document.getElementById('ab-focus').innerHTML =
+    `<span class="ab-focus-label svc">서비스</span> <b>${esc(svc)}</b>`
+    + `<span class="ab-proj">${eps.length} APIs</span>`;
+
+  // 브레드크럼: 전체보기 › 서비스 (노드 선택 시 › {METHOD} {API PATH} 3단계)
+  const bc = document.getElementById('breadcrumb');
+  bc.style.display = 'flex';
+  bc.innerHTML = `<a class="bc-link" id="bc-overview">🗺️ 전체보기</a>`
+    + `<span class="bc-sep">›</span>`
+    + (pickNode
+      ? `<a class="bc-link" id="bc-svc">${esc(svc)}</a>`
+        + `<span class="bc-sep">›</span><span class="bc-focus">${esc(pickLabelOf(pickNode))}</span>`
+      : `<span class="bc-focus">${esc(svc)}</span>`);
+  bc.querySelector('#bc-overview').addEventListener('click', () => setOverview(true));
+  bc.querySelector('#bc-svc')?.addEventListener('click', () => setService(svc));
+
+  // 교차-경계 엣지를 source-서비스(out) / target-서비스(in) 별로 인덱싱
+  const crossOut = new Map(), crossIn = new Map();
+  for (const e of EDGES) {
+    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external') continue;
+    const sn = nodeById.get(e.source), tn = nodeById.get(e.target);
+    if (!sn || !tn) continue;
+    if (sn.project && !isInfra(e.source, sn)) { (crossOut.get(sn.project) || crossOut.set(sn.project, []).get(sn.project)).push(e); }
+    if (tn.project && !isInfra(e.target, tn)) { (crossIn.get(tn.project) || crossIn.set(tn.project, []).get(tn.project)).push(e); }
+  }
+  const bucketOf = id => {
+    const n = nodeById.get(id);
+    if (n && n.project && !isInfra(id, n)) return { key: 'svc:' + n.project, label: '🧩 ' + n.project, rank: 0, svc: n.project };
+    const t = infraGroup(id);
+    return { key: 'infra:' + t, label: INFRA_ICON[t] + ' ' + INFRA_LABEL[t], rank: ({ kafka: 1, redis: 2, db: 3, external: 4, other: 5 })[t] || 5, svc: null };
+  };
+  const orphan = new Set();          // 기준 컬럼에 보강할 호출부/내부 노드
+  const derived = [];
+  const seen = new Set();
+  const addEdge = (s, t, e) => { const k = s + '|' + t; if (s && t && !seen.has(k)) { seen.add(k); derived.push({ source: s, target: t, kind: e.kind, relation: e.relation, mode: e.mode }); } };
+
+  // 방향별 스텝 BFS (서비스/인프라 단위로 한 단계씩 확장, 노드는 실제 대상)
+  function bfsSteps(dir) {
+    const adj = dir === 'out' ? crossOut : crossIn;
+    const steps = [], rep = new Map(), expanded = new Set([svc]);
+    let frontier = [svc];
+    for (let step = 1; step <= 6 && frontier.length; step++) {
+      const m = new Map();
+      for (const S of frontier) {
+        for (const e of adj.get(S) || []) {
+          const farId = dir === 'out' ? e.target : e.source;   // 상대편 노드
+          const fn = nodeById.get(farId);
+          if (!fn) continue;
+          const b = bucketOf(farId);
+          if (b.svc === svc) continue;                          // 원점으로 되돌아가는 건 제외
+          if (!m.has(b.key)) m.set(b.key, { label: b.label, rank: b.rank, svc: b.svc, nodes: new Set() });
+          m.get(b.key).nodes.add(farId);
+          // 연결선
+          if (S === svc) {
+            if (dir === 'out') {
+              const reps = resolveEndpoints(e.source).filter(x => epIds.has(x));
+              if (reps.length) reps.forEach(ep => addEdge(ep, farId, e));
+              else { orphan.add(e.source); addEdge(e.source, farId, e); }
+            } else {
+              if (epIds.has(e.target)) addEdge(farId, e.target, e);
+              else { orphan.add(e.target); addEdge(farId, e.target, e); }
+            }
+          } else {
+            const r = rep.get('svc:' + S);
+            if (r) dir === 'out' ? addEdge(r, farId, e) : addEdge(farId, r, e);
+          }
+          if (b.svc && !rep.has('svc:' + b.svc)) rep.set('svc:' + b.svc, farId);
+        }
+      }
+      if (!m.size) break;
+      steps.push(m);
+      const next = [];
+      for (const g of m.values()) if (g.svc && !expanded.has(g.svc)) { expanded.add(g.svc); next.push(g.svc); }
+      frontier = next;
+    }
+    return steps;
+  }
+  const fSteps = bfsSteps('out');   // 호출 단계 (오른쪽)
+  const bSteps = bfsSteps('in');    // 피호출 단계 (왼쪽)
+
+  const colsEl = document.getElementById('columns');
+  colsEl.className = '';
+  colsEl.innerHTML = '';
+
+  const renderStep = (stepMap, headLabel) => {
+    const col = document.createElement('div');
+    col.className = 'column step-col';
+    col.appendChild(mkHead(headLabel));
+    for (const bkt of [...stepMap.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label)))
+      appendGroupBox(col, bkt.label, [...bkt.nodes].map(id => nodeById.get(id)).filter(Boolean).sort(byNodeName), onActivate, onPick);
+    colsEl.appendChild(col);
+  };
+
+  // 피호출 단계 (왼쪽, 깊은 단계가 가장 바깥)
+  for (let i = bSteps.length - 1; i >= 0; i--) renderStep(bSteps[i], `피호출 ${i + 1}단계`);
+
+  // 기준 컬럼 (중앙): API 1단계 path 그룹 + (해석 안 된) 기타 호출부
+  const col0 = document.createElement('div');
+  col0.className = 'column base svc-base';
+  col0.appendChild(mkHead(`API 목록 · ${eps.length}`));
+  const segKey = n => { const s = segsOf(n)[0]; return s ? '/' + s : '/'; };
+  renderGroupedBoxes(col0, eps.map(n => n.id), onActivate, segKey, onPick);
+  if (orphan.size) appendGroupBox(col0, '기타 호출부', [...orphan].map(id => nodeById.get(id)).filter(Boolean).sort(byNodeName), onActivate, onPick);
+  colsEl.appendChild(col0);
+
+  // 호출 단계 (오른쪽)
+  for (let i = 0; i < fSteps.length; i++) renderStep(fSteps[i], `호출 ${i + 1}단계`);
+
+  currentEdges = derived.filter(e => cardEls.has(e.source) && cardEls.has(e.target));
+  buildCurrentAdj();
+  setupServiceFilter(eps.length);
+  requestAnimationFrame(() => { pruneOrphans(); applyPickFilter(); drawConnectors(); applyHighlight(); });
+}
+
+// 내부 노드를 호출하는 같은 서비스의 controller 엔드포인트로 거슬러 해석 (없으면 자기 자신)
+function resolveEndpoints(startId) {
+  const start = nodeById.get(startId);
+  if (!start) return [startId];
+  if (start.layer === 'CONTROLLER') return [startId];
+  const proj = start.project;
+  const seen = new Set([startId]);
+  const found = [];
+  let frontier = [startId];
+  for (let d = 0; d < 8 && found.length < 6; d++) {
+    const next = [];
+    for (const id of frontier)
+      for (const e of inEdges.get(id) || []) {
+        if (e.kind !== 'internal') continue;
+        const s = e.source, sn = nodeById.get(s);
+        if (!sn || sn.project !== proj || seen.has(s)) continue;
+        seen.add(s);
+        if (sn.layer === 'CONTROLLER') { if (!found.includes(s)) found.push(s); }
+        else next.push(s);
+      }
+    frontier = next; if (!next.length) break;
+  }
+  return found.length ? found : [startId];
+}
+
+function mkHead(text) {
+  const h = document.createElement('div');
+  h.className = 'column-head';
+  h.textContent = text;
+  return h;
+}
+// 기준 컬럼 맨 위 "연결된 노드만" 토글
+function orphanToggleEl() {
+  const wrap = document.createElement('label');
+  wrap.className = 'col-orphan-toggle';
+  wrap.title = '호출/피호출 관계가 없는 노드를 숨깁니다';
+  wrap.innerHTML = `<input type="checkbox" ${state.hideOrphans ? 'checked' : ''}> 연결된 노드만`;
+  wrap.querySelector('input').addEventListener('change', e => { state.hideOrphans = e.target.checked; render(); });
+  return wrap;
+}
+// 노드 목록을 테두리 박스로 (label=null 이면 헤더 없이 박스만)
+function appendGroupBox(col, label, nodeList, onActivate, onPick) {
+  const box = document.createElement('div');
+  box.className = 'path-group';
+  box.dataset.path = label || '';
+  if (label != null) box.innerHTML = `<div class="pg-head"><span class="pg-path">${esc(label)}</span><span class="pg-count">${nodeList.length}</span></div>`;
+  const body = document.createElement('div');
+  body.className = 'pg-body';
+  for (const n of nodeList) {
+    const isApi = n.layer === 'CONTROLLER' && n.endpoint;
+    const card = makeCard(n.id, { route: isApi, onActivate, onPick });
+    card.dataset.filter = [n.endpoint, n.httpMethod, n.method, n.fqcn, n.description, n.externalUrl].filter(Boolean).join(' ').toLowerCase();
+    body.appendChild(card);
+  }
+  box.appendChild(body);
+  col.appendChild(box);
+}
+
+// 인프라/외부 타입 보기 — 전체보기 → 타입의 모든 노드 + 호출/피호출 관계 (서비스 보기와 동일 레이아웃)
+function renderInfraTypeView() {
+  const type = state.infraType;
+  const bases = NODES.filter(n => isInfra(n.id, n) && infraGroup(n.id) === type).map(n => n.id);
+
+  const bar = document.getElementById('analysis-bar');
+  bar.classList.remove('hidden');
+  bar.classList.add('svc-mode', 'no-depth');
+  document.getElementById('back-to-browse').textContent = '⟵ 전체보기';
+  document.getElementById('ab-focus').innerHTML =
+    `<span class="ab-focus-label svc">${INFRA_ICON[type]} 인프라</span> <b>${esc(INFRA_LABEL[type])}</b>`
+    + `<span class="ab-proj">${bases.length}개</span>`;
+
+  const bc = document.getElementById('breadcrumb');
+  bc.style.display = 'flex';
+  bc.innerHTML = `<a class="bc-link" id="bc-overview">🗺️ 전체보기</a>`
+    + `<span class="bc-sep">›</span><span class="bc-focus">${INFRA_ICON[type]} ${esc(INFRA_LABEL[type])}</span>`;
+  bc.querySelector('#bc-overview').addEventListener('click', () => setOverview(true));
+
+  renderRelationColumns(bases, c => `${esc(INFRA_LABEL[type])} · ${c}`, id => setFocusFromOverview(id), infraBoxKey);
+}
+
+// 인프라/외부 노드의 그룹 박스 키 (외부는 클라이언트 클래스, 그 외는 타입)
+function infraBoxKey(n) {
+  const id = n.id;
+  if (/^ext:/.test(id)) return id.slice(4).split('#')[0] || '외부';
+  if (/^kafka:/.test(id)) return '토픽';
+  if (/^db:/.test(id)) return '테이블';
+  if (/redis/.test(id)) return 'Redis';
+  return n.resourceType || '리소스';
+}
+
+// 서비스/인프라 공통: 피호출 ← (그룹 박스: 기준 목록) → 호출 열 렌더 + 목록 필터 (깊이 1단계 고정)
+function renderRelationColumns(bases, baseHeadLabel, onActivate, keyOf) {
+  const { assigned, columns } = computeColumns(bases, false);
+  const levels = [...columns.keys()].sort((a, b) => a - b);
+  const colsEl = document.getElementById('columns');
+  colsEl.className = '';
+  colsEl.innerHTML = '';
+  for (const lv of levels) {
+    const col = document.createElement('div');
+    col.className = 'column' + (lv === 0 ? ' base svc-base' : '');
+    if (lv === 0) col.appendChild(orphanToggleEl());
+    const head = document.createElement('div');
+    head.className = 'column-head';
+    head.textContent = lv === 0 ? baseHeadLabel(columns.get(0).length) : lv < 0 ? `피호출 ${-lv}` : `호출 ${lv}`;
+    col.appendChild(head);
+    if (lv === 0) renderGroupedBoxes(col, columns.get(0), onActivate, keyOf);
+    else for (const id of columns.get(lv)) col.appendChild(makeCard(id, { onActivate }));
+    colsEl.appendChild(col);
+  }
+  currentEdges = EDGES.filter(e => assigned.has(e.source) && assigned.has(e.target));
+  buildCurrentAdj();
+  setupServiceFilter(columns.get(0).length);
+  requestAnimationFrame(() => { pruneOrphans(); drawConnectors(); applyHighlight(); });
+}
+
+// 기준 목록을 그룹 키별 박스로 (col 에 추가)
+function renderGroupedBoxes(col, ids, onActivate, keyOf, onPick) {
+  const groups = new Map();
+  for (const id of ids) {
+    const n = nodeById.get(id);
+    const key = keyOf(n);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(n);
+  }
+  const order = [...groups.keys()].sort((a, b) => a === '/' ? 1 : b === '/' ? -1 : String(a).localeCompare(String(b)));
+  for (const key of order) {
+    const list = groups.get(key).slice().sort((a, b) => {
+      const c = (a.endpoint || a.method || '').localeCompare(b.endpoint || b.method || '');
+      return c !== 0 ? c : methodRank(a.httpMethod) - methodRank(b.httpMethod);
+    });
+    const box = document.createElement('div');
+    box.className = 'path-group';
+    box.dataset.path = key;
+    box.innerHTML = `<div class="pg-head"><span class="pg-path">${esc(key)}</span><span class="pg-count">${list.length}</span></div>`;
+    const body = document.createElement('div');
+    body.className = 'pg-body';
+    for (const n of list) {
+      const isApi = n.layer === 'CONTROLLER' && n.endpoint;
+      const card = makeCard(n.id, { route: isApi, onActivate, onPick });
+      card.dataset.filter = [n.endpoint, n.httpMethod, n.method, n.fqcn, n.description, n.externalUrl].filter(Boolean).join(' ').toLowerCase();
+      body.appendChild(card);
+    }
+    box.appendChild(body);
+    col.appendChild(box);
+  }
+}
+
+// 서비스 API 목록 좁히기 (중앙 컬럼 카드 필터)
+function setupServiceFilter(total) {
+  const bar = document.getElementById('analysis-bar');
+  let wrap = document.getElementById('svc-filter-wrap');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'svc-filter-wrap';
+    wrap.innerHTML = `<input id="svc-filter" type="text" autocomplete="off" spellcheck="false" placeholder="목록 좁히기…">`
+      + `<span id="svc-filter-count" class="grid-count"></span>`;
+    bar.insertBefore(wrap, document.querySelector('.ab-depth'));
+  }
+  const input = wrap.querySelector('#svc-filter');
+  const countEl = wrap.querySelector('#svc-filter-count');
+  countEl.textContent = `${total}개`;
+  input.value = '';
+  input.oninput = () => {
+    const q = input.value.trim().toLowerCase();
+    let shown = 0;
+    document.querySelectorAll('#columns .node-card[data-filter]').forEach(c => {
+      const hit = !q || (c.dataset.filter || '').includes(q);
+      c.classList.toggle('hidden', !hit);
+      if (hit) shown++;
+    });
+    // 빈 path 그룹 박스 숨김
+    document.querySelectorAll('#columns .path-group').forEach(g => {
+      const any = [...g.querySelectorAll('.node-card[data-filter]')].some(c => !c.classList.contains('hidden'));
+      g.classList.toggle('hidden', !any);
+    });
+    countEl.textContent = q ? `${shown}/${total}개` : `${total}개`;
+    requestAnimationFrame(drawConnectors);
+  };
+}
+
+// =========================================================================
+// 전체보기 — 서비스 레벨 의존 지도 (서비스 간 s2s·이벤트·인프라)
+// =========================================================================
+function superId(id) {
+  const n = nodeById.get(id);
+  if (n && n.project && !isInfra(id, n)) return 'svc:' + n.project;
+  return 'infra:' + infraGroup(id);   // 인프라/외부는 타입(kafka/redis/db/external) 단위로 합침
+}
+const INFRA_LABEL = { kafka: 'Kafka 토픽', redis: 'Redis', db: 'DB 테이블', external: '외부 API', other: '기타' };
+const INFRA_ICON = { kafka: '📨', redis: '🔴', db: '🗄️', external: '🌐', other: '⬡' };
+
+function buildServiceGraph() {
+  const agg = new Map();   // key → { source, target, kc, count, async }
+  for (const e of EDGES) {
+    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external') continue;
+    const ss = superId(e.source), st = superId(e.target);
+    if (ss === st) continue;
+    const kc = e.kind === 's2s' ? 's2s' : kindClass(e);
+    const key = ss + '|' + st + '|' + kc;
+    let a = agg.get(key);
+    if (!a) { a = { source: ss, target: st, kc, count: 0, async: false }; agg.set(key, a); }
+    a.count++; if (e.mode === 'async') a.async = true;
+  }
+  return [...agg.values()];
+}
+
+function renderOverview() {
+  document.getElementById('analysis-bar').classList.add('hidden');
+  document.getElementById('flow-canvas').querySelector('#grid-toolbar')?.remove();
+
+  const bc = document.getElementById('breadcrumb');
+  bc.style.display = 'flex';
+  bc.innerHTML = `<span class="bc-focus">🗺️ 전체 서비스 지도</span>`
+    + `<span class="bc-sep">·</span>`
+    + `<span class="ov-hint">서비스 간 <b style="color:var(--e-s2s)">s2s 호출</b> · `
+    + `<b style="color:var(--e-kafka)">이벤트/인프라</b> 의존 — 카드 클릭 시 해당 서비스로 이동</span>`;
+
+  const edges = buildServiceGraph();
+
+  // 서비스 간 s2s 의존으로 좌→우 레이어(호출자 → 제공자) 계산
+  const svcs = META.projects.slice();
+  const sAdj = new Map(svcs.map(s => [s, []]));
+  for (const e of edges) {
+    if (e.kc !== 's2s') continue;
+    if (e.source.startsWith('svc:') && e.target.startsWith('svc:'))
+      sAdj.get(e.source.slice(4))?.push(e.target.slice(4));
+  }
+  const level = new Map(svcs.map(s => [s, 0]));
+  for (let i = 0; i < svcs.length; i++) {
+    let changed = false;
+    for (const [s, outs] of sAdj)
+      for (const t of outs)
+        if (level.get(t) < level.get(s) + 1) { level.set(t, level.get(s) + 1); changed = true; }
+    if (!changed) break;
+  }
+  const maxLevel = Math.max(0, ...svcs.map(s => level.get(s)));
+
+  // 인프라(공유): 타입(kafka/redis/db/external) 단위로 합친 super-id + 멤버 집합
+  const infraTypes = new Set();
+  const infraMembers = {};
+  for (const e of edges) {
+    for (const sup of [e.source, e.target]) if (sup.startsWith('infra:')) infraTypes.add(sup.slice(6));
+  }
+  for (const e of EDGES) {
+    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external') continue;
+    for (const ep of [e.source, e.target]) {
+      if (superId(ep).startsWith('infra:')) {
+        const t = infraGroup(ep);
+        (infraMembers[t] = infraMembers[t] || new Set()).add(ep);
+      }
+    }
+  }
+
+  // 서비스별 통계
+  const stats = {};
+  for (const s of svcs) stats[s] = { eps: 0, nodes: 0 };
+  for (const n of NODES) {
+    if (n.project && stats[n.project]) {
+      stats[n.project].nodes++;
+      if (n.layer === 'CONTROLLER' && n.endpoint) stats[n.project].eps++;
+    }
+  }
+
+  const colsEl = document.getElementById('columns');
+  colsEl.className = 'overview';
+  colsEl.innerHTML = '';
+
+  for (let lv = 0; lv <= maxLevel; lv++) {
+    const inLevel = svcs.filter(s => level.get(s) === lv).sort((a, b) => stats[b].eps - stats[a].eps);
+    if (!inLevel.length) continue;
+    const col = document.createElement('div');
+    col.className = 'column';
+    const head = document.createElement('div');
+    head.className = 'column-head';
+    head.textContent = lv === 0 ? '진입 / 호출' : lv === maxLevel ? '제공 서비스' : `의존 ${lv}`;
+    col.appendChild(head);
+    for (const s of inLevel) col.appendChild(makeServiceCard(s, stats[s]));
+    colsEl.appendChild(col);
+  }
+  if (infraTypes.size) {
+    const col = document.createElement('div');
+    col.className = 'column infra-col';
+    const head = document.createElement('div');
+    head.className = 'column-head infra';
+    head.textContent = '공유 인프라 / 외부';
+    col.appendChild(head);
+    for (const t of ['kafka', 'redis', 'db', 'external', 'other']) {
+      if (!infraTypes.has(t)) continue;
+      col.appendChild(makeInfraTypeCard(t, (infraMembers[t] || new Set()).size));
+    }
+    colsEl.appendChild(col);
+  }
+
+  currentEdges = edges;
+  buildCurrentAdj();
+  requestAnimationFrame(() => { pruneOrphans(); drawConnectors(); applyHighlight(); });
+}
+
+function makeServiceCard(svc, st) {
+  const card = document.createElement('div');
+  card.className = 'node-card ov-svc' + (('svc:' + svc) === state.sel ? ' sel' : '');
+  card.dataset.node = 'svc:' + svc;
+  card.innerHTML = `<div class="ov-svc-name">🧩 ${esc(svc)}</div>`
+    + `<div class="ov-svc-sub">${st.eps} endpoints · ${st.nodes} nodes</div>`;
+  card.addEventListener('click', () => setService(svc));
+  card.addEventListener('mouseenter', () => alignNeighbors('svc:' + svc));
+  card.addEventListener('mouseleave', () => clearAlign());
+  cardEls.set('svc:' + svc, card);
+  return card;
+}
+
+function infraGroup(id) {
+  const n = nodeById.get(id);
+  if (n) {
+    if (n.layer === 'EXTERNAL') return 'external';
+    if (n.resourceType === 'kafka-topic') return 'kafka';
+    if (n.resourceType === 'db-table') return 'db';
+    if (n.resourceType === 'redis') return 'redis';
+  }
+  if (/^kafka:/.test(id)) return 'kafka';
+  if (/^db:/.test(id)) return 'db';
+  if (/redis/.test(id)) return 'redis';
+  if (/^ext:/.test(id)) return 'external';
+  return 'other';
+}
+
+// 전체보기: 인프라/외부 타입을 하나의 노드로 표현
+function makeInfraTypeCard(type, count) {
+  const sup = 'infra:' + type;
+  const clsMap = { kafka: 'nc-r-kafka-topic', redis: 'nc-r-redis', db: 'nc-r-db-table', external: 'nc-l-external', other: 'nc-l-other' };
+  const card = document.createElement('div');
+  card.className = `node-card ov-infra ${clsMap[type] || 'nc-l-other'}` + (sup === state.sel ? ' sel' : '');
+  card.dataset.node = sup;
+  card.innerHTML = `<div class="ov-svc-name"><span class="nc-icon">${INFRA_ICON[type]}</span> ${esc(INFRA_LABEL[type])}</div>`
+    + `<div class="ov-svc-sub">${count} ${type === 'external' ? 'endpoints' : 'nodes'}</div>`;
+  card.addEventListener('click', () => setInfraType(type));
+  card.addEventListener('mouseenter', () => alignNeighbors(sup));
+  card.addEventListener('mouseleave', () => clearAlign());
+  cardEls.set(sup, card);
+  return card;
+}
+
+// =========================================================================
+// 진입 브라우저 — 서비스 → 경로 → 엔드포인트 드릴다운
+// =========================================================================
+const MAX_PATH_DEPTH = 2;
+
+function groupLevel(svc, segs) {
+  const eps = serviceEndpoints(svc).filter(ep => {
+    const s = segsOf(ep);
+    return segs.every((seg, i) => s[i] === seg);
+  });
+  const L = segs.length;
+  if (L >= MAX_PATH_DEPTH) return { leaves: eps.slice(), groupCards: [] };
+
+  const leaves = [];
+  const groups = new Map();
+  for (const ep of eps) {
+    const s = segsOf(ep);
+    if (s.length === L) leaves.push(ep);
+    else { const k = s[L]; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(ep); }
+  }
+  const groupCards = [];
+  for (const [seg, list] of groups) {
+    if (list.length === 1) leaves.push(list[0]);
+    else groupCards.push({ seg, list });
+  }
+  return { leaves, groupCards };
+}
+
+function renderBrowser() {
+  document.getElementById('analysis-bar').classList.add('hidden');
+  currentEdges = []; buildCurrentAdj();
+  document.getElementById('connectors').innerHTML = '';
+  renderBreadcrumb();
+
+  const flowCanvas = document.getElementById('flow-canvas');
+  flowCanvas.querySelector('#grid-toolbar')?.remove();
+
+  const grid = document.getElementById('columns');
+  grid.className = 'browse-grid';
+  grid.innerHTML = '';
+
+  if (!state.browse.svc) {
+    const list = META.projects
+      .map(svc => ({ svc, count: serviceEndpoints(svc).length }))
+      .sort((a, b) => b.count - a.count);
+    const maxCount = list.reduce((m, x) => Math.max(m, x.count), 1);
+    for (const { svc, count } of list) {
+      grid.appendChild(makeBrowseCard('svc', svc, count + ' endpoints', count,
+        () => setBrowse(svc, []), { ratio: count / maxCount, empty: count === 0 }));
+    }
+    requestAnimationFrame(applyHighlight);
+    return;
+  }
+
+  const { leaves, groupCards } = groupLevel(state.browse.svc, state.browse.segs);
+  groupCards.sort((a, b) => a.seg.localeCompare(b.seg));
+  leaves.sort((a, b) => {
+    const c = (a.endpoint || '').localeCompare(b.endpoint || '');
+    return c !== 0 ? c : methodRank(a.httpMethod) - methodRank(b.httpMethod);
+  });
+
+  if (!leaves.length && !groupCards.length) {
+    const up = document.createElement('div');
+    up.className = 'browse-empty';
+    up.innerHTML = `<div class="be-ico">🔍</div>`
+      + `<div class="be-msg">이 경로에 표시할 엔드포인트가 없습니다.</div>`
+      + `<div class="be-actions">`
+      + (state.browse.segs.length ? `<button class="btn" data-be="up">⟵ 상위 경로로</button>` : '')
+      + `<button class="btn" data-be="reset">서비스 목록으로</button></div>`;
+    grid.appendChild(up);
+    up.querySelector('[data-be="up"]')?.addEventListener('click',
+      () => setBrowse(state.browse.svc, state.browse.segs.slice(0, -1)));
+    up.querySelector('[data-be="reset"]')?.addEventListener('click', () => setBrowse(null, []));
+    return;
+  }
+
+  const total = leaves.length + groupCards.length;
+  const toolbar = document.createElement('div');
+  toolbar.id = 'grid-toolbar';
+  toolbar.innerHTML = `<input id="grid-filter" type="text" autocomplete="off" spellcheck="false"`
+    + ` placeholder="이 목록에서 경로·메서드 좁히기…">`
+    + `<span id="grid-count" class="grid-count">${total}개</span>`;
+  flowCanvas.insertBefore(toolbar, document.getElementById('zoom-layer'));   // grid(#columns)는 zoom-layer 안에 있음
+
+  for (const g of groupCards) {
+    const path = '/' + [...state.browse.segs, g.seg].join('/');
+    const card = makeBrowseCard('group', '/' + g.seg, path, g.list.length,
+      () => setBrowse(state.browse.svc, [...state.browse.segs, g.seg]));
+    card.dataset.filter = (path + ' ' + g.seg).toLowerCase();
+    grid.appendChild(card);
+  }
+  for (const ep of leaves) {
+    const card = makeCard(ep.id, { route: true, inBrowser: true });
+    card.dataset.filter = [ep.endpoint, ep.httpMethod, ep.method, ep.fqcn, ep.description]
+      .filter(Boolean).join(' ').toLowerCase();
+    grid.appendChild(card);
+  }
+
+  const filterEl = toolbar.querySelector('#grid-filter');
+  const countEl = toolbar.querySelector('#grid-count');
+  filterEl.addEventListener('input', () => {
+    const q = filterEl.value.trim().toLowerCase();
+    let shown = 0;
+    grid.querySelectorAll('.node-card, .browse-card').forEach(c => {
+      const hit = !q || (c.dataset.filter || '').includes(q);
+      c.classList.toggle('hidden', !hit);
+      if (hit) shown++;
+    });
+    countEl.textContent = q ? `${shown}/${total}개` : `${total}개`;
+  });
+  requestAnimationFrame(applyHighlight);
+}
+
+function renderBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  bc.style.display = 'flex';
+  const parts = [`<a class="bc-link" data-svc="" data-segs="">📚 서비스</a>`];
+  if (state.browse.svc) {
+    parts.push(`<a class="bc-link" data-svc="${escAttr(state.browse.svc)}" data-segs="">${esc(state.browse.svc)}</a>`);
+    let acc = [];
+    for (const seg of state.browse.segs) {
+      acc = [...acc, seg];
+      parts.push(`<a class="bc-link" data-svc="${escAttr(state.browse.svc)}" data-segs="${escAttr(acc.join('/'))}">/${esc(seg)}</a>`);
+    }
+  }
+  let html = parts.join('<span class="bc-sep">›</span>');
+  if (state.focus && nodeById.has(state.focus)) {
+    const n = nodeById.get(state.focus);
+    html += `<span class="bc-sep">›</span><span class="bc-focus">🎯 ${esc(n.method || state.focus)} 호출관계분석</span>`;
+  }
+  bc.innerHTML = html;
+  bc.querySelectorAll('.bc-link').forEach(a => a.addEventListener('click', () => {
+    setBrowse(a.dataset.svc || null, a.dataset.segs ? a.dataset.segs.split('/') : []);
+  }));
+}
+
+// 전체보기 › 노드명 (전체보기 인프라/외부 노드에서 드릴다운한 경우)
+function renderFocusFromOverviewCrumb(n) {
+  const bc = document.getElementById('breadcrumb');
+  bc.style.display = 'flex';
+  bc.innerHTML = `<a class="bc-link" id="bc-ov">🗺️ 전체보기</a>`
+    + `<span class="bc-sep">›</span>`
+    + `<span class="bc-focus">🎯 ${esc(n.method || n.externalUrl || state.focus)} 호출관계분석</span>`;
+  bc.querySelector('#bc-ov').addEventListener('click', () => setOverview(true));
+}
+
+// 전체보기 › 서비스 › 노드명 (서비스 보기에서 드릴다운한 경우)
+function renderFocusFromServiceCrumb(n) {
+  const bc = document.getElementById('breadcrumb');
+  bc.style.display = 'flex';
+  bc.innerHTML = `<a class="bc-link" id="bc-ov">🗺️ 전체보기</a>`
+    + `<span class="bc-sep">›</span>`
+    + `<a class="bc-link" id="bc-svc">${esc(state.fromService)}</a>`
+    + `<span class="bc-sep">›</span>`
+    + `<span class="bc-focus">🎯 ${esc(n.method || state.focus)} 호출관계분석</span>`;
+  bc.querySelector('#bc-ov').addEventListener('click', () => setOverview(true));
+  bc.querySelector('#bc-svc').addEventListener('click', () => setService(state.fromService));
+}
+
+function makeBrowseCard(kind, label, sub, count, onClick, opts) {
+  opts = opts || {};
+  const card = document.createElement('div');
+  card.className = 'node-card browse-card bc-' + kind + (opts.empty ? ' is-empty' : '');
+  const bar = kind === 'svc'
+    ? `<div class="svc-bar"><span style="width:${Math.round((opts.ratio || 0) * 100)}%"></span></div>`
+    : '';
+  card.innerHTML = `<div class="bc-ico">${kind === 'svc' ? '🧩' : '📁'}</div>`
+    + `<div class="bc-main"><div class="nc-method">${esc(label)}</div>`
+    + `<div class="nc-class">${esc(sub)}</div>${bar}</div>`
+    + `<div class="bc-count">${count}<span>›</span></div>`;
+  card.addEventListener('click', onClick);
+  return card;
+}
+
+// =========================================================================
+// 호출관계분석 — 기준 노드 중심 열 배치
+// =========================================================================
+function computeColumns(bases, skipDown) {
+  bases = (bases || [state.focus]).filter(id => nodeById.has(id));
+  const assigned = new Map();
+  const columns = new Map();
+  const place = (id, level) => {
+    if (assigned.has(id)) return;
+    assigned.set(id, level);
+    if (!columns.has(level)) columns.set(level, []);
+    columns.get(level).push(id);
+  };
+  bases.forEach(id => place(id, 0));
+
+  // 호출(callee) — 단일 분석 확장 모드에서는 인라인 프로세스 flow가 대신하므로 열 생략
+  if (!skipDown) {
+    let frontier = bases.slice();
+    for (let d = 0; d < state.down; d++) {
+      const next = [];
+      for (const id of frontier)
+        for (const e of (outEdges.get(id) || []).slice().sort(byCallSite)) {
+          if (assigned.has(e.target) || !passFilter(e.target)) continue;
+          place(e.target, d + 1); next.push(e.target);
+        }
+      frontier = next; if (!next.length) break;
+    }
+  }
+  // 피호출(caller)
+  let frontier = bases.slice();
+  for (let d = 0; d < state.up; d++) {
+    const next = [];
+    for (const id of frontier)
+      for (const e of (inEdges.get(id) || []).slice().sort(byCallSite)) {
+        if (assigned.has(e.source) || !passFilter(e.source)) continue;
+        place(e.source, -(d + 1)); next.push(e.source);
+      }
+    frontier = next; if (!next.length) break;
+  }
+  return { assigned, columns };
+}
+
+function renderAnalysis() {
+  const n = nodeById.get(state.focus);
+  const bar = document.getElementById('analysis-bar');
+  bar.classList.remove('hidden');
+  document.getElementById('back-to-browse').textContent =
+    state.fromOverview ? '⟵ 전체보기' : state.fromService ? '⟵ ' + state.fromService : '⟵ 목록';
+  document.getElementById('ab-focus').innerHTML =
+    `<span class="ab-focus-label">기준</span> <b>${esc(n.method || state.focus)}</b>`
+    + (n.project ? `<span class="ab-proj">${esc(n.project)}</span>` : '');
+  document.getElementById('up-val').textContent = state.up;
+  document.getElementById('down-val').textContent = state.down;
+
+  if (state.fromOverview) renderFocusFromOverviewCrumb(n);
+  else if (state.fromService) renderFocusFromServiceCrumb(n);
+  else renderBreadcrumb();
+
+  const { assigned, columns } = computeColumns([state.focus], state.expanded);
+  const levels = [...columns.keys()].sort((a, b) => a - b);
+  const colsEl = document.getElementById('columns');
+  colsEl.className = '';
+  colsEl.innerHTML = '';
+  for (const lv of levels) {
+    const col = document.createElement('div');
+    col.className = 'column' + (lv === 0 ? ' base' : '');
+    if (lv === 0) col.appendChild(orphanToggleEl());
+    const head = document.createElement('div');
+    head.className = 'column-head';
+    head.textContent = lv === 0 ? '기준 API' : lv < 0 ? `피호출 ${-lv}` : `호출 ${lv}`;
+    col.appendChild(head);
+    for (const id of columns.get(lv)) col.appendChild(makeCard(id, { isFocus: lv === 0 }));
+    if (lv === 0 && state.expanded) col.appendChild(makeProcessFlow(state.focus));
+    colsEl.appendChild(col);
+  }
+  currentEdges = EDGES.filter(e => assigned.has(e.source) && assigned.has(e.target));
+  buildCurrentAdj();
+  requestAnimationFrame(() => { pruneOrphans(); drawConnectors(); applyHighlight(); });
+}
+
+// =========================================================================
+// 프로세스 flow — 기준 노드 내부 실행 흐름(인라인 트리)
+// =========================================================================
+function makeProcessFlow(rootId) {
+  const wrap = document.createElement('div');
+  wrap.className = 'flow-tree';
+  wrap.innerHTML = `<div class="flow-tree-head">프로세스 상세 — 내부 호출 흐름</div>`;
+
+  const seen = new Set([rootId]);
+  let count = 0; const MAX = 120;
+  const rows = [];
+  (function walk(id, depth) {
+    if (count >= MAX || depth > 7) return;
+    for (const e of (outEdges.get(id) || []).slice().sort(byCallSite)) {
+      if (count >= MAX) break;
+      const t = e.target, tn = nodeById.get(t);
+      if (!tn) continue;
+      if (state.hideOther && tn.layer === 'OTHER') continue;
+      const recurse = e.kind === 'internal' && !seen.has(t);
+      count++;
+      rows.push(flowRowHtml(t, e, depth));
+      if (recurse) { seen.add(t); walk(t, depth + 1); }
+    }
+  })(rootId, 0);
+
+  if (!rows.length) {
+    wrap.innerHTML += `<div class="hint" style="padding:6px 2px">내부 호출이 감지되지 않았습니다.</div>`;
+  } else {
+    wrap.innerHTML += rows.join('');
+    if (count >= MAX) wrap.innerHTML += `<div class="hint" style="padding:6px 2px">… 일부만 표시 (상한 ${MAX})</div>`;
+  }
+  wrap.querySelectorAll('.flow-row').forEach(r => {
+    r.addEventListener('click', () => {
+      const id = r.dataset.node;
+      if (nodeById.has(id)) setSel(id);
+    });
+    r.querySelector('.flow-recenter')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setFocus(r.dataset.node);
+    });
+  });
+  return wrap;
+}
+
+function flowRowHtml(id, e, depth) {
+  const n = nodeById.get(id);
+  const color = layerColor(n);
+  const kc = kindClass(e);
+  const relLabel = e.kind === 's2s' ? 'S2S'
+    : e.kind === 'external' ? 'EXT'
+    : e.kind === 'resource' ? (e.relation || 'io')
+    : e.kind === 'batch' ? (e.relation || 'batch') : '';
+  const asyncTag = e.mode === 'async' ? '<span class="flow-async">async</span>' : '';
+  const line = e.callSiteLine != null ? `<span class="flow-line">L${e.callSiteLine}</span>` : '';
+  let label;
+  if (n.layer === 'CONTROLLER' && n.endpoint) label = `${n.httpMethod || ''} ${n.endpoint}`.trim();
+  else if (n.layer === 'RESOURCE') label = (RES_ICON[n.resourceType] || '⬡') + ' ' + (n.method || id);
+  else if (n.layer === 'EXTERNAL') label = n.externalUrl || n.method || id;
+  else label = n.method || id;
+  const cls = shortClass(n.fqcn || '');
+  return `<div class="flow-row" data-node="${escAttr(id)}" style="margin-left:${Math.min(depth, 7) * 18}px">`
+    + `<span class="flow-dot" style="background:${color}"></span>`
+    + `<span class="flow-method">${esc(label)}</span>`
+    + (cls && n.layer !== 'RESOURCE' && n.layer !== 'EXTERNAL' ? `<span class="flow-class">${esc(cls)}</span>` : '')
+    + (relLabel ? `<span class="flow-rel k-${kc}">${esc(relLabel)}</span>` : '')
+    + asyncTag + line
+    + `<button class="flow-recenter" title="이 노드를 기준으로 분석">중심 ⟲</button>`
+    + `</div>`;
+}
+
+// =========================================================================
+// 카드 (실제 그래프 노드)
+// =========================================================================
+function methodClass(m) { return 'm-' + String(m || 'any').toLowerCase(); }
+
+function makeCard(id, opts) {
+  opts = opts || {};
+  const n = nodeById.get(id);
+  const isFocus = !!opts.isFocus;
+  const layerCls = n.layer === 'RESOURCE'
+    ? 'nc-r-' + (n.resourceType || 'redis')
+    : 'nc-l-' + (LAYER_CLASS[n.layer] || 'other');
+  const isRoute = opts.route && n.layer === 'CONTROLLER' && n.endpoint;
+  const card = document.createElement('div');
+  card.className = `node-card ${layerCls}` + (isFocus ? ' base' : '') + (id === state.sel ? ' sel' : '')
+    + (isRoute ? ' is-route nc-m-' + String(n.httpMethod || 'any').toLowerCase() : '');
+  card.dataset.node = id;
+
+  let badge;
+  if (n.layer === 'CONTROLLER' && n.httpMethod) badge = `<span class="nc-badge http ${methodClass(n.httpMethod)}">${esc(n.httpMethod)}</span>`;
+  else if (n.layer === 'RESOURCE') badge = `<span class="nc-icon">${RES_ICON[n.resourceType] || '⬡'}</span>`;
+  else if (n.layer === 'EXTERNAL') badge = `<span class="nc-badge">EXT</span>`;
+  else badge = `<span class="nc-badge">${esc((n.layer || '').slice(0, 4))}</span>`;
+  const asyncTag = n.async ? '<span class="nc-async">async</span>' : '';
+
+  let body;
+  if (isRoute) {
+    const segs = segsOf(n);
+    const depth = (state.browse.svc && !state.focus) ? state.browse.segs.length : 0;
+    const remaining = '/' + segs.slice(depth).join('/');
+    body = `<div class="nc-route">${esc(remaining)}</div>`
+      + `<div class="nc-submethod">${esc(n.method || n.id)}${n.fqcn && n.fqcn !== n.id ? ' · ' + esc(shortClass(n.fqcn)) : ''}</div>`;
+    if (n.description) body += `<div class="nc-desc">${esc(n.description)}</div>`;
+  } else {
+    body = `<div class="nc-method">${esc(n.method || n.id)}</div>`;
+    if (n.layer !== 'RESOURCE' && n.fqcn && n.fqcn !== n.id) body += `<div class="nc-class">${esc(shortClass(n.fqcn))}</div>`;
+    if (n.endpoint) body += `<div class="nc-endpoint">${esc(n.endpoint)}</div>`;
+    if (n.externalUrl) body += `<div class="nc-endpoint">${esc(n.externalUrl)}</div>`;
+    if (n.description) body += `<div class="nc-desc">${esc(n.description)}</div>`;
+  }
+  const proj = (n.project && state.focus && !opts.inBrowser) ? `<span class="nc-proj">${esc(n.project)}</span>` : '';
+
+  // 액션 버튼
+  let act = '';
+  if (!opts.inBrowser) {
+    if (isFocus) {
+      act = `<button class="nc-act expand">${state.expanded ? '프로세스 접기 ▲' : '프로세스 상세보기 ▼'}</button>`;
+    } else if (!isInfra(id, n) || opts.onPick) {
+      act = `<button class="nc-act center" title="이 노드를 기준으로 분석">중심 ⟲</button>`;
+    }
+  }
+  card.innerHTML = `${act}<div class="nc-top">${badge}${asyncTag}</div>${body}${proj}`;
+  card.addEventListener('click', (e) => {
+    if (e.target.classList.contains('expand')) { toggleExpand(); return; }
+    if (e.target.classList.contains('center')) { opts.onActivate ? opts.onActivate(id) : setFocus(id); return; }
+    if (opts.onPick) { opts.onPick(id); return; }           // 서비스 보기: 노드 클릭 → 활성화된 연결 노드만 단계 필터
+    if (opts.onActivate) { opts.onActivate(id); return; }   // 그룹(서비스/인프라) 보기: 노드 클릭 → 드릴다운
+    if (opts.inBrowser) { setFocus(id, null); return; }     // 브라우저 엔드포인트 → 호출관계분석
+    setSel(id);
+  });
+  card.addEventListener('mouseenter', () => alignNeighbors(id));
+  card.addEventListener('mouseleave', () => clearAlign());
+  cardEls.set(id, card);
+  return card;
+}
+
+// =========================================================================
+// SVG 커넥터
+// =========================================================================
+function buildCurrentAdj() {
+  currentAdjOut.clear(); currentAdjIn.clear();
+  for (const e of currentEdges) {
+    if (!currentAdjOut.has(e.source)) currentAdjOut.set(e.source, []);
+    if (!currentAdjIn.has(e.target)) currentAdjIn.set(e.target, []);
+    currentAdjOut.get(e.source).push(e.target);
+    currentAdjIn.get(e.target).push(e.source);
+  }
+}
+function drawConnectors() {
+  const svg = document.getElementById('connectors');
+  const layer = document.getElementById('zoom-layer');
+  const z = state.zoom || 1;
+  const crect = layer.getBoundingClientRect();
+  // crect 은 줌이 적용된 화면 좌표 → 로컬(미줌) 좌표로 환산(/z)
+  svg.setAttribute('width', layer.scrollWidth);
+  svg.setAttribute('height', layer.scrollHeight);
+  const usedKinds = new Set();
+  let paths = '', labels = '';
+  for (const e of currentEdges) {
+    const sc = cardEls.get(e.source), tc = cardEls.get(e.target);
+    if (!sc || !tc) continue;
+    if (!sc.offsetParent || !tc.offsetParent) continue;   // 숨겨진(필터/고아/그룹접힘) 노드 제외
+    const sr = sc.getBoundingClientRect(), tr = tc.getBoundingClientRect();
+    const y1 = (sr.top + sr.height / 2 - crect.top) / z, y2 = (tr.top + tr.height / 2 - crect.top) / z;
+    let x1, x2;
+    if (tr.left >= sr.right - 1) { x1 = (sr.right - crect.left) / z; x2 = (tr.left - crect.left) / z; }
+    else if (tr.right <= sr.left + 1) { x1 = (sr.left - crect.left) / z; x2 = (tr.right - crect.left) / z; }
+    else { x1 = (sr.right - crect.left) / z; x2 = (tr.left - crect.left) / z; }
+    const fwd = x2 >= x1;
+    const dx = Math.max(28, Math.abs(x2 - x1) * 0.45);
+    const c1x = x1 + (fwd ? dx : -dx), c2x = x2 - (fwd ? dx : -dx);
+    const kc = e.kc || kindClass(e); usedKinds.add(kc);
+    const asyncCls = (e.async || e.mode === 'async') ? ' async' : '';
+    const stateCls = hoverId ? (e.source === hoverId || e.target === hoverId ? ' hot' : ' dim') : '';
+    const wStyle = e.count ? ` style="stroke-width:${Math.min(7, 1.8 + e.count * 0.7).toFixed(1)}"` : '';
+    paths += `<path class="edge-path k-${kc}${asyncCls}${stateCls}" data-s="${escAttr(e.source)}" data-t="${escAttr(e.target)}"${wStyle} `
+      + `d="M${x1.toFixed(1)},${y1.toFixed(1)} C${c1x.toFixed(1)},${y1.toFixed(1)} ${c2x.toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" `
+      + `marker-end="url(#arr-${kc})"/>`;
+    if (e.count && e.count > 1) {
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 6;
+      labels += `<text class="edge-label" x="${mx.toFixed(1)}" y="${my.toFixed(1)}" fill="${KIND_COLOR[kc] || '#94a3b8'}">×${e.count}</text>`;
+    }
+  }
+  let defs = '<defs>';
+  for (const kc of usedKinds)
+    defs += `<marker id="arr-${kc}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${KIND_COLOR[kc] || '#94a3b8'}"/></marker>`;
+  svg.innerHTML = defs + '</defs>' + paths + labels;
+}
+function highlightNeighbors(id) {
+  if (!cardEls.size || !currentEdges.length) return;
+  const neighbors = new Set([id]);
+  (currentAdjOut.get(id) || []).forEach(t => neighbors.add(t));
+  (currentAdjIn.get(id) || []).forEach(s => neighbors.add(s));
+  // 박스 단위: 관련 노드가 든 박스는 살리고 나머지 박스는 투명
+  const liveBoxes = new Set();
+  for (const nid of neighbors) { const el = cardEls.get(nid); const box = el && el.closest('.path-group'); if (box) liveBoxes.add(box); }
+  document.querySelectorAll('#columns .path-group').forEach(box => box.classList.toggle('dim', !liveBoxes.has(box)));
+  // 박스에 안 든 카드(예: 호출관계분석 focus 뷰)는 카드 단위로 처리
+  for (const [nid, el] of cardEls) {
+    if (el.closest('.path-group')) el.classList.remove('dim');
+    else el.classList.toggle('dim', !neighbors.has(nid));
+  }
+  // 엣지 강조는 drawConnectors(hoverId)에서 처리
+}
+function applyHighlight() {
+  for (const [nid, el] of cardEls) { el.classList.remove('dim'); el.classList.toggle('sel', nid === state.sel); }
+  document.querySelectorAll('#columns .path-group.dim').forEach(b => b.classList.remove('dim'));
+  document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('dim'); p.classList.remove('hot'); });
+}
+
+// 호출/피호출 관계가 없는 고아노드 숨김 (currentEdges 기준)
+function pruneOrphans() {
+  if (!state.hideOrphans) return;
+  const connected = new Set();
+  for (const e of currentEdges) { connected.add(e.source); connected.add(e.target); }
+  if (state.focus) connected.add(state.focus);
+  for (const [id, el] of cardEls) el.classList.toggle('orphan-hidden', !connected.has(id));
+  // 비어버린 그룹 박스 숨김
+  document.querySelectorAll('#columns .path-group').forEach(g => {
+    g.classList.toggle('orphan-hidden', !g.querySelector('.node-card:not(.orphan-hidden):not(.hidden)'));
+  });
+}
+
+// 서비스 보기: 선택 노드(svcPick) 기준 — 연결된(활성화된) 노드만 단계 표시
+function applyPickFilter() {
+  if (!state.service) return;
+  document.querySelectorAll('#columns .pick-hidden').forEach(el => el.classList.remove('pick-hidden'));
+  for (const [, el] of cardEls) el.classList.remove('picked');
+  const pick = state.svcPick;
+  if (!pick || !cardEls.has(pick)) return;
+  // 선택 노드에서 호출(out)·피호출(in) 방향으로 닿는 체인 전체가 활성 집합
+  const active = new Set([pick]);
+  for (const adj of [currentAdjOut, currentAdjIn]) {
+    let frontier = [pick];
+    while (frontier.length) {
+      const next = [];
+      for (const id of frontier)
+        for (const o of adj.get(id) || [])
+          if (!active.has(o)) { active.add(o); next.push(o); }
+      frontier = next;
+    }
+  }
+  for (const [id, el] of cardEls) el.classList.toggle('pick-hidden', !active.has(id));
+  cardEls.get(pick).classList.add('picked');
+  // 비어버린 그룹 박스 / 단계 컬럼 숨김
+  document.querySelectorAll('#columns .path-group').forEach(g => {
+    g.classList.toggle('pick-hidden', !g.querySelector('.node-card:not(.pick-hidden):not(.orphan-hidden):not(.hidden)'));
+  });
+  document.querySelectorAll('#columns .column').forEach(c => {
+    c.classList.toggle('pick-hidden', !c.querySelector('.node-card:not(.pick-hidden):not(.orphan-hidden):not(.hidden)'));
+  });
+}
+
+// hover 시 연결된 노드를 hover 노드와 같은 행(Y)으로 부드럽게 이동
+let alignRAF = null, alignFrames = 0;
+let hoverId = null;            // 현재 hover한 노드 (커넥터 강조용)
+function animateConnectors() {
+  alignFrames = 18;
+  if (alignRAF) return;
+  const tick = () => { drawConnectors(); if (--alignFrames > 0) alignRAF = requestAnimationFrame(tick); else alignRAF = null; };
+  alignRAF = requestAnimationFrame(tick);
+}
+// 현재 적용된(애니메이션 중 포함) translateY 값(로컬 px)
+function currentTy(el) {
+  const t = getComputedStyle(el).transform;
+  if (!t || t === 'none') return 0;
+  try { return new DOMMatrixReadOnly(t).m42; } catch (e) { return 0; }
+}
+// 카드가 속한 "이동 단위" — 그룹 박스(.path-group)가 있으면 박스 통째로, 없으면 카드 자신
+function moverOf(el) { return el.closest('.path-group') || el; }
+function resetMovers() {
+  document.querySelectorAll('#columns .path-group[style*="transform"]').forEach(b => { b.style.transform = ''; b.classList.remove('aligning-box'); });
+  for (const [, el] of cardEls) if (el.style.transform) { el.style.transform = ''; el.classList.remove('aligning'); }
+}
+function alignNeighbors(id) {
+  hoverId = id;
+  highlightNeighbors(id);
+  const hc = cardEls.get(id);
+  if (!hc || !currentEdges.length) { animateConnectors(); return; }
+  const z = state.zoom || 1;
+  // 카드의 "기준(base) 중심 Y" — 자신과 그룹 박스의 현재 transform 을 모두 역산 (애니메이션 위치 무관)
+  const baseCenterOf = card => {
+    const r = card.getBoundingClientRect();
+    let ty = currentTy(card);
+    const box = card.closest('.path-group');
+    if (box) ty += currentTy(box);
+    return r.top + r.height / 2 - ty * z;
+  };
+  const neighbors = new Set([...(currentAdjOut.get(id) || []), ...(currentAdjIn.get(id) || [])]);
+  const hoveredMover = moverOf(hc);
+
+  // 연결된 노드들을 "이동 단위(그룹 박스)"로 묶음
+  const movers = new Map();   // moverEl -> [neighborCardEls]
+  for (const nid of neighbors) {
+    const el = cardEls.get(nid);
+    if (!el || el === hc || !el.offsetParent) continue;
+    const mv = moverOf(el);
+    if (mv === hoveredMover) continue;          // 같은 그룹 안의 이웃은 이동 불필요
+    if (!movers.has(mv)) movers.set(mv, []);
+    movers.get(mv).push(el);
+  }
+
+  // 이번 hover와 무관한 이동단위/잔상 복귀
+  resetMovers();
+  const hCenter = baseCenterOf(hc);
+
+  // 같은 컬럼에 이동단위가 여러 개면 hover 행 주변으로 분산 (겹침 방지)
+  const byCol = new Map();
+  for (const [mv, cards] of movers) {
+    const col = mv.closest('.column') || mv.parentElement;
+    if (!byCol.has(col)) byCol.set(col, []);
+    byCol.get(col).push({ mv, cards, anchor: cards.reduce((s, c) => s + baseCenterOf(c), 0) / cards.length });
+  }
+  for (const [col, items] of byCol) {
+    items.sort((p, q) => p.anchor - q.anchor);
+    const n = items.length;
+    const plan = items.map((it, i) => {
+      const h = it.mv.getBoundingClientRect().height;
+      return { it, h, center: hCenter + (i - (n - 1) / 2) * (h + 12) };
+    });
+    // hover 노드가 상단에 있으면 목표 위치가 컬럼 위로 벗어남 → 헤더 아래로 전체 보정
+    const head = col.querySelector('.column-head');
+    const minY = (head ? head.getBoundingClientRect().bottom : col.getBoundingClientRect().top) + 6 * z;
+    let push = 0;
+    for (const p of plan) push = Math.max(push, minY - (p.center - p.h / 2));
+    for (const p of plan) {
+      const isBox = p.it.mv.classList.contains('path-group');
+      const delta = (p.center + push - p.it.anchor) / z;   // 연결 노드를 hover 행에 맞춤 (그룹 통째로 이동)
+      p.it.mv.classList.add(isBox ? 'aligning-box' : 'aligning');
+      p.it.mv.style.transform = `translateY(${delta.toFixed(1)}px)`;
+    }
+  }
+  animateConnectors();
+}
+function clearAlign() {
+  hoverId = null;
+  resetMovers();
+  applyHighlight();
+  animateConnectors();
+}
+
+// =========================================================================
+// 상세 패널
+// =========================================================================
+function renderDetail() {
+  const el = document.getElementById('detail');
+  const id = state.sel;
+  const n = id ? nodeById.get(id) : null;
+  // 엔드포인트 또는 인프라 노드를 선택했을 때만 패널 표시
+  const show = !!n && ((n.layer === 'CONTROLLER' && n.endpoint) || isInfra(id, n));
+  const toggled = el.classList.contains('hidden') === show;
+  el.classList.toggle('hidden', !show);
+  document.getElementById('detail-resizer').classList.toggle('hidden', !show);
+  if (toggled && currentEdges.length) requestAnimationFrame(drawConnectors);   // 패널 표시 여부 변경 → 캔버스 폭 변동
+  if (!show) { el.innerHTML = ''; return; }
+  const isFocus = id === state.focus;
+  const rows = [];
+  const row = (k, v) => { if (v != null && v !== '') rows.push(`<tr><td class="k">${k}</td><td class="v">${esc(String(v))}</td></tr>`); };
+  row('layer', n.layer);
+  row('project', n.project);
+  if (n.httpMethod || n.endpoint) row('endpoint', `${n.httpMethod || ''} ${n.endpoint || ''}`.trim());
+  row('externalUrl', n.externalUrl);
+  row('resource', n.resourceType);
+  row('returnType', n.returnType);
+  row('async', n.async ? 'true' : null);
+  if (n.file) row('file', `${n.file}${n.line ? ':' + n.line : ''}`);
+  row('id', n.id);
+
+  let actions = '';
+  if (isFocus) {
+    actions = `<button class="btn primary" data-act="expand">${state.expanded ? '▲ 프로세스 접기' : '▼ 프로세스 상세보기'}</button>`;
+  } else if (!isInfra(id, n)) {
+    actions = `<button class="btn primary" data-act="focus">🎯 이 노드 기준 호출관계분석</button>`;
+  }
+
+  el.innerHTML = `
+    <div class="detail-head">
+      <div class="detail-method">${esc(n.method || n.id)}</div>
+      <div class="detail-class">${esc(n.fqcn || '')}</div>
+      <div class="detail-tags">
+        <span class="tag">${esc(n.layer)}</span>
+        ${n.project ? `<span class="tag">${esc(n.project)}</span>` : ''}
+        ${n.httpMethod ? `<span class="tag ${methodClass(n.httpMethod)}">${esc(n.httpMethod)}</span>` : ''}
+        ${n.async ? '<span class="tag">async</span>' : ''}
+      </div>
+    </div>
+    ${n.description ? `<div class="nc-desc" style="color:var(--text-dim);margin-bottom:8px">${esc(n.description)}</div>` : ''}
+    <div class="detail-actions">${actions}<button class="btn" data-act="share">🔗 이 화면 공유 링크 복사</button></div>
+    <table class="detail-table">${rows.join('')}</table>`;
+
+  el.querySelector('[data-act="focus"]')?.addEventListener('click', () => setFocus(id));
+  el.querySelector('[data-act="expand"]')?.addEventListener('click', () => toggleExpand());
+  el.querySelector('[data-act="share"]')?.addEventListener('click', (e) => copyToClipboard(shareUrl(), e.target));
+}
+
+// =========================================================================
+// 검색
+// =========================================================================
+function runSearch(q) {
+  const box = document.getElementById('search-results');
+  q = q.trim().toLowerCase();
+  if (!q) { box.classList.add('hidden'); return; }
+  const hits = [];
+  for (const n of NODES) {
+    if (matches(q, n.method, n.fqcn, n.id, n.endpoint, n.description)) { hits.push(n); if (hits.length >= 40) break; }
+  }
+  if (!hits.length) { box.innerHTML = '<div class="search-empty">결과 없음</div>'; box.classList.remove('hidden'); return; }
+  box.innerHTML = hits.map(n => {
+    const sub = n.layer === 'CONTROLLER' && n.endpoint ? esc(n.endpoint) : esc(shortClass(n.fqcn || n.id));
+    const mb = (n.layer === 'CONTROLLER' && n.httpMethod)
+      ? `<span class="nc-badge http ${methodClass(n.httpMethod)} si-mb">${esc(n.httpMethod)}</span>`
+      : `<span class="legend-swatch" style="background:${layerColor(n)}"></span>`;
+    return `<div class="search-item" data-id="${escAttr(n.id)}" tabindex="-1">
+      ${mb}
+      <span class="si-text"><span class="si-method">${markHit(n.method || n.id, q)}</span>
+      <span class="si-sub">  ${markHit(sub, q)}${n.project ? ' · ' + esc(n.project) : ''}</span></span>
+      <button class="si-go" title="이 노드 기준 호출관계분석">↗</button></div>`;
+  }).join('');
+  box.classList.remove('hidden');
+  box.querySelectorAll('.search-item').forEach(it => {
+    it.addEventListener('click', () => {
+      setFocus(it.dataset.id, null);
+      document.getElementById('search').value = '';
+      box.classList.add('hidden');
+    });
+  });
+}
+function markHit(text, q) {
+  const s = String(text == null ? '' : text);
+  if (!q) return esc(s);
+  const i = s.toLowerCase().indexOf(q);
+  if (i < 0) return esc(s);
+  return esc(s.slice(0, i)) + '<mark>' + esc(s.slice(i, i + q.length)) + '</mark>' + esc(s.slice(i + q.length));
+}
+function matches(q, ...vals) { return vals.some(v => v && String(v).toLowerCase().includes(q)); }
+
+// =========================================================================
+// 핸들러
+// =========================================================================
+function attachHandlers() {
+  const search = document.getElementById('search');
+  search.addEventListener('input', e => runSearch(e.target.value));
+  search.addEventListener('focus', e => { if (e.target.value) runSearch(e.target.value); });
+  document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) document.getElementById('search-results').classList.add('hidden'); });
+  document.querySelectorAll('.stepper button').forEach(b => b.addEventListener('click', () => setDepth(b.dataset.depth, parseInt(b.dataset.dir, 10))));
+  document.getElementById('back-to-browse').addEventListener('click', () => {
+    if (state.service || state.infraType) setOverview(true);
+    else if (state.fromOverview) setOverview(true);
+    else if (state.fromService) setService(state.fromService);
+    else clearFocus();
+  });
+  document.getElementById('overview-btn').addEventListener('click', () => setOverview(!state.overview));
+  setupDetailResizer();
+  document.getElementById('share-btn').addEventListener('click', e => copyToClipboard(shareUrl(), e.target));
+  window.addEventListener('resize', () => {
+    if (currentEdges.length) requestAnimationFrame(drawConnectors);
+    if (dockDraw) requestAnimationFrame(dockDraw);
+  });
+  document.addEventListener('keydown', onKeydown);
+
+  // 트랙패드 핀치(ctrlKey wheel) → 확대/축소. 일반 휠/투핑거 스크롤은 패닝(기본 동작 유지)
+  const flow = document.getElementById('flow');
+  flow.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;                 // 핀치 제스처만 가로챔
+    e.preventDefault();
+    zoomBy(Math.exp(-e.deltaY * 0.0125), e.clientX, e.clientY);
+  }, { passive: false });
+  // 줌 컨트롤 버튼
+  document.getElementById('zoom-ctl').addEventListener('click', e => {
+    const k = e.target.closest('button')?.dataset.zoom;
+    if (k === 'in') zoomBy(1.2);
+    else if (k === 'out') zoomBy(1 / 1.2);
+    else if (k === 'reset') resetZoom();
+  });
+}
+
+function searchActiveIndex(items) { return items.findIndex(it => it.classList.contains('kb-active')); }
+function onKeydown(e) {
+  const search = document.getElementById('search');
+  const box = document.getElementById('search-results');
+  const tag = (e.target.tagName || '').toLowerCase();
+  const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+  const resultsOpen = !box.classList.contains('hidden');
+
+  if (resultsOpen && e.target === search) {
+    const items = [...box.querySelectorAll('.search-item')];
+    if (items.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        let i = searchActiveIndex(items);
+        items.forEach(it => it.classList.remove('kb-active'));
+        i = e.key === 'ArrowDown' ? (i + 1) % items.length : (i <= 0 ? items.length - 1 : i - 1);
+        items[i].classList.add('kb-active');
+        items[i].scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const i = searchActiveIndex(items);
+        const it = items[i >= 0 ? i : 0];
+        if (it) { setFocus(it.dataset.id, null); search.value = ''; box.classList.add('hidden'); }
+        return;
+      }
+    }
+    if (e.key === 'Escape') { box.classList.add('hidden'); search.blur(); return; }
+  }
+
+  if (typing) return;
+
+  if (e.key === '/') { e.preventDefault(); search.focus(); search.select(); return; }
+  if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomBy(1.2); return; }
+  if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomBy(1 / 1.2); return; }
+  if (e.key === '0') { e.preventDefault(); resetZoom(); return; }
+  if (e.key === 'Escape') {
+    if (state.overview) { setOverview(false); return; }
+    if (state.service && state.svcPick) { setServicePick(state.svcPick); return; }
+    if (state.service || state.infraType) { setOverview(true); return; }
+    if (state.focus && state.fromOverview) { setOverview(true); return; }
+    if (state.focus && state.fromService) { setService(state.fromService); return; }
+    if (state.focus) { clearFocus(); return; }
+    return;
+  }
+  if (e.key === 'Backspace') {
+    if (state.overview) { e.preventDefault(); setOverview(false); return; }
+    if (state.service && state.svcPick) { e.preventDefault(); setServicePick(state.svcPick); return; }
+    if (state.service || state.infraType) { e.preventDefault(); setOverview(true); return; }
+    if (state.focus && state.fromOverview) { e.preventDefault(); setOverview(true); return; }
+    if (state.focus && state.fromService) { e.preventDefault(); setService(state.fromService); return; }
+    if (state.focus) { e.preventDefault(); clearFocus(); return; }
+    if (state.browse.svc) {
+      e.preventDefault();
+      if (state.browse.segs.length) setBrowse(state.browse.svc, state.browse.segs.slice(0, -1));
+      else setBrowse(null, []);
+    }
+    return;
+  }
+}
+
+// =========================================================================
+// 유틸
+// =========================================================================
+async function copyToClipboard(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+  if (btn) { const t = btn.textContent; btn.textContent = '✓ 복사됨'; btn.classList.add('ok'); setTimeout(() => { btn.textContent = t; btn.classList.remove('ok'); }, 1400); }
+}
+function layerColor(n) {
+  const cs = getComputedStyle(document.documentElement);
+  if (n.layer === 'RESOURCE') return cs.getPropertyValue(n.resourceType === 'kafka-topic' ? '--c-kafka' : n.resourceType === 'db-table' ? '--c-db' : '--c-redis');
+  return cs.getPropertyValue('--c-' + (LAYER_CLASS[n.layer] || 'other'));
+}
+function shortClass(fqcn) {
+  if (!fqcn) return '';
+  const p = fqcn.split('.');
+  return p.length > 2 ? '…' + p.slice(-2).join('.') : fqcn;
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
+
+boot();

@@ -1,0 +1,110 @@
+{
+  "directed": true,
+  "multigraph": true,
+  "meta": {
+    "command": "analyze",
+    "repo": ".repo",
+    "project": "twice-api",
+    "files": 2,
+    "nodes": 4,
+    "edges": 2
+  },
+  "nodes": [
+    {
+      "id": "com.acme.twice.TwiceUserController#getForLogin",
+      "fqcn": "com.acme.twice.TwiceUserController",
+      "method": "getForLogin",
+      "layer": "CONTROLLER",
+      "visibility": "public",
+      "async": false,
+      "returnType": "UserView",
+      "httpMethod": "POST",
+      "endpoint": "/internal/user/for-login",
+      "externalService": null,
+      "externalUrl": null,
+      "resourceType": null,
+      "description": null,
+      "file": "twice-api/src/main/kotlin/com/acme/twice/TwiceUserController.kt",
+      "line": 16,
+      "project": "twice-api",
+      "module": "src"
+    },
+    {
+      "id": "com.acme.twice.TwiceUserController#getForTokenRefresh",
+      "fqcn": "com.acme.twice.TwiceUserController",
+      "method": "getForTokenRefresh",
+      "layer": "CONTROLLER",
+      "visibility": "public",
+      "async": false,
+      "returnType": "UserView",
+      "httpMethod": "GET",
+      "endpoint": "/internal/user/for-refresh",
+      "externalService": null,
+      "externalUrl": null,
+      "resourceType": null,
+      "description": null,
+      "file": "twice-api/src/main/kotlin/com/acme/twice/TwiceUserController.kt",
+      "line": 20,
+      "project": "twice-api",
+      "module": "src"
+    },
+    {
+      "id": "com.acme.twice.TwiceUserService#login",
+      "fqcn": "com.acme.twice.TwiceUserService",
+      "method": "login",
+      "layer": "SERVICE",
+      "visibility": "public",
+      "async": false,
+      "returnType": "UserView",
+      "httpMethod": null,
+      "endpoint": null,
+      "externalService": null,
+      "externalUrl": null,
+      "resourceType": null,
+      "description": null,
+      "file": "twice-api/src/main/kotlin/com/acme/twice/TwiceUserService.kt",
+      "line": 7,
+      "project": "twice-api",
+      "module": "src"
+    },
+    {
+      "id": "com.acme.twice.TwiceUserService#refresh",
+      "fqcn": "com.acme.twice.TwiceUserService",
+      "method": "refresh",
+      "layer": "SERVICE",
+      "visibility": "public",
+      "async": false,
+      "returnType": "UserView",
+      "httpMethod": null,
+      "endpoint": null,
+      "externalService": null,
+      "externalUrl": null,
+      "resourceType": null,
+      "description": null,
+      "file": "twice-api/src/main/kotlin/com/acme/twice/TwiceUserService.kt",
+      "line": 8,
+      "project": "twice-api",
+      "module": "src"
+    }
+  ],
+  "edges": [
+    {
+      "source": "com.acme.twice.TwiceUserController#getForLogin",
+      "target": "com.acme.twice.TwiceUserService#login",
+      "mode": "sync",
+      "kind": "internal",
+      "relation": "call",
+      "callSiteFile": "twice-api/src/main/kotlin/com/acme/twice/TwiceUserController.kt",
+      "callSiteLine": 17
+    },
+    {
+      "source": "com.acme.twice.TwiceUserController#getForTokenRefresh",
+      "target": "com.acme.twice.TwiceUserService#refresh",
+      "mode": "sync",
+      "kind": "internal",
+      "relation": "call",
+      "callSiteFile": "twice-api/src/main/kotlin/com/acme/twice/TwiceUserController.kt",
+      "callSiteLine": 21
+    }
+  ]
+}

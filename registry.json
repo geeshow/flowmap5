@@ -1,0 +1,1208 @@
+{
+  "version": 1,
+  "services": {
+    "user-service": {},
+    "order-service": {},
+    "notification-service": {},
+    "sample-shop": {},
+    "tera-cloud-user": {},
+    "twice-api": {},
+    "funding-service": {},
+    "bank-broker": {},
+    "admin-portal": {}
+  },
+  "endpoints": [
+    {
+      "project": "order-service",
+      "nodeId": "com.acme.order.OrderController#create",
+      "fqcn": "com.acme.order.OrderController",
+      "method": "create",
+      "httpMethod": "POST",
+      "endpoint": "/orders",
+      "description": null
+    },
+    {
+      "project": "user-service",
+      "nodeId": "com.acme.user.UserController#getUser",
+      "fqcn": "com.acme.user.UserController",
+      "method": "getUser",
+      "httpMethod": "GET",
+      "endpoint": "/internal/users/{id}",
+      "description": "사용자 단건 조회 (내부용)"
+    },
+    {
+      "project": "sample-shop",
+      "nodeId": "com.shop.order.OrderController#placeOrder",
+      "fqcn": "com.shop.order.OrderController",
+      "method": "placeOrder",
+      "httpMethod": "POST",
+      "endpoint": "/orders",
+      "description": null
+    },
+    {
+      "project": "sample-shop",
+      "nodeId": "com.shop.order.OrderController#notifyOrder",
+      "fqcn": "com.shop.order.OrderController",
+      "method": "notifyOrder",
+      "httpMethod": "POST",
+      "endpoint": "/orders/{id}/notify",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.UserServiceApplication#index",
+      "fqcn": "com.terafunding.cloud.user.UserServiceApplication",
+      "method": "index",
+      "httpMethod": "ANY",
+      "endpoint": "/",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.kakaopay.KakaopayController#transfer",
+      "fqcn": "com.terafunding.cloud.user.controller.kakaopay.KakaopayController",
+      "method": "transfer",
+      "httpMethod": "POST",
+      "endpoint": "/v1/kakaopay/transfer",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.kakaopay.KakaopayController#confirm",
+      "fqcn": "com.terafunding.cloud.user.controller.kakaopay.KakaopayController",
+      "method": "confirm",
+      "httpMethod": "POST",
+      "endpoint": "/v1/kakaopay/confirm",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.kakaopay.KakaopayVerifyController#getCiDi",
+      "fqcn": "com.terafunding.cloud.user.controller.kakaopay.KakaopayVerifyController",
+      "method": "getCiDi",
+      "httpMethod": "POST",
+      "endpoint": "/v1/kakaopayVerify/getCiDi",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointSummary",
+      "fqcn": "com.terafunding.cloud.user.controller.point.PublicPointInfoController",
+      "method": "getPointSummary",
+      "httpMethod": "GET",
+      "endpoint": "/v1/summary",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPassbook",
+      "fqcn": "com.terafunding.cloud.user.controller.point.PublicPointInfoController",
+      "method": "getPointPassbook",
+      "httpMethod": "GET",
+      "endpoint": "/v1/passbook",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.point.PublicPointInfoController#downloadCSV",
+      "fqcn": "com.terafunding.cloud.user.controller.point.PublicPointInfoController",
+      "method": "downloadCSV",
+      "httpMethod": "GET",
+      "endpoint": "/v1/passbook/excel",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPolicy",
+      "fqcn": "com.terafunding.cloud.user.controller.point.PublicPointInfoController",
+      "method": "getPointPolicy",
+      "httpMethod": "GET",
+      "endpoint": "/v1/policy",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "fqcn": "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController",
+      "method": "findUser",
+      "httpMethod": "POST",
+      "endpoint": "/internal/tera/user/ci",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.admin.MemberController#out",
+      "fqcn": "com.terafunding.cloud.user.controller.admin.MemberController",
+      "method": "out",
+      "httpMethod": "GET",
+      "endpoint": "/admin/member/toOut",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.admin.MemberController#wakeUp",
+      "fqcn": "com.terafunding.cloud.user.controller.admin.MemberController",
+      "method": "wakeUp",
+      "httpMethod": "POST",
+      "endpoint": "/admin/member/wakeup",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.admin.MemberController#findId",
+      "fqcn": "com.terafunding.cloud.user.controller.admin.MemberController",
+      "method": "findId",
+      "httpMethod": "GET",
+      "endpoint": "/admin/member/findid",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.admin.AccountController#balanceList",
+      "fqcn": "com.terafunding.cloud.user.controller.admin.AccountController",
+      "method": "balanceList",
+      "httpMethod": "GET",
+      "endpoint": "/admin/account/balance",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalEmployeeController#index",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalEmployeeController",
+      "method": "index",
+      "httpMethod": "GET",
+      "endpoint": "/internal/employee",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalEmployeeController#department",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalEmployeeController",
+      "method": "department",
+      "httpMethod": "GET",
+      "endpoint": "/internal/employee/department",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalUserController#wakeUp",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalUserController",
+      "method": "wakeUp",
+      "httpMethod": "POST",
+      "endpoint": "/internal/user/wakeup",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalUserController#integrateSimple",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalUserController",
+      "method": "integrateSimple",
+      "httpMethod": "POST",
+      "endpoint": "/internal/user/integrate/simple",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalSlashCommandController#getBalanceMap",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalSlashCommandController",
+      "method": "getBalanceMap",
+      "httpMethod": "ANY",
+      "endpoint": "/internal/v1/slash-command/balance",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalSlashCommandController#getChecked",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalSlashCommandController",
+      "method": "getChecked",
+      "httpMethod": "ANY",
+      "endpoint": "/internal/v1/slash-command/check",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalBankController#checkFakeDeposit",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalBankController",
+      "method": "checkFakeDeposit",
+      "httpMethod": "GET",
+      "endpoint": "/internal/v1/bank/check-fake-deposit",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalBankController#checkInvestor",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalBankController",
+      "method": "checkInvestor",
+      "httpMethod": "GET",
+      "endpoint": "/internal/v1/bank/check-investor",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalBankController#cancelDeposit",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalBankController",
+      "method": "cancelDeposit",
+      "httpMethod": "DELETE",
+      "endpoint": "/internal/v1/bank/deposit",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalBankController#getWithdrawalAmount",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalBankController",
+      "method": "getWithdrawalAmount",
+      "httpMethod": "GET",
+      "endpoint": "/internal/v1/bank/withdrawal-amount",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalBankController#withdraw",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalBankController",
+      "method": "withdraw",
+      "httpMethod": "POST",
+      "endpoint": "/internal/v1/bank/withdraw/{userNo}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalBankController#checkLedgerBalance",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalBankController",
+      "method": "checkLedgerBalance",
+      "httpMethod": "GET",
+      "endpoint": "/internal/v1/bank/check-ledger-balance",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalBankController#emailSend",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalBankController",
+      "method": "emailSend",
+      "httpMethod": "GET",
+      "endpoint": "/internal/v1/bank/email",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.SignupController#validCheck",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method": "validCheck",
+      "httpMethod": "GET",
+      "endpoint": "/v1/signup/valid",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.SignupController#validEmail",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method": "validEmail",
+      "httpMethod": "GET",
+      "endpoint": "/v1/signup/email/valid",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signup",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method": "signup",
+      "httpMethod": "POST",
+      "endpoint": "/v1/signup",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupInternal",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method": "signupInternal",
+      "httpMethod": "POST",
+      "endpoint": "/v1/signup/internal=true",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupSocial",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method": "signupSocial",
+      "httpMethod": "POST",
+      "endpoint": "/v1/signup/social",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupReset",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method": "signupReset",
+      "httpMethod": "POST",
+      "endpoint": "/v1/signup/reset",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#investorProfile",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method": "investorProfile",
+      "httpMethod": "GET",
+      "endpoint": "/v1/investor",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#accountInfo",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method": "accountInfo",
+      "httpMethod": "GET",
+      "endpoint": "/v1/investor/account",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#accountCheck",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method": "accountCheck",
+      "httpMethod": "POST",
+      "endpoint": "/v1/investor/account/check",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#accountCertificationUrl",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method": "accountCertificationUrl",
+      "httpMethod": "GET",
+      "endpoint": "/v1/investor/account/certification",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#registorBizInvestor",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method": "registorBizInvestor",
+      "httpMethod": "POST",
+      "endpoint": "/v1/investor/biz",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#minorGuide",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method": "minorGuide",
+      "httpMethod": "POST",
+      "endpoint": "/v1/investor/minor-guide",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#updateBankAccountInternal",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method": "updateBankAccountInternal",
+      "httpMethod": "POST",
+      "endpoint": "/v1/investor/bank",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#investLimits",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method": "investLimits",
+      "httpMethod": "GET",
+      "endpoint": "/v1/investor/limits",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.CertificationController#accountCertification",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.CertificationController",
+      "method": "accountCertification",
+      "httpMethod": "GET",
+      "endpoint": "/certification/balance/{cacheKey}.pdf",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.BankController#withdraw",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.BankController",
+      "method": "withdraw",
+      "httpMethod": "POST",
+      "endpoint": "/v1/bank/withdraw",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.BankController#getWithdrawalAmount",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.BankController",
+      "method": "getWithdrawalAmount",
+      "httpMethod": "GET",
+      "endpoint": "/v1/bank/withdrawal-amount",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.BankController#delayedWithdraw",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.BankController",
+      "method": "delayedWithdraw",
+      "httpMethod": "POST",
+      "endpoint": "/v1/bank/delaywithdraw",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.BankController#getTransactions",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.BankController",
+      "method": "getTransactions",
+      "httpMethod": "GET",
+      "endpoint": "/v1/bank/transactions",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.BankController#buildExcelDocument",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.BankController",
+      "method": "buildExcelDocument",
+      "httpMethod": "GET",
+      "endpoint": "/v1/bank/transactions.xls",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.BankController#getDuplicateCustomerData",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.BankController",
+      "method": "getDuplicateCustomerData",
+      "httpMethod": "GET",
+      "endpoint": "/v1/bank/check/duplicate/{userNo}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PermissionController#check",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PermissionController",
+      "method": "check",
+      "httpMethod": "GET",
+      "endpoint": "/v1/permission/check",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PermissionController#checkAll",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PermissionController",
+      "method": "checkAll",
+      "httpMethod": "POST",
+      "endpoint": "/v1/permission/check-all",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PermissionController#request",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PermissionController",
+      "method": "request",
+      "httpMethod": "POST",
+      "endpoint": "/v1/permission/request",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.SigninController#postSignin",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.SigninController",
+      "method": "postSignin",
+      "httpMethod": "POST",
+      "endpoint": "/oauth/signin",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#me",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "me",
+      "httpMethod": "GET",
+      "endpoint": "/v1/me",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#getProfile",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "getProfile",
+      "httpMethod": "GET",
+      "endpoint": "/v1/me/profile",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#updateProfile",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "updateProfile",
+      "httpMethod": "POST",
+      "endpoint": "/v1/me/profile",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#registorRecommender",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "registorRecommender",
+      "httpMethod": "POST",
+      "endpoint": "/v1/me/recommender",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#checkChangePasswordDate",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "checkChangePasswordDate",
+      "httpMethod": "GET",
+      "endpoint": "/v1/me/check-change-password-date",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#changeAfterPassword",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "changeAfterPassword",
+      "httpMethod": "GET",
+      "endpoint": "/v1/me/change-after-password",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#changePassword",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "changePassword",
+      "httpMethod": "POST",
+      "endpoint": "/v1/me/change-password",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#leaveCheck",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "leaveCheck",
+      "httpMethod": "GET",
+      "endpoint": "/v1/me/check-leave",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.MeController#cancelMembership",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.MeController",
+      "method": "cancelMembership",
+      "httpMethod": "DELETE",
+      "endpoint": "/v1/me",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.RecoveryController#findId",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.RecoveryController",
+      "method": "findId",
+      "httpMethod": "GET",
+      "endpoint": "/v1/recovery",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.RecoveryController#resetPassword",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.RecoveryController",
+      "method": "resetPassword",
+      "httpMethod": "POST",
+      "endpoint": "/v1/recovery",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.RecoveryController#wakeUp",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.RecoveryController",
+      "method": "wakeUp",
+      "httpMethod": "POST",
+      "endpoint": "/v1/recovery/wakeup",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.RecoveryController#integration",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.RecoveryController",
+      "method": "integration",
+      "httpMethod": "POST",
+      "endpoint": "/v1/recovery/integration",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#rrnVerify",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "rrnVerify",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/rrn",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankVerify",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "bankVerify",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/bank",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#niceCheckPlus",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "niceCheckPlus",
+      "httpMethod": "GET",
+      "endpoint": "/v1/verify/phone/nice-check",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#niceCheckPlusHandler",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "niceCheckPlusHandler",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/phone/nice-check",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneVerifyRequest",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "phoneVerifyRequest",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/phone/request",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneVerifyConfirm",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "phoneVerifyConfirm",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/phone/confirm",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneChangeVerifyRequest",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "phoneChangeVerifyRequest",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/phone/change-request",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneSimpleVerifyRequest",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "phoneSimpleVerifyRequest",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/phone/simple-request",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneSimpleVerifyConfirm",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "phoneSimpleVerifyConfirm",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/phone/simple-confirm",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#InternalPhoneVerifyRequest",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "InternalPhoneVerifyRequest",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/internal/phone/request",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#InternalPhoneVerifyConfirm",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "InternalPhoneVerifyConfirm",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/internal/phone/confirm",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneStatus",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "phoneStatus",
+      "httpMethod": "GET",
+      "endpoint": "/v1/verify/status",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#sendMsg",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "sendMsg",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/phone/mobile",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#signKey",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "signKey",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/signkey",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankOwnershipRequest",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "bankOwnershipRequest",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/bank/ownership/request",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankOwnershipConfirm",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "bankOwnershipConfirm",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/bank/ownership/confirm",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "uploadOCR",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/ocr/upload",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "inputStatus",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/ocr/input/status",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#amlRegister",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "amlRegister",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/aml/register",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#KycBusinessRegister",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "KycBusinessRegister",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/aml/business/register",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#internalKycBusiness",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "internalKycBusiness",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/internal/kyc/business",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#internalKycInvest",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "internalKycInvest",
+      "httpMethod": "GET",
+      "endpoint": "/v1/verify/internal/kyc/invest",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#internalKycCheck",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "internalKycCheck",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/internal/kyc/check",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#KycBusinessRegisterTemp",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method": "KycBusinessRegisterTemp",
+      "httpMethod": "POST",
+      "endpoint": "/v1/verify/aml/business/temp",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController#list",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController",
+      "method": "list",
+      "httpMethod": "GET",
+      "endpoint": "/admin/permission",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController#listByUser",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController",
+      "method": "listByUser",
+      "httpMethod": "GET",
+      "endpoint": "/admin/permission/user/{userNo}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController#allowPemission",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController",
+      "method": "allowPemission",
+      "httpMethod": "PUT",
+      "endpoint": "/admin/permission/user/{userNo}/{permId}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController#denyPermission",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController",
+      "method": "denyPermission",
+      "httpMethod": "DELETE",
+      "endpoint": "/admin/permission/user/{userNo}/{permId}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController#copy",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PermissionAdminController",
+      "method": "copy",
+      "httpMethod": "POST",
+      "endpoint": "/admin/permission/copy",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PhoneController#verifyRequest",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PhoneController",
+      "method": "verifyRequest",
+      "httpMethod": "POST",
+      "endpoint": "/v1/phone/verify/request",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.PhoneController#verifyConfirm",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.PhoneController",
+      "method": "verifyConfirm",
+      "httpMethod": "POST",
+      "endpoint": "/v1/phone/verify/confirm",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.DashboardController#dashboard",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.DashboardController",
+      "method": "dashboard",
+      "httpMethod": "GET",
+      "endpoint": "/v1/dashboard",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.DeviceController#myDevices",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.DeviceController",
+      "method": "myDevices",
+      "httpMethod": "GET",
+      "endpoint": "/v1/devices/my",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.DeviceController#register",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.DeviceController",
+      "method": "register",
+      "httpMethod": "POST",
+      "endpoint": "/v1/devices",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.RejectSmsController#rejectSmsByQueryString",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.RejectSmsController",
+      "method": "rejectSmsByQueryString",
+      "httpMethod": "GET",
+      "endpoint": "/v1/reject-sms",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v1.RejectSmsController#rejectSms",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v1.RejectSmsController",
+      "method": "rejectSms",
+      "httpMethod": "GET",
+      "endpoint": "/v1/reject-sms/{number}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v2.InvestorControllerV2#investLimits",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v2.InvestorControllerV2",
+      "method": "investLimits",
+      "httpMethod": "GET",
+      "endpoint": "/v2/investor/limits",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.legacy.v2.InvestorControllerV2#resistorInvestor",
+      "fqcn": "com.terafunding.cloud.user.controller.legacy.v2.InvestorControllerV2",
+      "method": "resistorInvestor",
+      "httpMethod": "POST",
+      "endpoint": "/v2/investor",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.factor.TwoFactorOldController#checkFinNumber",
+      "fqcn": "com.terafunding.cloud.user.controller.factor.TwoFactorOldController",
+      "method": "checkFinNumber",
+      "httpMethod": "POST",
+      "endpoint": "/internal/v1/admin/two-factor/authentication",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.factor.TwoFactorOldController#checkPassword",
+      "fqcn": "com.terafunding.cloud.user.controller.factor.TwoFactorOldController",
+      "method": "checkPassword",
+      "httpMethod": "POST",
+      "endpoint": "/internal/v1/admin/confirm/password/authentication",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.factor.TwoFactorOldController#getEmail4EmpNo",
+      "fqcn": "com.terafunding.cloud.user.controller.factor.TwoFactorOldController",
+      "method": "getEmail4EmpNo",
+      "httpMethod": "GET",
+      "endpoint": "/internal/v1/admin/email/{empNo}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.factor.TwoFactorController#checkFinNumber",
+      "fqcn": "com.terafunding.cloud.user.controller.factor.TwoFactorController",
+      "method": "checkFinNumber",
+      "httpMethod": "POST",
+      "endpoint": "/internal/v1/two-factor/authentication",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.factor.TwoFactorController#checkPassword",
+      "fqcn": "com.terafunding.cloud.user.controller.factor.TwoFactorController",
+      "method": "checkPassword",
+      "httpMethod": "POST",
+      "endpoint": "/internal/v1/confirm/password/authentication",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.factor.TwoFactorController#getEmail4EmpNo",
+      "fqcn": "com.terafunding.cloud.user.controller.factor.TwoFactorController",
+      "method": "getEmail4EmpNo",
+      "httpMethod": "GET",
+      "endpoint": "/internal/v1/email/{empNo}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.v3.DefaultController#teraApi",
+      "fqcn": "com.terafunding.cloud.user.controller.v3.DefaultController",
+      "method": "teraApi",
+      "httpMethod": "GET",
+      "endpoint": "/docs/{docName}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.v3.your.StatusController#getStatus",
+      "fqcn": "com.terafunding.cloud.user.controller.v3.your.StatusController",
+      "method": "getStatus",
+      "httpMethod": "GET",
+      "endpoint": "/v3/your/status",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.v3.verify.VerifyAccountController#bankOwnershipRequest",
+      "fqcn": "com.terafunding.cloud.user.controller.v3.verify.VerifyAccountController",
+      "method": "bankOwnershipRequest",
+      "httpMethod": "POST",
+      "endpoint": "/v3/verify/account",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.v3.verify.VerifyAccountController#bankOwnershipConfirm",
+      "fqcn": "com.terafunding.cloud.user.controller.v3.verify.VerifyAccountController",
+      "method": "bankOwnershipConfirm",
+      "httpMethod": "PUT",
+      "endpoint": "/v3/verify/account",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.v3.enc.RSAController#getRSAPublicKey",
+      "fqcn": "com.terafunding.cloud.user.controller.v3.enc.RSAController",
+      "method": "getRSAPublicKey",
+      "httpMethod": "GET",
+      "endpoint": "/v3/rsa",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.v3.enc.RSAController#getProfile",
+      "fqcn": "com.terafunding.cloud.user.controller.v3.enc.RSAController",
+      "method": "getProfile",
+      "httpMethod": "GET",
+      "endpoint": "/v3/rsa/profile",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.recapcha.CapchaRestController#authFromCapchaServer",
+      "fqcn": "com.terafunding.cloud.user.controller.recapcha.CapchaRestController",
+      "method": "authFromCapchaServer",
+      "httpMethod": "POST",
+      "endpoint": "/v1/capcha",
+      "description": null
+    },
+    {
+      "project": "bank-broker",
+      "nodeId": "com.acme.bank.SibController#customerQuery",
+      "fqcn": "com.acme.bank.SibController",
+      "method": "customerQuery",
+      "httpMethod": "GET",
+      "endpoint": "/sib/customers/{userNo}",
+      "description": null
+    },
+    {
+      "project": "bank-broker",
+      "nodeId": "com.acme.bank.SibController#customerRegister",
+      "fqcn": "com.acme.bank.SibController",
+      "method": "customerRegister",
+      "httpMethod": "POST",
+      "endpoint": "/sib/customers",
+      "description": null
+    },
+    {
+      "project": "bank-broker",
+      "nodeId": "com.acme.bank.SibController#customerUpdate",
+      "fqcn": "com.acme.bank.SibController",
+      "method": "customerUpdate",
+      "httpMethod": "PUT",
+      "endpoint": "/sib/customers",
+      "description": null
+    },
+    {
+      "project": "bank-broker",
+      "nodeId": "com.acme.bank.SibController#inquiryCustomer",
+      "fqcn": "com.acme.bank.SibController",
+      "method": "inquiryCustomer",
+      "httpMethod": "POST",
+      "endpoint": "/sib/inquiry/customer",
+      "description": null
+    },
+    {
+      "project": "bank-broker",
+      "nodeId": "com.acme.bank.SibController#fundWithdraw",
+      "fqcn": "com.acme.bank.SibController",
+      "method": "fundWithdraw",
+      "httpMethod": "POST",
+      "endpoint": "/sib/fund/withdraw",
+      "description": null
+    },
+    {
+      "project": "funding-service",
+      "nodeId": "com.acme.funding.InvestmentController#currentValidSummary",
+      "fqcn": "com.acme.funding.InvestmentController",
+      "method": "currentValidSummary",
+      "httpMethod": "GET",
+      "endpoint": "/internal/investment/current-summary",
+      "description": null
+    },
+    {
+      "project": "twice-api",
+      "nodeId": "com.acme.twice.TwiceUserController#getForLogin",
+      "fqcn": "com.acme.twice.TwiceUserController",
+      "method": "getForLogin",
+      "httpMethod": "POST",
+      "endpoint": "/internal/user/for-login",
+      "description": null
+    },
+    {
+      "project": "twice-api",
+      "nodeId": "com.acme.twice.TwiceUserController#getForTokenRefresh",
+      "fqcn": "com.acme.twice.TwiceUserController",
+      "method": "getForTokenRefresh",
+      "httpMethod": "GET",
+      "endpoint": "/internal/user/for-refresh",
+      "description": null
+    },
+    {
+      "project": "admin-portal",
+      "nodeId": "com.acme.admin.AdminController#viewUser",
+      "fqcn": "com.acme.admin.AdminController",
+      "method": "viewUser",
+      "httpMethod": "GET",
+      "endpoint": "/admin/portal/users/{userNo}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalUserController#findUserTransaction",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalUserController",
+      "method": "findUserTransaction",
+      "httpMethod": "GET",
+      "endpoint": "/internal/user/{userNo}",
+      "description": null
+    },
+    {
+      "project": "tera-cloud-user",
+      "nodeId": "com.terafunding.cloud.user.controller.internal.InternalUserController#findUsersBy",
+      "fqcn": "com.terafunding.cloud.user.controller.internal.InternalUserController",
+      "method": "findUsersBy",
+      "httpMethod": "POST",
+      "endpoint": "/internal/user/users",
+      "description": null
+    }
+  ],
+  "kafka": {
+    "order.created": {
+      "producers": [
+        {
+          "project": "order-service",
+          "nodeId": "com.acme.order.OrderService#placeOrder",
+          "fqcn": "com.acme.order.OrderService",
+          "method": "placeOrder",
+          "layer": "SERVICE"
+        }
+      ],
+      "consumers": [
+        {
+          "project": "notification-service",
+          "nodeId": "com.acme.notification.OrderEventListener#onOrderCreated",
+          "fqcn": "com.acme.notification.OrderEventListener",
+          "method": "onOrderCreated",
+          "layer": "COMPONENT"
+        }
+      ]
+    }
+  }
+}
