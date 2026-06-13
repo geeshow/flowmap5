@@ -1,0 +1,2651 @@
+{
+  "branch" : "develop",
+  "commitCount" : 30,
+  "depth" : 3,
+  "changedNodeCount" : 47,
+  "deletedEndpointCount" : 0,
+  "trulyDeletedEndpointCount" : 0,
+  "breakingDeletionCount" : 0,
+  "commits" : [ {
+    "sha" : "8c665f9df379c0470108a9671a81c053da667404",
+    "shortSha" : "8c665f9d",
+    "author" : "kyutae",
+    "date" : "2022-12-23T00:10:21+09:00",
+    "subject" : "db test api 추가",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/v3/enc/RSAController.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/v3/your/StatusController.kt", "tera-user-service/src/main/resources/application-local.yml" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.controller.v3.enc.RSAController#getProfile",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.v3.your.StatusController#getStatus",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.v3.enc.RSAController#getProfile",
+      "httpMethod" : "GET",
+      "endpoint" : "/v3/rsa/profile",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.v3.your.StatusController#getStatus",
+      "httpMethod" : "GET",
+      "endpoint" : "/v3/your/status",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "e5942d8978d48644c54c30d557d9c2a5e1c094d7",
+    "shortSha" : "e5942d89",
+    "author" : "kyutae",
+    "date" : "2022-12-22T23:19:13+09:00",
+    "subject" : "Update nginx.conf",
+    "changedFiles" : [ ".eb/.platform/nginx/nginx.conf" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "40cf672eb8f18fadb639276fbaeb671c2799c5e4",
+    "shortSha" : "40cf672e",
+    "author" : "kyutae",
+    "date" : "2022-12-22T22:30:43+09:00",
+    "subject" : "[merge-point-server] ecs to eb",
+    "changedFiles" : [ ".eb/.ebextensions/00-set-timezone.config", ".eb/.ebextensions/01-setup-swap.config", ".eb/.ebextensions/02-makeFiles.config", ".eb/.ebextensions/setup_swap.sh", ".eb/.platform/nginx/nginx.conf", ".eb/Procfile", ".github/workflows/common-deploy-to-eb.yml", ".github/workflows/env-develop-branch.yml", ".github/workflows/env-live-branch.yml", ".github/workflows/env-main-branch.yml", ".github/workflows/env-stage-branch.yml", "tera-user-service/build.gradle", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/component/PointPolicySelectQueryStore.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/point/PublicPointInfoController.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/entity/point/PointPassbook.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/entity/point/PointPolicyEntity.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/entity/point/PointUsage.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/entity/point/PointUserRecommendLog.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/Paging.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/util/ExposedExtension.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/util/LocalDateExtension.kt", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/controller/PublicPointInfoControllerTest.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.component.PointPolicySelectQueryStore#findById",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.component.PointPolicySelectQueryStore#getPolicyList",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointSummary",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPassbook",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#downloadCSV",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPolicy",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPassbook#empty",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPassbook#isEmpty",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPassbook#isNotEmpty",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPassbook#getId",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPassbook#toDto",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPolicyEntity#isExpiredEvent",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPolicyEntity#getType",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPolicyEntity#toDto",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointUsage#getUsingId",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.ExposedPaging#paging",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findByUserNoAndType",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAccumulatePointByUserNo",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getExpirePointInMonth",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findMayBeExpirePoints",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getRemainPoint",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPointPassbookJoinWithPolicy",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAllPointPassbookJoinWithPolicy",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findPointPassbookJoinWithPolicyQuery",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#toDto",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPageOfPassbook",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findById",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findLastestByUserNo",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findPointPassbookByUserNoAndByCodes",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAllByCreateDate",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#sumByCreateDate",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getJoinColumns",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getRemainExpiredPoint",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointQueryBuilder#where",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointQueryBuilder#buildWhereQuery",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointQueryBuilder#buildWhereStatementWithoutUser",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointQueryBuilder#buildWhereStatementWithUser",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointSummary",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPolicy",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#findAllPointPassbookJoinWithPolicy",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#findById",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPassbook",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.PublicPointInfoControllerTest#getStringBalancedRequests",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.PublicPointInfoControllerTest# verify list up ",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointSummary",
+      "httpMethod" : "GET",
+      "endpoint" : "/v1/summary",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPassbook",
+      "httpMethod" : "GET",
+      "endpoint" : "/v1/passbook",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#downloadCSV",
+      "httpMethod" : "GET",
+      "endpoint" : "/v1/passbook/excel",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPolicy",
+      "httpMethod" : "GET",
+      "endpoint" : "/v1/policy",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "101d3345edf0c74a7eb32ade66aea3a289eeee16",
+    "shortSha" : "101d3345",
+    "author" : "kyutae",
+    "date" : "2022-12-12T19:39:22+09:00",
+    "subject" : "Update UsebClient.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#request",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/upload",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/input/status",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "8663da45ba9867befa8a7ace6226343cc011dc75",
+    "shortSha" : "8663da45",
+    "author" : "kyutae",
+    "date" : "2022-12-12T16:44:54+09:00",
+    "subject" : "Update UsebClient.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#statusIdCard",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#statusDriver",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/input/status",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "f25b4907ed907eb7974ea344f5857f3e5cb30937",
+    "shortSha" : "f25b4907",
+    "author" : "kyutae",
+    "date" : "2022-12-12T16:29:14+09:00",
+    "subject" : "Update UsebBaseClient.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/base/UsebBaseClient.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.external.useb.base.UsebBaseClient#getCloudClient",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.base.UsebBaseClient#getCloudAuthClient",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "8861efab5fe1f354c25e64eb65d1c28bd2e808c0",
+    "shortSha" : "8861efab",
+    "author" : "kyutae",
+    "date" : "2022-12-12T14:56:30+09:00",
+    "subject" : "feature: 신분증 진위여부 logging 추가",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/base/UsebBaseClient.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#statusIdCard",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#statusDriver",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#request",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.base.UsebBaseClient#getCloudClient",
+      "inGraph" : false
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#inputStatus",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/input/status",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/upload",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "b98b8373fd7185c57b8dc1e0d99e4923e45c3f92",
+    "shortSha" : "b98b8373",
+    "author" : "kyutae",
+    "date" : "2022-12-09T00:41:41+09:00",
+    "subject" : "Update InternalBankController.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/internal/InternalBankController.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internal.InternalBankController#withdraw",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internal.InternalBankController#withdraw",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/v1/bank/withdraw/{userNo}",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "8453a785c4a469abf5df6f8ad67a478742c222f8",
+    "shortSha" : "8453a785",
+    "author" : "kyutae",
+    "date" : "2022-12-08T21:47:26+09:00",
+    "subject" : "내부용 출금 처리 API 추가",
+    "changedFiles" : [ "tera-user-service/build/generated-snippets/bankOwnershipConfirm/curl-request.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/http-request.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/http-response.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/httpie-request.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/request-body.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/request-fields.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/request-headers.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/response-body.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/response-fields.adoc", "tera-user-service/build/generated-snippets/bankOwnershipConfirm/response-headers.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/curl-request.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/http-request.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/http-response.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/httpie-request.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/request-body.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/request-fields.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/request-headers.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/response-body.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/response-fields.adoc", "tera-user-service/build/generated-snippets/bankOwnershipRequest/response-headers.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/curl-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/http-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/http-response.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/httpie-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/request-body.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/request-headers.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/response-body.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/response-fields.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/response-headers.adoc", "tera-user-service/build/generated-snippets/errors/curl-request.adoc", "tera-user-service/build/generated-snippets/errors/http-request.adoc", "tera-user-service/build/generated-snippets/errors/http-response.adoc", "tera-user-service/build/generated-snippets/errors/httpie-request.adoc", "tera-user-service/build/generated-snippets/errors/request-body.adoc", "tera-user-service/build/generated-snippets/errors/response-body.adoc", "tera-user-service/build/generated-snippets/errors/response-fields.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/curl-request.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/http-request.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/http-response.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/httpie-request.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/request-body.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/request-headers.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/response-body.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/response-fields.adoc", "tera-user-service/build/generated-snippets/getRsaPublicKey/response-headers.adoc", "tera-user-service/build/generated-snippets/oauthSignin/curl-request.adoc", "tera-user-service/build/generated-snippets/oauthSignin/http-request.adoc", "tera-user-service/build/generated-snippets/oauthSignin/http-response.adoc", "tera-user-service/build/generated-snippets/oauthSignin/httpie-request.adoc", "tera-user-service/build/generated-snippets/oauthSignin/request-body.adoc", "tera-user-service/build/generated-snippets/oauthSignin/request-fields.adoc", "tera-user-service/build/generated-snippets/oauthSignin/request-headers.adoc", "tera-user-service/build/generated-snippets/oauthSignin/response-body.adoc", "tera-user-service/build/generated-snippets/oauthSignin/response-fields.adoc", "tera-user-service/build/generated-snippets/oauthSignin/response-headers.adoc", "tera-user-service/build/generated-snippets/rsaEncryptionError/curl-request.adoc", "tera-user-service/build/generated-snippets/rsaEncryptionError/http-request.adoc", "tera-user-service/build/generated-snippets/rsaEncryptionError/http-response.adoc", "tera-user-service/build/generated-snippets/rsaEncryptionError/httpie-request.adoc", "tera-user-service/build/generated-snippets/rsaEncryptionError/request-body.adoc", "tera-user-service/build/generated-snippets/rsaEncryptionError/response-body.adoc", "tera-user-service/build/generated-snippets/rsaEncryptionError/response-fields.adoc", "tera-user-service/build/generated-snippets/signup/curl-request.adoc", "tera-user-service/build/generated-snippets/signup/http-request.adoc", "tera-user-service/build/generated-snippets/signup/http-response.adoc", "tera-user-service/build/generated-snippets/signup/httpie-request.adoc", "tera-user-service/build/generated-snippets/signup/request-body.adoc", "tera-user-service/build/generated-snippets/signup/request-headers.adoc", "tera-user-service/build/generated-snippets/signup/response-body.adoc", "tera-user-service/build/generated-snippets/signup/response-fields.adoc", "tera-user-service/build/generated-snippets/signup/response-headers.adoc", "tera-user-service/build/generated-snippets/signupBySocial/curl-request.adoc", "tera-user-service/build/generated-snippets/signupBySocial/http-request.adoc", "tera-user-service/build/generated-snippets/signupBySocial/http-response.adoc", "tera-user-service/build/generated-snippets/signupBySocial/httpie-request.adoc", "tera-user-service/build/generated-snippets/signupBySocial/request-body.adoc", "tera-user-service/build/generated-snippets/signupBySocial/request-fields.adoc", "tera-user-service/build/generated-snippets/signupBySocial/request-headers.adoc", "tera-user-service/build/generated-snippets/signupBySocial/response-body.adoc", "tera-user-service/build/generated-snippets/signupBySocial/response-fields.adoc", "tera-user-service/build/generated-snippets/signupBySocial/response-headers.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/curl-request.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/http-request.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/http-response.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/httpie-request.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/request-body.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/request-fields.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/request-headers.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/response-body.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/response-fields.adoc", "tera-user-service/build/generated-snippets/verify-phone-confirm/response-headers.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/curl-request.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/http-request.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/http-response.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/httpie-request.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/request-body.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/request-fields.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/request-headers.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/response-body.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/response-fields.adoc", "tera-user-service/build/generated-snippets/verify-phone-request/response-headers.adoc", "tera-user-service/build/generated-snippets/yourStatus/curl-request.adoc", "tera-user-service/build/generated-snippets/yourStatus/http-request.adoc", "tera-user-service/build/generated-snippets/yourStatus/http-response.adoc", "tera-user-service/build/generated-snippets/yourStatus/httpie-request.adoc", "tera-user-service/build/generated-snippets/yourStatus/request-body.adoc", "tera-user-service/build/generated-snippets/yourStatus/request-headers.adoc", "tera-user-service/build/generated-snippets/yourStatus/response-body.adoc", "tera-user-service/build/generated-snippets/yourStatus/response-fields.adoc", "tera-user-service/build/generated-snippets/yourStatus/response-headers.adoc", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/internal/InternalBankController.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internal.InternalBankController#withdraw",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internal.InternalBankController#withdraw",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/v1/bank/withdraw/{userNo}",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "0d93591e856dca3d23ed4c7f23f922b6babcafdf",
+    "shortSha" : "0d93591e",
+    "author" : "kyutae",
+    "date" : "2022-12-06T07:05:42+09:00",
+    "subject" : "Update MemberFinder.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/member/MemberFinder.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.member.MemberFinder#findByCi",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/tera/user/ci",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "0b9a4037ea954fbbdca3f754c262b51ee7e19b9b",
+    "shortSha" : "0b9a4037",
+    "author" : "kyutae",
+    "date" : "2022-12-06T04:58:19+09:00",
+    "subject" : "데카콘용 테라 고객 조회 API - 잔액 조회 추가",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/member/MemberFinder.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.member.MemberFinder#findByCi",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/tera/user/ci",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "b697d03a42ffa3b6601768f3895970d535acd61d",
+    "shortSha" : "b697d03a",
+    "author" : "kyutae",
+    "date" : "2022-12-05T22:07:29+09:00",
+    "subject" : "테라 사용자 조회 API - 사용자가 없을 시 응답 컬럼 추가",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/member/MemberFinder.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.member.MemberFinder#findByCi",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/tera/user/ci",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "9a62dd8c684fc6da8e8c4490b759a01d1686f910",
+    "shortSha" : "9a62dd8c",
+    "author" : "kyutae",
+    "date" : "2022-12-04T22:22:51+09:00",
+    "subject" : "외부 연동 API - 계좌번호 복호화 키 오류 수정",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/member/MemberFinder.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.member.MemberFinder#findByCi",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/tera/user/ci",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "ad87dc4f37b502201fcddcdebf54ac419a6d80d6",
+    "shortSha" : "ad87dc4f",
+    "author" : "kyutae",
+    "date" : "2022-12-04T22:14:53+09:00",
+    "subject" : "Update UserForDecaController.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/internalDeca/UserForDecaController.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/tera/user/ci",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "86bc0c168af691d1dd5ac708059f9ab4788aa7b2",
+    "shortSha" : "86bc0c16",
+    "author" : "kyutae",
+    "date" : "2022-12-04T21:46:57+09:00",
+    "subject" : "feature: CI로 고객정보 조회 내부 API - 계좌정보 추가",
+    "changedFiles" : [ "tera-user-service/build.gradle", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/internalDeca/UserForDecaController.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/member/MemberFinder.kt", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/controller/internal/UserForDecaControllerTest.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.member.MemberFinder#findByCi",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.internal.UserForDecaControllerTest#findUserSuccess",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ "com.terafunding.cloud.user.controller.internal.UserForDecaControllerTest#Should Response 200 when find user ", "com.terafunding.cloud.user.controller.internal.UserForDecaControllerTest#Should Response 200 when find user by No ", "com.terafunding.cloud.user.controller.internal.UserForDecaControllerTest#Should Response 200 when find user by Id " ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/tera/user/ci",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "c62e8648e3cd1054769c1e860a4ad8d946e5fffc",
+    "shortSha" : "c62e8648",
+    "author" : "kyutae",
+    "date" : "2022-11-15T15:35:43+09:00",
+    "subject" : "fix: bts oauth 인증 오류 수정",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/entity/legacy/Employee.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.entity.legacy.Employee#toUser",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "d69f1100d55d8bf98126aa323bc65a93123bfabf",
+    "shortSha" : "d69f1100",
+    "author" : "kyutae",
+    "date" : "2022-11-14T13:13:13+09:00",
+    "subject" : "Update VerifyService.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#ocrRequest",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/upload",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "fb3bae1740c393e335b29f668ea9c8aa379162d7",
+    "shortSha" : "fb3bae17",
+    "author" : "kyutae",
+    "date" : "2022-11-14T11:50:47+09:00",
+    "subject" : "Update UsebClient.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#token",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "14320314a5d3376d1d41132d2a075d6e5c5a85da",
+    "shortSha" : "14320314",
+    "author" : "kyutae",
+    "date" : "2022-11-14T11:26:29+09:00",
+    "subject" : "fix: 신분증 오류용 로그",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt", "tera-user-service/src/main/resources/application-live.yml", "tera-user-service/src/main/resources/application-local.yml" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#ocrRequest",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/upload",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/input/status",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "e166498c45d7b9597ab60e4eee2f94df78489b97",
+    "shortSha" : "e166498c",
+    "author" : "kyutae",
+    "date" : "2022-10-23T21:48:50+09:00",
+    "subject" : "사용자 정보 조회 internal api 추가",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/internalDeca/UserForDecaController.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/member/MemberFinder.kt", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/controller/internal/UserForDecaControllerTest.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.member.MemberFinder#findByCi",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ "com.terafunding.cloud.user.controller.internal.InternalUserControllerTest#Should Response 200 when find user ", "com.terafunding.cloud.user.controller.internal.InternalUserControllerTest#Should Response 200 when find user by No ", "com.terafunding.cloud.user.controller.internal.InternalUserControllerTest#Should Response 200 when find user by Id " ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/tera/user/ci",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "993d466eec438fc68c4dba2467a4667bafafac95",
+    "shortSha" : "993d466e",
+    "author" : "kyutae",
+    "date" : "2022-10-20T16:31:01+09:00",
+    "subject" : "Update SBClientTest.kt",
+    "changedFiles" : [ "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/external/sb/SBClientTest.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.external.sb.SBClientTest#ownerNameRequest_ok",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "f80cc0db293d8768a86e3beae251513d3dd061ad",
+    "shortSha" : "f80cc0db",
+    "author" : "kyutae",
+    "date" : "2022-10-18T23:15:16+09:00",
+    "subject" : "oauth 1.0.6 적용",
+    "changedFiles" : [ "gradle-env.gradle", "tera-user-service/build/generated-snippets/bankVerifySuccess/curl-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/http-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/http-response.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/httpie-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/request-body.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/response-body.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/response-fields.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/response-headers.adoc" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "e71c95a5fb00fc5f91d055d723d14f4ee5e2e5ea",
+    "shortSha" : "e71c95a5",
+    "author" : "kyutae",
+    "date" : "2022-10-18T23:08:36+09:00",
+    "subject" : "Update gradle-env.gradle",
+    "changedFiles" : [ "gradle-env.gradle" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "62bd0ae4ba4f9326b003c1a3e69a6a831f9770e9",
+    "shortSha" : "62bd0ae4",
+    "author" : "kyutae",
+    "date" : "2022-10-18T18:24:31+09:00",
+    "subject" : "fix deprecated feature of github action",
+    "changedFiles" : [ ".github/workflows/common-deploy-to-ecs.yml" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "3c677bc1f50703ca1c2ea55795094a68ea454b92",
+    "shortSha" : "3c677bc1",
+    "author" : "kyutae",
+    "date" : "2022-10-18T18:11:23+09:00",
+    "subject" : "계좌 명의 확인 모듈 나이스 -> 세틀뱅크로 변경",
+    "changedFiles" : [ "tera-user-service/build/generated-snippets/bankVerifySuccess/curl-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/http-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/http-response.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/httpie-request.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/request-body.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/request-headers.adoc", "tera-user-service/build/generated-snippets/bankVerifySuccess/response-body.adoc", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/verify/NiceBankVerifier.kt", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyControllerTest.kt", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/controller/v3/your/StatusControllerTest.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankVerify",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankOwnershipRequest",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.verify.NiceBankVerifier#verify",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyControllerTest#bankVerifySuccess",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankVerify",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/bank",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankOwnershipRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/bank/ownership/request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#updateBankAccountInternal",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/investor/bank",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#accountCheck",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/investor/account/check",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupInternal",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/signup/internal=true",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "267ef902d7950397cdd86696b921c110dc6a98f4",
+    "shortSha" : "267ef902",
+    "author" : "kyutae",
+    "date" : "2022-10-11T18:58:26+09:00",
+    "subject" : "Update NicePhoneVerifier.kt",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/verify/NicePhoneVerifier.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.verify.NicePhoneVerifier#request",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.PhoneController#verifyRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/phone/verify/request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneVerifyRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/phone/request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#InternalPhoneVerifyRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/internal/phone/request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneChangeVerifyRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/phone/change-request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "8fa80817c0a742a3a872ccb48eba1c88340006ba",
+    "shortSha" : "8fa80817",
+    "author" : "kyutae",
+    "date" : "2022-10-11T18:42:46+09:00",
+    "subject" : "Nice log",
+    "changedFiles" : [ "tera-user-service/src/main/java/com/terafunding/cloud/user/support/MCheckPlusFix.java", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/verify/NicePhoneVerifier.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.verify.NicePhoneVerifier#request",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.PhoneController#verifyRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/phone/verify/request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneVerifyRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/phone/request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#InternalPhoneVerifyRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/internal/phone/request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneChangeVerifyRequest",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/phone/change-request",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "d9768490772e334854b59e3b4fab036e83b1aa5a",
+    "shortSha" : "d9768490",
+    "author" : "kyutae",
+    "date" : "2022-10-11T17:35:30+09:00",
+    "subject" : "log nice phone auth",
+    "changedFiles" : [ "tera-user-service/build/generated-snippets/getRsaPublicKey/request-headers.adoc", "tera-user-service/src/main/java/com/terafunding/cloud/user/support/MCheckPlusFix.java" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "35e16465afe9f5b1e1a23b44d9ce046b32aa37c8",
+    "shortSha" : "35e16465",
+    "author" : "kyutae",
+    "date" : "2022-09-21T09:08:36+09:00",
+    "subject" : "tera oauth module version up",
+    "changedFiles" : [ "gradle-env.gradle" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "4503f17b9964bbd5445a92094fe02ba84d7b3ae6",
+    "shortSha" : "4503f17b",
+    "author" : "kyutae",
+    "date" : "2022-09-20T21:33:33+09:00",
+    "subject" : "fix auth return data",
+    "changedFiles" : [ ".aws/stage-task-definition.json", "gradle-env.gradle", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/auth/AuthorizationServerConfig.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/entity/legacy/Employee.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.entity.legacy.Employee#toUser",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  } ],
+  "subgraph" : {
+    "directed" : true,
+    "multigraph" : true,
+    "meta" : {
+      "kind" : "impact-subgraph"
+    },
+    "nodes" : [ {
+      "id" : "com.terafunding.cloud.user.controller.v3.enc.RSAController#getProfile",
+      "fqcn" : "com.terafunding.cloud.user.controller.v3.enc.RSAController",
+      "method" : "getProfile",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "GET",
+      "endpoint" : "/v3/rsa/profile",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/v3/enc/RSAController.kt",
+      "line" : 31,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.v3.your.StatusController#getStatus",
+      "fqcn" : "com.terafunding.cloud.user.controller.v3.your.StatusController",
+      "method" : "getStatus",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "GET",
+      "endpoint" : "/v3/your/status",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/v3/your/StatusController.kt",
+      "line" : 23,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.component.PointPolicySelectQueryStore#findById",
+      "fqcn" : "com.terafunding.cloud.user.component.PointPolicySelectQueryStore",
+      "method" : "findById",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "PointPolicyEntity",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/component/PointPolicySelectQueryStore.kt",
+      "line" : 13,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.component.PointPolicySelectQueryStore#getPolicyList",
+      "fqcn" : "com.terafunding.cloud.user.component.PointPolicySelectQueryStore",
+      "method" : "getPolicyList",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/component/PointPolicySelectQueryStore.kt",
+      "line" : 17,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointSummary",
+      "fqcn" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController",
+      "method" : "getPointSummary",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "GET",
+      "endpoint" : "/v1/summary",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/point/PublicPointInfoController.kt",
+      "line" : 17,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPassbook",
+      "fqcn" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController",
+      "method" : "getPointPassbook",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "GET",
+      "endpoint" : "/v1/passbook",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/point/PublicPointInfoController.kt",
+      "line" : 22,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#downloadCSV",
+      "fqcn" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController",
+      "method" : "downloadCSV",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Unit",
+      "httpMethod" : "GET",
+      "endpoint" : "/v1/passbook/excel",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/point/PublicPointInfoController.kt",
+      "line" : 28,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPolicy",
+      "fqcn" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController",
+      "method" : "getPointPolicy",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : "GET",
+      "endpoint" : "/v1/policy",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/point/PublicPointInfoController.kt",
+      "line" : 37,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPassbook#empty",
+      "fqcn" : "com.terafunding.cloud.user.entity.point.PointPassbook",
+      "method" : "empty",
+      "layer" : "OTHER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "PointPassbook",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/entity/point/PointPassbook.kt",
+      "line" : 33,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.entity.point.PointPolicyEntity#toDto",
+      "fqcn" : "com.terafunding.cloud.user.entity.point.PointPolicyEntity",
+      "method" : "toDto",
+      "layer" : "OTHER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/entity/point/PointPolicyEntity.kt",
+      "line" : 23,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findByUserNoAndType",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findByUserNoAndType",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "PointPassbook",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 36,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAccumulatePointByUserNo",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findAccumulatePointByUserNo",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 41,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getExpirePointInMonth",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "getExpirePointInMonth",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Int",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 44,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findMayBeExpirePoints",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findMayBeExpirePoints",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 53,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getRemainPoint",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "getRemainPoint",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Int",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 60,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPointPassbookJoinWithPolicy",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "getPointPassbookJoinWithPolicy",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 64,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAllPointPassbookJoinWithPolicy",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findAllPointPassbookJoinWithPolicy",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 68,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findPointPassbookJoinWithPolicyQuery",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findPointPassbookJoinWithPolicyQuery",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 72,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#toDto",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "toDto",
+      "layer" : "COMPONENT",
+      "visibility" : "private",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 80,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPageOfPassbook",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "getPageOfPassbook",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 95,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findById",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findById",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 116,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findLastestByUserNo",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findLastestByUserNo",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "PointPassbook",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 120,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findPointPassbookByUserNoAndByCodes",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findPointPassbookByUserNoAndByCodes",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 125,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAllByCreateDate",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "findAllByCreateDate",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 130,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#sumByCreateDate",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "sumByCreateDate",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Int",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 137,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getJoinColumns",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "getJoinColumns",
+      "layer" : "COMPONENT",
+      "visibility" : "private",
+      "async" : false,
+      "returnType" : "MutableList",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 141,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getRemainExpiredPoint",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore",
+      "method" : "getRemainExpiredPoint",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 147,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.component.PointQueryBuilder#where",
+      "fqcn" : "com.terafunding.cloud.user.service.component.PointQueryBuilder",
+      "method" : "where",
+      "layer" : "OTHER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "line" : 168,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointSummary",
+      "fqcn" : "com.terafunding.cloud.user.service.point.PointInfoService",
+      "method" : "getPointSummary",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "line" : 19,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPolicy",
+      "fqcn" : "com.terafunding.cloud.user.service.point.PointInfoService",
+      "method" : "getPointPolicy",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "line" : 25,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#findAllPointPassbookJoinWithPolicy",
+      "fqcn" : "com.terafunding.cloud.user.service.point.PointInfoService",
+      "method" : "findAllPointPassbookJoinWithPolicy",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "List",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "line" : 28,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#findById",
+      "fqcn" : "com.terafunding.cloud.user.service.point.PointInfoService",
+      "method" : "findById",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "line" : 31,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPassbook",
+      "fqcn" : "com.terafunding.cloud.user.service.point.PointInfoService",
+      "method" : "getPointPassbook",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "line" : 38,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "fqcn" : "com.terafunding.cloud.user.external.useb.UsebClient",
+      "method" : "requestHandler",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "S",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "line" : 115,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#request",
+      "fqcn" : "com.terafunding.cloud.user.external.useb.UsebClient",
+      "method" : "request",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "S",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "line" : 133,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#statusIdCard",
+      "fqcn" : "com.terafunding.cloud.user.external.useb.UsebClient",
+      "method" : "statusIdCard",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "line" : 92,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#statusDriver",
+      "fqcn" : "com.terafunding.cloud.user.external.useb.UsebClient",
+      "method" : "statusDriver",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "line" : 103,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#inputStatus",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService",
+      "method" : "inputStatus",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "line" : 666,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.internal.InternalBankController#withdraw",
+      "fqcn" : "com.terafunding.cloud.user.controller.internal.InternalBankController",
+      "method" : "withdraw",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/v1/bank/withdraw/{userNo}",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/internal/InternalBankController.kt",
+      "line" : 57,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.member.MemberFinder#findByCi",
+      "fqcn" : "com.terafunding.cloud.user.service.member.MemberFinder",
+      "method" : "findByCi",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Map",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/member/MemberFinder.kt",
+      "line" : 50,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "fqcn" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController",
+      "method" : "findUser",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Map",
+      "httpMethod" : "POST",
+      "endpoint" : "/internal/tera/user/ci",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/internalDeca/UserForDecaController.kt",
+      "line" : 25,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#ocrRequest",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService",
+      "method" : "ocrRequest",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "IdCardInfo",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "line" : 627,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#token",
+      "fqcn" : "com.terafunding.cloud.user.external.useb.UsebClient",
+      "method" : "token",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Token",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "line" : 50,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankVerify",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService",
+      "method" : "bankVerify",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "BankVerifyResult",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "line" : 344,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankOwnershipRequest",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService",
+      "method" : "bankOwnershipRequest",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "String",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "line" : 494,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.verify.NiceBankVerifier#verify",
+      "fqcn" : "com.terafunding.cloud.user.service.verify.NiceBankVerifier",
+      "method" : "verify",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "BankVerifyRes",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/verify/NiceBankVerifier.kt",
+      "line" : 32,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.verify.NicePhoneVerifier#request",
+      "fqcn" : "com.terafunding.cloud.user.service.verify.NicePhoneVerifier",
+      "method" : "request",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "VerifyRes",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/verify/NicePhoneVerifier.kt",
+      "line" : 22,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.external.useb.UsebClient#ocrIdCard",
+      "fqcn" : "com.terafunding.cloud.user.external.useb.UsebClient",
+      "method" : "ocrIdCard",
+      "layer" : "COMPONENT",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "line" : 85,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method" : "inputStatus",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/input/status",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "line" : 209,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method" : "uploadOCR",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "IdCardInfo",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/upload",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "line" : 203,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankVerify",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method" : "bankVerify",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/bank",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "line" : 54,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.AccountService#updateBankAccount",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.AccountService",
+      "method" : "updateBankAccount",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Unit",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/AccountService.kt",
+      "line" : 90,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.AccountService#checkAccount",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.AccountService",
+      "method" : "checkAccount",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "AccountCheckResult",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/AccountService.kt",
+      "line" : 178,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signupInternal",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.SignupService",
+      "method" : "signupInternal",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Res",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/SignupService.kt",
+      "line" : 274,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankOwnershipRequest",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method" : "bankOwnershipRequest",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/bank/ownership/request",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "line" : 192,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneVerify",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService",
+      "method" : "phoneVerify",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "VerifyRes",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "line" : 178,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#updateBankAccountInternal",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method" : "updateBankAccountInternal",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/investor/bank",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/InvestorController.kt",
+      "line" : 101,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#accountCheck",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController",
+      "method" : "accountCheck",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/investor/account/check",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/InvestorController.kt",
+      "line" : 56,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupInternal",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method" : "signupInternal",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Res",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/signup/internal=true",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/SignupController.kt",
+      "line" : 87,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.PhoneController#verifyRequest",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.PhoneController",
+      "method" : "verifyRequest",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/phone/verify/request",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/PhoneController.kt",
+      "line" : 22,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneVerifyRequest",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method" : "phoneVerifyRequest",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/phone/request",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "line" : 106,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#InternalPhoneVerifyRequest",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method" : "InternalPhoneVerifyRequest",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/internal/phone/request",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "line" : 153,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneChangeVerify",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService",
+      "method" : "phoneChangeVerify",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "VerifyRes",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "line" : 201,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneChangeVerifyRequest",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController",
+      "method" : "phoneChangeVerifyRequest",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/phone/change-request",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "line" : 127,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    } ],
+    "edges" : [ {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#findById",
+      "target" : "com.terafunding.cloud.user.component.PointPolicySelectQueryStore#findById",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 33
+    }, {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPolicy",
+      "target" : "com.terafunding.cloud.user.component.PointPolicySelectQueryStore#getPolicyList",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 25
+    }, {
+      "source" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findByUserNoAndType",
+      "target" : "com.terafunding.cloud.user.entity.point.PointPassbook#empty",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "callSiteLine" : 38
+    }, {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#findById",
+      "target" : "com.terafunding.cloud.user.entity.point.PointPolicyEntity#toDto",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 33
+    }, {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointSummary",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getExpirePointInMonth",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 20
+    }, {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointSummary",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getRemainPoint",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 21
+    }, {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPassbook",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPointPassbookJoinWithPolicy",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 41
+    }, {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#findAllPointPassbookJoinWithPolicy",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAllPointPassbookJoinWithPolicy",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 28
+    }, {
+      "source" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPointPassbookJoinWithPolicy",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findPointPassbookJoinWithPolicyQuery",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "callSiteLine" : 65
+    }, {
+      "source" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAllPointPassbookJoinWithPolicy",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findPointPassbookJoinWithPolicyQuery",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "callSiteLine" : 69
+    }, {
+      "source" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPointPassbookJoinWithPolicy",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#toDto",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "callSiteLine" : 65
+    }, {
+      "source" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findAllPointPassbookJoinWithPolicy",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#toDto",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "callSiteLine" : 69
+    }, {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPassbook",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPageOfPassbook",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 43
+    }, {
+      "source" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findPointPassbookJoinWithPolicyQuery",
+      "target" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getJoinColumns",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "callSiteLine" : 75
+    }, {
+      "source" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#findPointPassbookJoinWithPolicyQuery",
+      "target" : "com.terafunding.cloud.user.service.component.PointQueryBuilder#where",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "callSiteLine" : 76
+    }, {
+      "source" : "com.terafunding.cloud.user.service.component.PointPassbookSelectQueryStore#getPageOfPassbook",
+      "target" : "com.terafunding.cloud.user.service.component.PointQueryBuilder#where",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/component/PointPassbookSelectQueryStore.kt",
+      "callSiteLine" : 96
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointSummary",
+      "target" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointSummary",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/point/PublicPointInfoController.kt",
+      "callSiteLine" : 18
+    }, {
+      "source" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPassbook",
+      "target" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointSummary",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/point/PointInfoService.kt",
+      "callSiteLine" : 42
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPolicy",
+      "target" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPolicy",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/point/PublicPointInfoController.kt",
+      "callSiteLine" : 38
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPassbook",
+      "target" : "com.terafunding.cloud.user.service.point.PointInfoService#getPointPassbook",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/point/PublicPointInfoController.kt",
+      "callSiteLine" : 24
+    }, {
+      "source" : "com.terafunding.cloud.user.external.useb.UsebClient#ocrIdCard",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "callSiteLine" : 86
+    }, {
+      "source" : "com.terafunding.cloud.user.external.useb.UsebClient#statusIdCard",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "callSiteLine" : 93
+    }, {
+      "source" : "com.terafunding.cloud.user.external.useb.UsebClient#statusDriver",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "callSiteLine" : 104
+    }, {
+      "source" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#request",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "callSiteLine" : 119
+    }, {
+      "source" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#request",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "callSiteLine" : 130
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#inputStatus",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#statusIdCard",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "callSiteLine" : 693
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#inputStatus",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#statusDriver",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "callSiteLine" : 694
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#inputStatus",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "callSiteLine" : 211
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+      "target" : "com.terafunding.cloud.user.service.member.MemberFinder#findByCi",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/internalDeca/UserForDecaController.kt",
+      "callSiteLine" : 26
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#ocrRequest",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "callSiteLine" : 204
+    }, {
+      "source" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#token",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "callSiteLine" : 116
+    }, {
+      "source" : "com.terafunding.cloud.user.external.useb.UsebClient#requestHandler",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#token",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClient.kt",
+      "callSiteLine" : 125
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankVerify",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "callSiteLine" : 60
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.AccountService#updateBankAccount",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/AccountService.kt",
+      "callSiteLine" : 167
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.AccountService#checkAccount",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/AccountService.kt",
+      "callSiteLine" : 212
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signupInternal",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/SignupService.kt",
+      "callSiteLine" : 324
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankOwnershipRequest",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "callSiteLine" : 518
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankOwnershipRequest",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#bankOwnershipRequest",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "callSiteLine" : 193
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneVerify",
+      "target" : "com.terafunding.cloud.user.service.verify.NicePhoneVerifier#request",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "callSiteLine" : 190
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#ocrRequest",
+      "target" : "com.terafunding.cloud.user.external.useb.UsebClient#ocrIdCard",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "callSiteLine" : 645
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#updateBankAccountInternal",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.AccountService#updateBankAccount",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/InvestorController.kt",
+      "callSiteLine" : 102
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.AccountService#updateBankAccount",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.AccountService#updateBankAccount",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/AccountService.kt",
+      "callSiteLine" : 171
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#accountCheck",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.AccountService#checkAccount",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/InvestorController.kt",
+      "callSiteLine" : 57
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupInternal",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signupInternal",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/SignupController.kt",
+      "callSiteLine" : 89
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.PhoneController#verifyRequest",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/PhoneController.kt",
+      "callSiteLine" : 23
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneVerifyRequest",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "callSiteLine" : 110
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#InternalPhoneVerifyRequest",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "callSiteLine" : 155
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneChangeVerify",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
+      "callSiteLine" : 220
+    }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneChangeVerifyRequest",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneChangeVerify",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/VerifyController.kt",
+      "callSiteLine" : 128
+    } ]
+  },
+  "endpointImpact" : [ {
+    "id" : "com.terafunding.cloud.user.controller.internalDeca.UserForDecaController#findUser",
+    "httpMethod" : "POST",
+    "endpoint" : "/internal/tera/user/ci",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "0d93591e", "0b9a4037", "b697d03a", "9a62dd8c", "ad87dc4f", "86bc0c16", "e166498c" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/verify/ocr/upload",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "101d3345", "8861efab", "d69f1100", "14320314" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/verify/ocr/input/status",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "101d3345", "8663da45", "8861efab", "14320314" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.internal.InternalBankController#withdraw",
+    "httpMethod" : "POST",
+    "endpoint" : "/internal/v1/bank/withdraw/{userNo}",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "b98b8373", "8453a785" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.PhoneController#verifyRequest",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/phone/verify/request",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "267ef902", "8fa80817" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneVerifyRequest",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/verify/phone/request",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "267ef902", "8fa80817" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#InternalPhoneVerifyRequest",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/verify/internal/phone/request",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "267ef902", "8fa80817" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneChangeVerifyRequest",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/verify/phone/change-request",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "267ef902", "8fa80817" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.v3.enc.RSAController#getProfile",
+    "httpMethod" : "GET",
+    "endpoint" : "/v3/rsa/profile",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "8c665f9d" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.v3.your.StatusController#getStatus",
+    "httpMethod" : "GET",
+    "endpoint" : "/v3/your/status",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "8c665f9d" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointSummary",
+    "httpMethod" : "GET",
+    "endpoint" : "/v1/summary",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "40cf672e" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPassbook",
+    "httpMethod" : "GET",
+    "endpoint" : "/v1/passbook",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "40cf672e" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#downloadCSV",
+    "httpMethod" : "GET",
+    "endpoint" : "/v1/passbook/excel",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "40cf672e" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.point.PublicPointInfoController#getPointPolicy",
+    "httpMethod" : "GET",
+    "endpoint" : "/v1/policy",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "40cf672e" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankVerify",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/verify/bank",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "3c677bc1" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#bankOwnershipRequest",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/verify/bank/ownership/request",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "3c677bc1" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#updateBankAccountInternal",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/investor/bank",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "3c677bc1" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.InvestorController#accountCheck",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/investor/account/check",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "3c677bc1" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupInternal",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/signup/internal=true",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "3c677bc1" ]
+  } ],
+  "deletedEndpoints" : [ ]
+}

@@ -1,0 +1,160 @@
+/* flowmap 기능 모듈 — Kafka 토픽 영향도 분석 (.tpc-*)
+ * 색 원칙: var(--c-kafka) 단일 색의 채움/외곽선 변형만 사용 (신규 색 도입 금지).
+ * produce/consume 구분은 색약 대응을 위해 칩 텍스트 화살표(PRODUCE ⟶ / ⟶ CONSUME)를 항상 포함.
+ */
+
+/* 뷰 레이아웃: 분석 바(상단) + 3컬럼 행 */
+#columns.tpc-view {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+  min-width: 100%;
+}
+
+/* ── 분석 바 ── */
+.tpc-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.tpc-bar-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+}
+.tpc-bar-meta { font-size: 12px; color: var(--text-dim); }
+.tpc-e2e {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  background: #0b1220;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+}
+.tpc-e2e input { accent-color: var(--c-kafka); cursor: pointer; }
+.tpc-partial {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-kafka);
+  border: 1px dashed var(--c-kafka);
+  border-radius: 9px;
+  padding: 2px 8px;
+}
+.tpc-back { margin-left: auto; }
+
+/* ── 3컬럼 행 ── */
+.tpc-cols { display: flex; gap: 72px; align-items: center; width: max-content; }
+.tpc-col-center { min-width: 240px; align-self: center; }
+
+/* 중앙 토픽 카드: 1.25배 확대 + kafka 색 2px 외곽 */
+.tpc-center-wrap { transform: scale(1.25); transform-origin: center; margin: 10px 30px; }
+.node-card.tpc-center {
+  box-shadow: 0 0 0 2px var(--c-kafka), 0 8px 20px rgba(0, 0, 0, .55);
+  border-color: var(--c-kafka);
+}
+
+/* ── 서비스 그룹 박스 (.path-group 변형) ──
+ * produce 측: 옅은 틴트 + 외곽선 칩 / consume 측: 짙은 틴트 + 채움 칩 */
+.tpc-group.tpc-produce { background: rgba(192, 38, 211, .04); border-color: rgba(192, 38, 211, .35); }
+.tpc-group.tpc-consume { background: rgba(192, 38, 211, .09); border-color: rgba(192, 38, 211, .35); }
+.tpc-svc { font-size: 12px; font-weight: 700; color: var(--text); }
+
+/* 방향 칩 — 텍스트 화살표 포함(색약 대응) */
+.tpc-chip {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  border-radius: 9px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.tpc-chip-produce { color: var(--c-kafka); border: 1px solid var(--c-kafka); background: transparent; }
+.tpc-chip-consume { color: #fff; background: var(--c-kafka); border: 1px solid var(--c-kafka); }
+
+/* ── 2차 토픽 체인 미니 카드 ── */
+.node-card.tpc-mini {
+  border: 1px dashed var(--c-kafka);
+  background: rgba(192, 38, 211, .06);
+  cursor: pointer;
+}
+.node-card.tpc-mini.tpc-cycle { cursor: default; opacity: .85; }
+.tpc-mini-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+}
+.tpc-mini-sub { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+.tpc-badge-cycle {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-kafka);
+  border: 1px solid var(--c-kafka);
+  border-radius: 9px;
+  padding: 1px 7px;
+  font-family: system-ui, sans-serif;
+}
+
+/* ── 빈 상태 카드 (producer/consumer 없음) ── */
+.node-card.tpc-empty-card {
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: center;
+  padding: 14px 12px;
+  line-height: 1.5;
+  cursor: default;
+}
+.node-card.tpc-empty-card:hover { transform: none; box-shadow: none; border-color: var(--border); }
+
+/* ── 전체 토픽 목록 ── */
+.tpc-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+.node-card.tpc-topic-card { cursor: pointer; border-left: 3px solid var(--c-kafka); width: auto; }
+.node-card.tpc-topic-card:hover { border-color: var(--c-kafka); }
+.tpc-tc-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: ui-monospace, monospace;
+}
+.tpc-tc-sub { font-size: 11px; color: var(--text-dim); margin-top: 5px; }
+
+/* consumer 0 = 죽은 토픽 — 빨강 틴트 (기존 --c-external 토큰 재사용) */
+.node-card.tpc-topic-card.tpc-dead {
+  border-left-color: var(--c-external);
+  background: rgba(220, 38, 38, .08);
+}
+.tpc-dead-label {
+  font-weight: 700;
+  color: var(--c-external);
+  border: 1px solid var(--c-external);
+  border-radius: 9px;
+  padding: 1px 7px;
+  margin-left: 4px;
+}

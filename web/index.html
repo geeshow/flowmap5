@@ -4,13 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>flowmap — 호출관계분석</title>
-  <link rel="stylesheet" href="style.css?v=35">
+  <link rel="stylesheet" href="style.css?v=39">
 </head>
 <body>
   <header id="topbar">
     <div class="brand">flowmap</div>
     <nav id="nav">
       <button id="overview-btn" class="nav-btn" title="전체 서비스 지도 — 서비스 간 s2s·이벤트·인프라 의존 관계">🗺️ 전체보기</button>
+      <button class="nav-btn" data-view="commits" title="git 커밋별 변경 메서드 → 영향받는 API 엔드포인트 분석">🧾 커밋 영향도</button>
+      <button class="nav-btn" data-view="api" title="OpenAPI 기반 API 카탈로그 — 파라미터·요청/응답 스키마 문서">📖 API 문서</button>
     </nav>
     <div class="search-wrap">
       <input id="search" type="text" autocomplete="off" spellcheck="false"
@@ -66,6 +68,6 @@
   <!-- 하단 프로세스 독 — 서비스 보기에서 노드 선택 시 application 내부 흐름 -->
   <div id="process-dock" class="hidden"></div>
 
-  <script src="app.js?v=35"></script>
+  <script src="app.js?v=39"></script>
 </body>
 </html>

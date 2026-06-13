@@ -47,10 +47,11 @@ html, body {
 .brand { font-weight: 700; font-size: 16px; letter-spacing: .5px; color: #fff; }
 
 /* 상단 메뉴 */
-#nav { display: flex; gap: 6px; }
+#nav { display: flex; gap: 6px; flex-shrink: 0; }
 .nav-btn {
   height: 32px; padding: 0 14px; cursor: pointer; font-size: 12px; font-weight: 600;
   background: #0b1220; color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+  white-space: nowrap;
 }
 .nav-btn:hover { border-color: var(--c-controller); color: #fff; }
 .nav-btn.active { background: var(--c-controller); color: #fff; border-color: var(--c-controller); }
@@ -63,7 +64,7 @@ html, body {
 }
 .view-tab:hover { color: var(--text); }
 .view-tab.active { background: var(--c-controller); color: #fff; }
-.search-wrap { position: relative; flex: 1; max-width: 560px; }
+.search-wrap { position: relative; flex: 1; max-width: 560px; min-width: 140px; }
 #search {
   width: 100%; height: 34px; padding: 0 12px;
   background: #0b1220; color: var(--text);
@@ -96,7 +97,14 @@ html, body {
 .search-item .si-go:hover { border-color: var(--c-controller); color: #fff; }
 .search-empty { padding: 10px 12px; color: var(--text-dim); }
 
-.topbar-actions { margin-left: auto; }
+.topbar-actions { margin-left: auto; flex-shrink: 0; }
+.topbar-actions .btn, .brand { white-space: nowrap; }
+
+/* 좁은 화면(프리뷰 패널 등): 검색창을 둘째 줄로 내려 한 줄 깨짐 방지 */
+@media (max-width: 860px) {
+  #topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 8px 12px; gap: 8px; }
+  .search-wrap { order: 9; flex-basis: 100%; max-width: none; }
+}
 .btn {
   height: 32px; padding: 0 12px; cursor: pointer;
   background: #0b1220; color: var(--text);
@@ -506,13 +514,6 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .dn-sub { font-size: 10px; color: var(--text-dim); word-break: break-all; }
 .dn-desc { font-size: 10px; color: #cbd5e1; margin-top: 2px; }
 .dn-file { font-size: 9px; color: var(--text-dim); opacity: .75; margin-top: 2px; }
-.dn-act {
-  position: absolute; top: 5px; right: 5px; display: none;
-  padding: 1px 6px; border-radius: 5px; cursor: pointer; font-size: 10px;
-  background: #1e293b; color: var(--text); border: 1px solid var(--border);
-}
-.dock-node:hover .dn-act { display: block; }
-.dn-act:hover { border-color: var(--c-controller); color: #fff; }
 
 /* ---------- 상세 패널 (엔드포인트/인프라 노드 선택 시에만 표시) ---------- */
 .btn.primary { background: var(--c-controller); color: #fff; border-color: var(--c-controller); font-weight: 600; }
@@ -536,3 +537,13 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: #334155; border-radius: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- 기능 모듈 호스트 (features/*.js lazy load) ---------- */
+:root {
+  --imp-changed: #f97316;                /* 영향도: 변경 노드 */
+  --imp-tint:    rgba(249,115,22,.10);   /* 영향도: 경로 노드 배경 틴트 */
+  --imp-halo:    rgba(249,115,22,.35);   /* 영향도: 경로 엣지 halo */
+}
+.feature-loading {
+  padding: 60px 20px; text-align: center; color: var(--text-dim); font-size: 13px;
+}

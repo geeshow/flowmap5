@@ -1,0 +1,154 @@
+/* apidoc — RestDoc/API 문서 보기 (.doc-* 접두사)
+ * 타이포그래피: DESIGN-v2 §5.4 — 섹션 헤더 10px 700 uppercase, 트리 11px,
+ * 타입 #7dd3fc mono, required * = var(--c-external) */
+
+/* ---------- 상세 패널 섹션 ---------- */
+.doc-section { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+.doc-sec-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.doc-none { font-size: 11px; color: var(--text-dim); opacity: .8; margin-top: 14px; }
+.doc-none code, .doc-cmd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px; background: #0b1220; border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px;
+}
+
+/* ---------- operation 문서 블록 ---------- */
+.doc-op { margin-bottom: 14px; }
+.doc-op + .doc-op { padding-top: 10px; border-top: 1px dashed var(--border); }
+.doc-op-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 14px; font-weight: 700; margin-bottom: 6px;
+}
+.doc-op-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px; color: var(--text); word-break: break-all;
+}
+.doc-desc { font-size: 12px; line-height: 1.7; color: #cbd5e1; margin: 2px 0 8px; }
+
+/* 섹션 헤더 (▸ 파라미터 …) — 10px 700 uppercase */
+.doc-sec-head {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-dim); margin: 12px 0 5px;
+}
+.doc-sec-extra { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: .8; }
+
+/* ---------- 파라미터 테이블 (.detail-table 재사용 + 보정) ---------- */
+.doc-params .doc-th td { color: var(--text-dim); font-size: 10px; text-transform: uppercase; }
+.doc-params td { font-size: 11px; }
+.doc-pin { color: var(--text-dim); }
+
+/* ---------- 스키마 트리 ---------- */
+.doc-tree { font-size: 11px; margin: 2px 0 6px; }
+.doc-row {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  padding: 2px 0; line-height: 1.5;
+}
+.doc-kids { margin-left: 14px; padding-left: 8px; border-left: 1px solid var(--border); }
+.doc-fname { color: var(--text); word-break: break-all; }
+.doc-req { color: var(--c-external); font-weight: 700; font-style: normal; margin-left: 1px; }
+.doc-ftype {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; color: #7dd3fc; word-break: break-all;
+}
+.doc-ftype-map { color: var(--text-dim); font-style: italic; }
+.doc-chip {
+  font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-dim); background: #0b1220; border: 1px solid var(--border);
+  border-radius: 8px; padding: 0 5px; line-height: 1.6; white-space: nowrap;
+}
+.doc-chip-enum { color: #cbd5e1; }
+.doc-cycle { color: var(--c-kafka); border-color: rgba(192,38,211,.4); }
+.doc-toggle {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px;
+  color: var(--c-controller); background: none; border: none; cursor: pointer;
+  padding: 0 2px; line-height: 1;
+}
+.doc-toggle:hover { color: #fff; }
+.doc-warn { color: var(--c-external); opacity: .85; font-size: 11px; }
+.doc-dim { color: var(--text-dim); font-size: 11px; opacity: .8; }
+
+/* ---------- Responses ---------- */
+.doc-resp { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
+.doc-resp-tree { margin-left: 4px; }
+.doc-st {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 6px;
+}
+.doc-st-ok   { background: rgba(22,163,74,.18);  color: #4ade80; border: 1px solid rgba(22,163,74,.45); }
+.doc-st-warn { background: rgba(251,191,36,.14); color: #fbbf24; border: 1px solid rgba(251,191,36,.4); }
+.doc-st-err  { background: rgba(220,38,38,.16);  color: #f87171; border: 1px solid rgba(220,38,38,.45); }
+.doc-st-etc  { background: #0b1220; color: var(--text-dim); border: 1px solid var(--border); }
+
+/* ---------- 카탈로그 뷰 (view=api) ---------- */
+#columns.doc-host { display: block; width: 100%; max-width: 1080px; }
+.doc-wrap { width: 100%; }
+
+/* 서비스 카드 목록 */
+.doc-svc-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px;
+}
+.doc-svc-card {
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; cursor: pointer;
+  transition: transform .12s, border-color .12s, box-shadow .12s;
+}
+.doc-svc-card:hover {
+  transform: translateY(-1px); border-color: var(--c-controller);
+  box-shadow: 0 6px 18px rgba(0,0,0,.5);
+}
+.doc-svc-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.doc-svc-count { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+/* 필터 툴바 */
+.doc-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.doc-filter {
+  flex: 0 1 340px; background: #0b1220; border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 12px; padding: 6px 10px; outline: none;
+}
+.doc-filter:focus { border-color: var(--c-controller); }
+.doc-filter::placeholder { color: var(--text-dim); }
+
+/* 경로 그룹 + endpoint 행 */
+.doc-ep-list { display: flex; flex-direction: column; gap: 16px; }
+.doc-group { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.doc-group-head {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-dim); background: #0b1220; padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.doc-group-body { display: flex; flex-direction: column; }
+.doc-ep-row {
+  display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+  border-bottom: 1px solid rgba(51,65,85,.5); cursor: pointer; min-width: 0;
+}
+.doc-ep-row:last-child { border-bottom: none; }
+.doc-ep-row:hover { background: #0b1220; }
+.doc-ep-row.doc-ep-sel { box-shadow: inset 2px 0 0 #38bdf8; background: #0b1220; }
+.doc-ep-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; color: var(--text); white-space: nowrap;
+}
+.doc-ep-desc {
+  flex: 1; min-width: 0; font-size: 11px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.doc-ep-noGraph .doc-ep-path, .doc-ep-noGraph .doc-ep-desc { opacity: .55; }
+.doc-ep-nograph {
+  margin-left: auto; font-size: 10px; color: var(--text-dim); opacity: .7;
+  border: 1px dashed var(--border); border-radius: 8px; padding: 0 6px; white-space: nowrap;
+}
+.doc-ep-go {
+  display: none; margin-left: auto; flex-shrink: 0;
+  background: #0b1220; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text-dim); font-size: 11px; padding: 1px 7px; cursor: pointer;
+}
+.doc-ep-row:hover .doc-ep-go { display: inline-block; }
+.doc-ep-go:hover { border-color: var(--c-controller); color: #fff; }
+.doc-ep-nograph + .doc-ep-go { margin-left: 0; }
+
+/* 그래프 미존재 행의 인라인 문서 전개 */
+.doc-inline {
+  padding: 10px 14px 12px 28px; background: rgba(11,18,32,.6);
+  border-bottom: 1px solid rgba(51,65,85,.5);
+}

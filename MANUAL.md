@@ -98,8 +98,7 @@ CONTROLLER → SERVICE → REPOSITORY → INFRA │ CONTROLLER → COMPONENT →
 - **레이어 컬럼** — 세그먼트 안에서 Controller → Service → Component → Batch/Config →
   Repository → Infra/External 순서.
 - **노드 카드** — HTTP 메서드/레이어/리소스 배지, 메서드명, 엔드포인트·외부 URL, 클래스명,
-  API 설명, 파일명:라인. hover 시 전체 FQCN·경로 툴팁과 **⟲ 버튼**(그 노드 기준 호출관계분석)이 나타납니다.
-  기준 노드는 노란 테두리.
+  API 설명, 파일명:라인. hover 시 전체 FQCN·경로 툴팁이 나타납니다. 기준 노드는 노란 테두리.
 - **연결선** — kind 색(내부 회색 / S2S 파랑 / 외부 빨강 / Kafka 보라 / Redis 분홍 / DB 갈색),
   화살표는 호출 방향. **sync는 실선, async는 점선 + `· async` 라벨**
   (`kafka:produce · async` 등). 헤더에 `— sync ┄ async` 범례.
@@ -198,3 +197,42 @@ BATCH/EXTERNAL/RESOURCE/OTHER), `method`, `fqcn`, `httpMethod`+`endpoint`(컨트
 | `batch` | `batch:step`·`batch:reader`·`batch:processor`·`batch:writer` | async | 보라 |
 
 `callSiteFile`/`callSiteLine`은 호출 지점 — 화면에서는 호출 순서 정렬과 프로세스 트리의 `L44` 표기에 사용됩니다.
+
+## 15. 기능 모듈 (lazy load)
+
+`web/features/` 의 기능 모듈은 **메뉴 진입 시에만** 코드와 데이터를 로드합니다 (초기 로딩 영향 0).
+모듈 계약은 `docs/FEATURE-API.md` 참조 — AI/개발자가 기능을 수정할 땐 해당 모듈 파일만 보면 됩니다.
+
+### 15.1 🧾 커밋 영향도 (`?view=commits`)
+- 헤더 nav `🧾 커밋 영향도` 로 진입. 데이터: `web/data/impact.json` (없으면 생성 안내 표시).
+- 좌측 커밋 레일: 체크박스로 **여러 커밋 묶어 보기**(합집합), 카드 클릭은 단일 선택. 작성자/메시지/파일 필터.
+- 커밋 미선택: 엔드포인트 → 영향 커밋 집계 테이블. 선택: 변경 노드(◆ 주황 링)에서 피호출 역추적 → 영향 엔드포인트(◇ 점선 링) 그래프.
+- `inGraph:false` 변경은 "그래프 외 변경 N건" 으로 별도 표기.
+- 상세 패널: 영향받은 엔드포인트 선택 시 `◆ 영향 커밋 N건` 섹션 (impact 모듈 로드 후).
+- URL: `commit=<shortSha[,sha...]>`, `ep=<nodeId>` (역조회 필터)
+
+### 15.2 📡 카프카 토픽 영향도 (`?view=topic`)
+- 진입: kafka 토픽 노드 상세 패널의 `📡 토픽 영향도 분석` 버튼, 또는 `?view=topic` (토픽 목록).
+- 좌측 PRODUCE 레인: 이 토픽을 발행시키는 체인을 API 엔드포인트까지 역추적. 우측 CONSUME 레인: 소비 후 후속 처리(DB/외부/2차 토픽)까지 순추적.
+- `엔드포인트까지 역추적(end-to-end)` 토글 (`e2e=0/1`), 컨슈머 없는 토픽은 "소비되지 않음" 경고.
+- URL: `topic=<노드id>` (예 `kafka:order.created`)
+
+### 15.3 📖 API 문서 (`?view=api`)
+- 헤더 nav `📖 API 문서` 로 진입. 데이터: `web/data/openapi.json` (OpenAPI 3.1, operationId = 그래프 노드 id).
+- 서비스 목록 → 엔드포인트 카탈로그 (마스터-디테일). 행 클릭 → 상세 패널에 파라미터 테이블·Request/Response 스키마 트리($ref 클릭 전개, 순환은 `↺ 재귀`).
+- 그래프의 CONTROLLER 노드 상세 패널에서도 `📄 API 문서` 버튼으로 동일 문서 확인.
+- URL: `asvc=<서비스>`, `q=<필터>`
+
+## 16. 데이터 동기화
+
+```bash
+scripts/sync-data.sh   # _combined → graph.json, _openapi → openapi.json, analyzer impact → impact.json
+```
+analyzer 재분석(refresh) 후 이 스크립트만 실행하면 세 데이터가 같은 시점으로 갱신됩니다.
+
+## 17. 테스트
+
+```bash
+node tests/check-data.mjs       # 데이터 계약 (끊긴 엣지/operationId 조인율/impact 무결성)
+node tests/check-features.mjs   # 기능 모듈 정적 검사 (문법/등록/금지 패턴)
+```
