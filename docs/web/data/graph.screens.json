@@ -1,0 +1,151 @@
+{
+  "meta": {
+    "command": "screens",
+    "repo": ".repo",
+    "project": null,
+    "screens": 3,
+    "components": 5
+  },
+  "screens": [
+    {
+      "id": "sample-shop-react/src/pages/OrdersPage.tsx::OrdersPage",
+      "name": "OrdersPage",
+      "route": "/orders",
+      "file": "sample-shop-react/src/pages/OrdersPage.tsx"
+    },
+    {
+      "id": "sample-shop-react/src/pages/ReportPage.tsx::ReportPage",
+      "name": "ReportPage",
+      "route": "/report",
+      "file": "sample-shop-react/src/pages/ReportPage.tsx"
+    },
+    {
+      "id": "sample-shop-react/src/pages/UserPage.tsx::UserPage",
+      "name": "UserPage",
+      "route": "/users/{}",
+      "file": "sample-shop-react/src/pages/UserPage.tsx"
+    }
+  ],
+  "components": {
+    "sample-shop-react/src/components/UserCard.tsx::UserCard": {
+      "id": "sample-shop-react/src/components/UserCard.tsx::UserCard",
+      "name": "UserCard",
+      "kind": "component",
+      "file": "sample-shop-react/src/components/UserCard.tsx",
+      "line": 4,
+      "project": "sample-shop-react",
+      "root": {
+        "tag": "div",
+        "kind": "host",
+        "line": 7,
+        "props": {
+          "className": "user-card"
+        },
+        "children": [
+          {
+            "tag": "span",
+            "kind": "host",
+            "line": 8,
+            "children": [
+              {
+                "tag": "#expr",
+                "kind": "expression",
+                "text": "name",
+                "line": 8
+              }
+            ]
+          },
+          {
+            "tag": "#cond",
+            "kind": "conditional",
+            "text": "auth.token",
+            "children": [
+              {
+                "tag": "em",
+                "kind": "host",
+                "line": 9,
+                "children": [
+                  {
+                    "tag": "#text",
+                    "kind": "text",
+                    "text": "authed",
+                    "line": 9
+                  }
+                ]
+              }
+            ],
+            "line": 9
+          }
+        ]
+      }
+    },
+    "sample-shop-react/src/hooks/useUser.ts::useUser": {
+      "id": "sample-shop-react/src/hooks/useUser.ts::useUser",
+      "name": "useUser",
+      "kind": "component",
+      "file": "sample-shop-react/src/hooks/useUser.ts",
+      "line": 5,
+      "project": "sample-shop-react",
+      "root": null
+    },
+    "sample-shop-react/src/pages/OrdersPage.tsx::OrdersPage": {
+      "id": "sample-shop-react/src/pages/OrdersPage.tsx::OrdersPage",
+      "name": "OrdersPage",
+      "kind": "screen",
+      "file": "sample-shop-react/src/pages/OrdersPage.tsx",
+      "line": 7,
+      "project": "sample-shop-react",
+      "root": {
+        "tag": "button",
+        "kind": "host",
+        "line": 19,
+        "children": [
+          {
+            "tag": "#text",
+            "kind": "text",
+            "text": "Order",
+            "line": 20
+          }
+        ]
+      }
+    },
+    "sample-shop-react/src/pages/ReportPage.tsx::ReportPage": {
+      "id": "sample-shop-react/src/pages/ReportPage.tsx::ReportPage",
+      "name": "ReportPage",
+      "kind": "screen",
+      "file": "sample-shop-react/src/pages/ReportPage.tsx",
+      "line": 4,
+      "project": "sample-shop-react",
+      "root": {
+        "tag": "div",
+        "kind": "host",
+        "line": 5,
+        "children": [
+          {
+            "tag": "#text",
+            "kind": "text",
+            "text": "report",
+            "line": 5
+          }
+        ]
+      }
+    },
+    "sample-shop-react/src/pages/UserPage.tsx::UserPage": {
+      "id": "sample-shop-react/src/pages/UserPage.tsx::UserPage",
+      "name": "UserPage",
+      "kind": "screen",
+      "file": "sample-shop-react/src/pages/UserPage.tsx",
+      "line": 7,
+      "project": "sample-shop-react",
+      "root": {
+        "tag": "UserCard",
+        "kind": "component",
+        "line": 17,
+        "props": {
+          "name": "{name || current?.name || ''}"
+        },
+        "componentId": "sample-shop-react/src/components/UserCard.tsx::UserCard"
+      }
+    }
+  }
+}

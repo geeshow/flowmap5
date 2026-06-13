@@ -1,8 +1,8 @@
 {
   "branch" : "develop",
-  "commitCount" : 30,
+  "commitCount" : 50,
   "depth" : 3,
-  "changedNodeCount" : 47,
+  "changedNodeCount" : 50,
   "deletedEndpointCount" : 0,
   "trulyDeletedEndpointCount" : 0,
   "breakingDeletionCount" : 0,
@@ -831,6 +831,285 @@
     "deletedEndpoints" : [ ],
     "impactedEndpoints" : [ ],
     "impactedServices" : [ ]
+  }, {
+    "sha" : "b6c00b475b7d15c23705d1862d1a4f417a1dcc37",
+    "shortSha" : "b6c00b47",
+    "author" : "kyutae",
+    "date" : "2022-09-05T02:00:29+09:00",
+    "subject" : "fix",
+    "changedFiles" : [ ".aws/live-task-definition.json", ".github/workflows/env-develop-branch.yml" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "9647634ffb0542da89bcc78aeae82607204035dc",
+    "shortSha" : "9647634f",
+    "author" : "kyutae",
+    "date" : "2022-09-05T01:48:18+09:00",
+    "subject" : "fix",
+    "changedFiles" : [ ".github/workflows/common-deploy-to-ecs-v2.yml", ".github/workflows/common-deploy-to-ecs.yml", ".github/workflows/env-develop-branch.yml" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "1df160c8ebd697fa7cb0d0bc4fecf5d00f8a4706",
+    "shortSha" : "1df160c8",
+    "author" : "kyutae",
+    "date" : "2022-09-05T01:25:52+09:00",
+    "subject" : "Update common-deploy-to-ecs-v2.yml",
+    "changedFiles" : [ ".github/workflows/common-deploy-to-ecs-v2.yml" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "f084d34a1dae34da9c65c7064cdd98857fc690e6",
+    "shortSha" : "f084d34a",
+    "author" : "kyutae",
+    "date" : "2022-09-05T00:59:09+09:00",
+    "subject" : "Update common-deploy-to-ecs-v2.yml",
+    "changedFiles" : [ ".github/workflows/common-deploy-to-ecs-v2.yml" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "d29e7f1d6e90520468c5f80d26d7978e7ed247f5",
+    "shortSha" : "d29e7f1d",
+    "author" : "kyutae",
+    "date" : "2022-09-05T00:57:46+09:00",
+    "subject" : "check taken build time",
+    "changedFiles" : [ ".github/workflows/common-deploy-to-ecs-v2.yml", ".github/workflows/env-develop-branch.yml", "Dockerfile" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "dcda7fb6c739c76a4f7a7a5d74dc7457e37323a8",
+    "shortSha" : "dcda7fb6",
+    "author" : "kyutae",
+    "date" : "2022-09-04T23:28:25+09:00",
+    "subject" : "apply github action cache",
+    "changedFiles" : [ ".aws/stage-task-definition.json", ".github/workflows/common-deploy-to-ecs.yml", ".github/workflows/env-develop-branch.yml" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "c3807c97c72e36f15d338e06be65514e15621e6b",
+    "shortSha" : "c3807c97",
+    "author" : "kyutae",
+    "date" : "2022-09-04T22:49:59+09:00",
+    "subject" : "Update common-deploy-to-ecs.yml",
+    "changedFiles" : [ ".github/workflows/common-deploy-to-ecs.yml" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "d35f52d68814c7481b4c16ce88b7de9fb81bf0fa",
+    "shortSha" : "d35f52d6",
+    "author" : "kyutae",
+    "date" : "2022-09-04T22:33:05+09:00",
+    "subject" : "Update common-deploy-to-ecs.yml",
+    "changedFiles" : [ ".github/workflows/common-deploy-to-ecs.yml" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "583d93426a22feb3945110ee4a16c6d839fd1e5e",
+    "shortSha" : "583d9342",
+    "author" : "kyutae",
+    "date" : "2022-09-04T22:31:29+09:00",
+    "subject" : "docker cache test",
+    "changedFiles" : [ ".aws/stage-task-definition.json", ".github/workflows/common-deploy-to-ecs.yml", ".github/workflows/env-develop-branch.yml", "Dockerfile", "tera-user-service/build/generated-snippets/signup/curl-request.adoc", "tera-user-service/build/generated-snippets/signup/http-request.adoc", "tera-user-service/build/generated-snippets/signup/http-response.adoc", "tera-user-service/build/generated-snippets/signup/httpie-request.adoc", "tera-user-service/build/generated-snippets/signup/request-body.adoc", "tera-user-service/build/generated-snippets/signup/request-fields.adoc", "tera-user-service/build/generated-snippets/signup/request-headers.adoc", "tera-user-service/build/generated-snippets/signup/response-body.adoc" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "383e37026a1e1ff127c9adb50e2b3b215e4d45cd",
+    "shortSha" : "383e3702",
+    "author" : "kyutae",
+    "date" : "2022-09-04T07:26:05+09:00",
+    "subject" : "hotfix: 회원가입 오류 수정",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/SignupController.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/SignupService.kt", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/controller/legacy/v1/SignupControllerTest.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signup",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupSocial",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signup",
+      "inGraph" : true
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupControllerTest#postSignin",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signup",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/signup",
+      "service" : "tera-cloud-user",
+      "description" : null
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupSocial",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/signup/social",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
+  }, {
+    "sha" : "b1d4f323667ee6b1c913bf7f2ee7d5fd71af4387",
+    "shortSha" : "b1d4f323",
+    "author" : "kyutae",
+    "date" : "2022-09-03T02:49:21+09:00",
+    "subject" : "remove github workflow branch",
+    "changedFiles" : [ ".github/workflows/env-develop-branch.yml", "tera-user-service/build/docs/javadoc/allclasses-frame.html", "tera-user-service/build/docs/javadoc/allclasses-noframe.html", "tera-user-service/build/docs/javadoc/com/terafunding/cloud/user/support/MCheckPlusFix.html", "tera-user-service/build/docs/javadoc/com/terafunding/cloud/user/support/VNOInteropFix.html", "tera-user-service/build/docs/javadoc/com/terafunding/cloud/user/support/package-frame.html", "tera-user-service/build/docs/javadoc/com/terafunding/cloud/user/support/package-summary.html", "tera-user-service/build/docs/javadoc/com/terafunding/cloud/user/support/package-tree.html", "tera-user-service/build/docs/javadoc/constant-values.html", "tera-user-service/build/docs/javadoc/deprecated-list.html", "tera-user-service/build/docs/javadoc/help-doc.html", "tera-user-service/build/docs/javadoc/index-all.html", "tera-user-service/build/docs/javadoc/index.html", "tera-user-service/build/docs/javadoc/overview-tree.html", "tera-user-service/build/docs/javadoc/package-list", "tera-user-service/build/docs/javadoc/script.js", "tera-user-service/build/docs/javadoc/stylesheet.css" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "e0658078168a6de65ecb1858ce96f198c0b83e53",
+    "shortSha" : "e0658078",
+    "author" : "kyutae",
+    "date" : "2022-09-03T02:43:30+09:00",
+    "subject" : "Update live-task-definition.json",
+    "changedFiles" : [ ".aws/live-task-definition.json" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "753dbc7e90537f0f1da0ef40e5e2d5088ebb874d",
+    "shortSha" : "753dbc7e",
+    "author" : "kyutae",
+    "date" : "2022-09-03T02:28:22+09:00",
+    "subject" : "Update stage-task-definition.json",
+    "changedFiles" : [ ".aws/stage-task-definition.json" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "d63e006894cd60e112fbd1533c7266bf1f6ccfbe",
+    "shortSha" : "d63e0068",
+    "author" : "kyutae",
+    "date" : "2022-09-03T01:55:30+09:00",
+    "subject" : "redeploy",
+    "changedFiles" : [ ".aws/live-task-definition.json", ".aws/stage-task-definition.json", "tera-user-service/src/main/resources/application.properties" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "ddae49f16c1a0999eb3136b406b40a14bb8b359d",
+    "shortSha" : "ddae49f1",
+    "author" : "kyutae",
+    "date" : "2022-09-02T16:15:42+09:00",
+    "subject" : "kotlin version up to 1.6.21",
+    "changedFiles" : [ "gradle-env.gradle", "tera-user-service/build.gradle", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/InvestorCheckService.kt", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/auth/AuthorizationServerConfigTest.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.InvestorCheckService.InvestCheckTask#run",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ "com.terafunding.cloud.user.auth.AuthorizationServerConfigTest#make jwt", "com.terafunding.cloud.user.auth.AuthorizationServerConfigTest#createToken" ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "03d204b721e9ab965a1ed888b277031ea0e2750a",
+    "shortSha" : "03d204b7",
+    "author" : "kyutae",
+    "date" : "2022-09-02T15:21:40+09:00",
+    "subject" : "Update build.gradle",
+    "changedFiles" : [ "tera-user-service/build.gradle" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "ea2dbfb1a35b6c56a5ba9a3774635f0af14359f4",
+    "shortSha" : "ea2dbfb1",
+    "author" : "kyutae",
+    "date" : "2022-09-02T14:45:26+09:00",
+    "subject" : "fix server logging",
+    "changedFiles" : [ "tera-user-service/build.gradle", "tera-user-service/src/main/resources/application.properties" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "6511e3233ad17714ea58a69639c11a7b14f60b4e",
+    "shortSha" : "6511e323",
+    "author" : "kyutae",
+    "date" : "2022-09-02T11:29:37+09:00",
+    "subject" : "apply docker env",
+    "changedFiles" : [ ".aws/live-task-definition.json", ".aws/stage-task-definition.json", ".github/workflows/common-deploy-to-ecs.yml", ".github/workflows/env-develop-branch.yml", ".github/workflows/env-main-branch.yml", "Dockerfile", "build.gradle", "buildspec_domain.yml", "buildspec_service.yml", "gradle-build-config.gradle", "gradle-env.gradle", "settings.gradle" ],
+    "changedNodes" : [ ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "d9b49de62015a792a8e65a5db805812ba0cbe7ad",
+    "shortSha" : "d9b49de6",
+    "author" : "kyutae",
+    "date" : "2022-09-01T16:52:59+09:00",
+    "subject" : "application 파일 정리",
+    "changedFiles" : [ "build.gradle", "settings.gradle", "tera-user-service/build.gradle", "tera-user-service/src/main/resources/application-local.yml", "tera-user-service/src/main/resources/application.properties", "tera-user-service/src/main/resources/application.yml", "tera-user-service/src/main/resources/banner.txt", "tera-user-service/src/main/resources/bootstrap-live.properties", "tera-user-service/src/main/resources/bootstrap.properties", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/controller/v3/verify/AccountControllerTest.kt", "tera-user-service/src/test/kotlin/com/terafunding/cloud/user/service/legacy/v1/AsyncExecuteComponentTest.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.AsyncExecuteComponentTest#mqSendTest",
+      "inGraph" : false
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ ],
+    "impactedServices" : [ ]
+  }, {
+    "sha" : "72edb2b62e513dac2fd1faec0113746902e3ef46",
+    "shortSha" : "72edb2b6",
+    "author" : "kyutae",
+    "date" : "2022-08-18T17:39:00+09:00",
+    "subject" : "OCR 신분증 이름 체크 제거",
+    "changedFiles" : [ "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/external/useb/UsebClientRes.kt", "tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt" ],
+    "changedNodes" : [ {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#ocrRequest",
+      "inGraph" : true
+    } ],
+    "deletedNodes" : [ ],
+    "deletedEndpoints" : [ ],
+    "impactedEndpoints" : [ {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#uploadOCR",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/verify/ocr/upload",
+      "service" : "tera-cloud-user",
+      "description" : null
+    } ],
+    "impactedServices" : [ "tera-cloud-user" ]
   } ],
   "subgraph" : {
     "directed" : true,
@@ -1779,6 +2058,66 @@
       "project" : "tera-cloud-user",
       "module" : "tera-user-service"
     }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signup",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method" : "signup",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/signup",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/SignupController.kt",
+      "line" : 66,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupSocial",
+      "fqcn" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController",
+      "method" : "signupSocial",
+      "layer" : "CONTROLLER",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "<Error class: unknown class>",
+      "httpMethod" : "POST",
+      "endpoint" : "/v1/signup/social",
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/SignupController.kt",
+      "line" : 97,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signup",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.SignupService",
+      "method" : "signup",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Member",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/SignupService.kt",
+      "line" : 150,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
       "id" : "com.terafunding.cloud.user.external.useb.UsebClient#ocrIdCard",
       "fqcn" : "com.terafunding.cloud.user.external.useb.UsebClient",
       "method" : "ocrIdCard",
@@ -1956,6 +2295,26 @@
       "clientPackage" : null,
       "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
       "line" : 178,
+      "project" : "tera-cloud-user",
+      "module" : "tera-user-service"
+    }, {
+      "id" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signupSocial",
+      "fqcn" : "com.terafunding.cloud.user.service.legacy.v1.SignupService",
+      "method" : "signupSocial",
+      "layer" : "SERVICE",
+      "visibility" : "public",
+      "async" : false,
+      "returnType" : "Member",
+      "httpMethod" : null,
+      "endpoint" : null,
+      "externalService" : null,
+      "externalUrl" : null,
+      "resourceType" : null,
+      "description" : null,
+      "urlPlaceholder" : null,
+      "clientPackage" : null,
+      "file" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/SignupService.kt",
+      "line" : 229,
       "project" : "tera-cloud-user",
       "module" : "tera-user-service"
     }, {
@@ -2432,6 +2791,22 @@
       "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
       "callSiteLine" : 190
     }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signup",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signup",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/SignupController.kt",
+      "callSiteLine" : 78
+    }, {
+      "source" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signupSocial",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signup",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/SignupService.kt",
+      "callSiteLine" : 261
+    }, {
       "source" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#ocrRequest",
       "target" : "com.terafunding.cloud.user.external.useb.UsebClient#ocrIdCard",
       "mode" : "sync",
@@ -2504,6 +2879,14 @@
       "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/service/legacy/v1/VerifyService.kt",
       "callSiteLine" : 220
     }, {
+      "source" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupSocial",
+      "target" : "com.terafunding.cloud.user.service.legacy.v1.SignupService#signupSocial",
+      "mode" : "sync",
+      "kind" : "internal",
+      "relation" : "call",
+      "callSiteFile" : "tera-cloud-user/tera-user-service/src/main/kotlin/com/terafunding/cloud/user/controller/legacy/v1/SignupController.kt",
+      "callSiteLine" : 103
+    }, {
       "source" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#phoneChangeVerifyRequest",
       "target" : "com.terafunding.cloud.user.service.legacy.v1.VerifyService#phoneChangeVerify",
       "mode" : "sync",
@@ -2526,7 +2909,7 @@
     "endpoint" : "/v1/verify/ocr/upload",
     "service" : "tera-cloud-user",
     "description" : null,
-    "commits" : [ "101d3345", "8861efab", "d69f1100", "14320314" ]
+    "commits" : [ "101d3345", "8861efab", "d69f1100", "14320314", "72edb2b6" ]
   }, {
     "id" : "com.terafunding.cloud.user.controller.legacy.v1.VerifyController#inputStatus",
     "httpMethod" : "POST",
@@ -2646,6 +3029,20 @@
     "service" : "tera-cloud-user",
     "description" : null,
     "commits" : [ "3c677bc1" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signup",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/signup",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "383e3702" ]
+  }, {
+    "id" : "com.terafunding.cloud.user.controller.legacy.v1.SignupController#signupSocial",
+    "httpMethod" : "POST",
+    "endpoint" : "/v1/signup/social",
+    "service" : "tera-cloud-user",
+    "description" : null,
+    "commits" : [ "383e3702" ]
   } ],
   "deletedEndpoints" : [ ]
 }

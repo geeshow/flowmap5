@@ -1,0 +1,78 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "tera-cloud-gateway",
+    "version" : "1.0.0"
+  },
+  "tags" : [ {
+    "name" : "tera-cloud-gateway"
+  } ],
+  "paths" : {
+    "/" : {
+      "get" : {
+        "operationId" : "com.terafunding.cloud.gateway.GatewayServerApplication#index",
+        "tags" : [ "tera-cloud-gateway" ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : { }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/favicon.ico" : {
+      "get" : {
+        "operationId" : "com.terafunding.cloud.gateway.GatewayServerApplication#favicon",
+        "tags" : [ "tera-cloud-gateway" ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : { }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/image/resize/{size}/{filename}" : {
+      "get" : {
+        "operationId" : "com.terafunding.cloud.gateway.ImageController#resize",
+        "tags" : [ "tera-cloud-gateway" ],
+        "parameters" : [ {
+          "name" : "size",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "filename",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : { }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : { }
+  }
+}
