@@ -204,7 +204,7 @@ BATCH/EXTERNAL/RESOURCE/OTHER), `method`, `fqcn`, `httpMethod`+`endpoint`(컨트
 모듈 계약은 `docs/FEATURE-API.md` 참조 — AI/개발자가 기능을 수정할 땐 해당 모듈 파일만 보면 됩니다.
 
 ### 15.1 🧾 커밋 영향도 (`?view=commits`)
-- 헤더 nav `🧾 커밋 영향도` 로 진입. 데이터: `docs/web/data/impact.json` (없으면 생성 안내 표시).
+- 헤더 nav `🧾 커밋 영향도` 로 진입. 데이터: 매니페스트의 `<project>.impact.json` 들을 병합(없으면 생성 안내 표시).
 - 좌측 커밋 레일: 체크박스로 **여러 커밋 묶어 보기**(합집합), 카드 클릭은 단일 선택. 작성자/메시지/파일 필터.
 - 커밋 미선택: 엔드포인트 → 영향 커밋 집계 테이블. 선택: 변경 노드(◆ 주황 링)에서 피호출 역추적 → 영향 엔드포인트(◇ 점선 링) 그래프.
 - `inGraph:false` 변경은 "그래프 외 변경 N건" 으로 별도 표기.
@@ -218,17 +218,27 @@ BATCH/EXTERNAL/RESOURCE/OTHER), `method`, `fqcn`, `httpMethod`+`endpoint`(컨트
 - URL: `topic=<노드id>` (예 `kafka:order.created`)
 
 ### 15.3 📖 API 문서 (`?view=api`)
-- 헤더 nav `📖 API 문서` 로 진입. 데이터: `docs/web/data/openapi.json` (OpenAPI 3.1, operationId = 그래프 노드 id).
+- 헤더 nav `📖 API 문서` 로 진입. 데이터: 매니페스트의 `<project>.openapi.json` 들을 병합 (OpenAPI 3.1, operationId = 그래프 노드 id).
 - 서비스 목록 → 엔드포인트 카탈로그 (마스터-디테일). 행 클릭 → 상세 패널에 파라미터 테이블·Request/Response 스키마 트리($ref 클릭 전개, 순환은 `↺ 재귀`).
 - 그래프의 CONTROLLER 노드 상세 패널에서도 `📄 API 문서` 버튼으로 동일 문서 확인.
 - URL: `asvc=<서비스>`, `q=<필터>`
 
-## 16. 데이터 동기화
+## 16. 데이터 동기화 — 프로젝트별 독립 분석 + 매니페스트
 
+여러 프로젝트(백엔드 다수 + 프론트엔드)를 **각각 따로 분석**해 둔 산출물을 모아 한 화면에 통합한다. 앱은 통합 그래프 하나가 아니라 **프로젝트별 파일 + 매니페스트**를 읽고 브라우저에서 병합한다(서비스 간 s2s 호출과 프론트→백엔드 join 연결도 브라우저가 계산).
+
+- 두 분석기는 각자 `json/`에 per-project 파일과 `_manifest.json`(프로젝트 메타데이터)을 자동 생성한다.
+  - 백엔드(`../flowmap-spring-kotlin`): `<project>.json`, `<project>.openapi.json`, `_combined.json`, `_manifest.json`
+  - 프론트(`../flowmap-react`): `<project>.json`, `<project>.join.json`, `_manifest.json`
+- 동기화:
 ```bash
-scripts/sync-data.sh   # _combined → graph.json, _openapi → openapi.json, analyzer impact → impact.json
+scripts/sync-data.sh
+# 1) 두 분석기 json/ 의 per-project 파일을 docs/web/data/ 로 복사 (_* 통합본 제외)
+# 2) 백엔드 커밋 영향도 → <project>.impact.json 생성
+# 3) 두 _manifest.json 을 병합 → data/manifest.json (앱의 프로젝트 목록)
 ```
-analyzer 재분석(refresh) 후 이 스크립트만 실행하면 세 데이터가 같은 시점으로 갱신됩니다.
+- 매니페스트(`data/manifest.json`): `{version, generated, projects:[{name,type,graph,openapi,impact,join,screens,nodes,edges}]}`. `type`은 `backend`/`frontend`.
+- 한 프로젝트만 재분석해도 그 프로젝트 파일과 매니페스트 엔트리만 갱신하면 된다(전체 재통합 불필요). 매니페스트가 없으면 앱은 단일 `data/graph.json`으로 폴백한다(하위호환).
 
 ## 17. 테스트
 

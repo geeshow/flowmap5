@@ -32,10 +32,33 @@
     return `<span class="imp-sha">◆ ${FM.esc(sha)}</span>`;
   }
 
+  // 매니페스트가 있으면 프로젝트별 <project>.impact.json 들을 병합, 없으면 단일 impact.json 폴백
+  function impactFiles() {
+    const projs = FM.MANIFEST && FM.MANIFEST.projects;
+    if (projs && projs.length) {
+      const files = projs.filter(p => p.impact).map(p => p.impact);
+      return files.length ? files : null;   // 매니페스트는 있으나 impact 없음 → 빈 상태
+    }
+    return [DATA_URL.replace('data/', '')];
+  }
+  function mergeImpact(parts) {
+    const out = { branch: parts[0].branch, depth: parts[0].depth, commits: [], endpointImpact: [],
+      commitCount: 0, changedNodeCount: 0 };
+    for (const p of parts) {
+      if (Array.isArray(p.commits)) out.commits.push(...p.commits);
+      if (Array.isArray(p.endpointImpact)) out.endpointImpact.push(...p.endpointImpact);
+      out.commitCount += p.commitCount || (p.commits ? p.commits.length : 0);
+      out.changedNodeCount += p.changedNodeCount || 0;
+    }
+    return out;
+  }
+
   async function ensureData() {
     if (data === undefined) {
-      const d = await FM.fetchData(DATA_URL);
-      data = d || null;
+      const files = impactFiles();
+      if (!files) { data = null; return data; }
+      const parts = (await Promise.all(files.map(f => FM.fetchData('data/' + f)))).filter(Boolean);
+      data = parts.length ? mergeImpact(parts) : null;
       if (data && Array.isArray(data.commits)) {
         data.commits.forEach(c => commitBySha.set(c.shortSha, c));
       }

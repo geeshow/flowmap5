@@ -14,19 +14,22 @@ const LAYER_CLASS = {
   CONTROLLER: 'controller', SERVICE: 'service', REPOSITORY: 'repository',
   COMPONENT: 'component', CONFIG: 'config', BATCH: 'batch',
   EXTERNAL: 'external', RESOURCE: 'resource', OTHER: 'other',
+  // 프론트엔드(react/vue) 레이어
+  SCREEN: 'screen', HOOK: 'hook', STORE: 'store', API: 'api',
 };
 const RES_ICON = { 'kafka-topic': '📨', 'redis': '🔴', 'db-table': '🗄️' };
 const HTTP_ORDER = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ANY'];
 function methodRank(m) { const i = HTTP_ORDER.indexOf(String(m || 'ANY').toUpperCase()); return i < 0 ? HTTP_ORDER.length : i; }
 const KIND_COLOR = {
   internal: '#94a3b8', s2s: '#2563eb', external: '#dc2626', batch: '#7c3aed',
-  kafka: '#c026d3', redis: '#db2777', db: '#b45309',
+  kafka: '#c026d3', redis: '#db2777', db: '#b45309', join: '#4f46e5',
 };
 
 // ---- 전역 데이터 / 인덱스 ----
 let NODES = [];
 let EDGES = [];
 let META = {};
+let MANIFEST = null;   // data/manifest.json (프로젝트별 독립 분석 목록); 없으면 단일 graph.json 폴백
 const nodeById = new Map();
 const outEdges = new Map();
 const inEdges = new Map();
@@ -60,14 +63,10 @@ const ZOOM_MIN = 0.3, ZOOM_MAX = 3;
 // 부트
 // =========================================================================
 async function boot() {
-  const data = await fetch('data/graph.json').then(r => r.json());
-  NODES = data.nodes; EDGES = data.edges; META = data.meta;
-  for (const n of NODES) nodeById.set(n.id, n);
-  for (const id of nodeById.keys()) { outEdges.set(id, []); inEdges.set(id, []); }
-  for (const e of EDGES) {
-    if (outEdges.has(e.source)) outEdges.get(e.source).push(e);
-    if (inEdges.has(e.target)) inEdges.get(e.target).push(e);
-  }
+  await loadGraphData();       // manifest + 프로젝트별 graph 병렬 로드 → NODES/EDGES/META 병합
+  reconcileS2S();              // kind:external → s2s 재현 (서비스 간 호출 연결)
+  await loadAndApplyJoins();   // join.json matched 링크 → kind:'join' 엣지 (프론트→백엔드)
+  buildIndexes();              // nodeById/outEdges/inEdges 1회 빌드
 
   parseUrl();
   attachHandlers();
@@ -75,6 +74,126 @@ async function boot() {
   renderDetail();
 
   window.addEventListener('popstate', () => { parseUrl(); render(); renderDetail(); });
+}
+
+// =========================================================================
+// 데이터 로딩 / 병합 — 프로젝트별 독립 분석 파일을 매니페스트로 모아 브라우저에서 통합
+//   계약: data/manifest.json (docs/FEATURE-API.md, 매니페스트 규약)
+// =========================================================================
+function jsonFetch(path) { return fetch(path).then(r => r.ok ? r.json() : null).catch(() => null); }
+
+// (source,target,relation,callSiteLine) 기준 엣지 중복 제거 (scripts/build.py 규칙 동일)
+function dedupEdges(list) {
+  const m = new Map();
+  for (const e of list) m.set([e.source, e.target, e.relation, e.callSiteLine].join(''), e);
+  return [...m.values()];
+}
+
+async function loadGraphData() {
+  const manifest = await jsonFetch('data/manifest.json');
+  if (!manifest || !Array.isArray(manifest.projects) || !manifest.projects.length) {
+    // 하위호환: 매니페스트가 없으면 기존 단일 통합 그래프
+    const data = await jsonFetch('data/graph.json');
+    if (data) { NODES = data.nodes || []; EDGES = data.edges || []; META = data.meta || {}; }
+    MANIFEST = null;
+    return;
+  }
+  MANIFEST = manifest;
+  const results = await Promise.all(manifest.projects.map(p =>
+    jsonFetch('data/' + p.graph).then(g => ({ p, g }))));
+
+  const nodeMap = new Map();    // id → node (file 채워진 노드 우선)
+  const okProjects = [];
+  let edgeAccum = [];
+  for (const { p, g } of results) {
+    if (!g || !Array.isArray(g.nodes)) { console.warn('[flowmap] 프로젝트 그래프 로드 실패, 건너뜀:', p.name, p.graph); continue; }
+    okProjects.push(p.name);
+    for (const n of g.nodes) {
+      const prev = nodeMap.get(n.id);
+      if (!prev || (n.file && !prev.file)) nodeMap.set(n.id, n);
+    }
+    if (Array.isArray(g.edges)) edgeAccum.push(...g.edges);
+  }
+  NODES = [...nodeMap.values()];
+  EDGES = dedupEdges(edgeAccum);
+  META = { projects: okProjects.sort(), nodes: NODES.length, edges: EDGES.length, manifest: true };
+}
+
+// 호출관계 경로 정규화 (백엔드 CrossRun.normPath 재현): 쿼리 제거 → {var}→{} → 끝슬래시 제거
+function normPath(p) {
+  if (!p) return '';
+  let s = String(p).split('?')[0].replace(/\{[^}]*\}/g, '{}').replace(/\/+$/, '');
+  return s === '' ? '/' : s;
+}
+function verbCompatible(a, b) {
+  const x = (a || 'ANY').toUpperCase(), y = (b || 'ANY').toUpperCase();
+  return x === 'ANY' || y === 'ANY' || x === y;
+}
+
+// 브라우저 s2s 재현: 백엔드 kind:external 엣지의 ext: 타깃을 다른 백엔드 프로젝트 CONTROLLER와 매칭 → s2s 승격.
+//   프론트엔드의 외부호출(http)은 join.json 이 명시적으로 담당하므로 여기서 건드리지 않는다.
+function reconcileS2S() {
+  if (!MANIFEST) return;   // 단일 통합 그래프는 이미 s2s 처리됨
+  const frontProjects = new Set(MANIFEST.projects.filter(p => p.type === 'frontend').map(p => p.name));
+  const ctrlByPath = new Map();
+  const nodeIndex = new Map();
+  for (const n of NODES) {
+    nodeIndex.set(n.id, n);
+    if (n.layer === 'CONTROLLER' && n.endpoint) {
+      const k = normPath(n.endpoint);
+      if (!ctrlByPath.has(k)) ctrlByPath.set(k, []);
+      ctrlByPath.get(k).push(n);
+    }
+  }
+  const absorbed = new Set();
+  for (const e of EDGES) {
+    if (e.kind !== 'external') continue;
+    const src = nodeIndex.get(e.source);
+    if (src && frontProjects.has(src.project)) continue;   // 프론트 외부호출은 join 으로 처리
+    const ext = nodeIndex.get(e.target);
+    if (!ext || !ext.endpoint) continue;        // endpoint 없는 서드파티(외부 URL만)는 external 유지
+    const cands = (ctrlByPath.get(normPath(ext.endpoint)) || [])
+      .filter(c => verbCompatible(ext.httpMethod, c.httpMethod) && c.project !== ext.project);
+    if (cands.length !== 1) continue;            // 0=미매칭 유지, 2+=ambiguous 보수적 유지
+    e.kind = 's2s'; e.relation = 'call'; e.target = cands[0].id;
+    absorbed.add(ext.id);
+  }
+  if (absorbed.size) {
+    const refed = new Set();
+    for (const e of EDGES) { refed.add(e.source); refed.add(e.target); }
+    NODES = NODES.filter(n => !(absorbed.has(n.id) && !refed.has(n.id)));
+  }
+}
+
+// 프론트→백엔드 연결: <project>.join.json 의 matched 링크를 kind:'join' 엣지로 추가
+async function loadAndApplyJoins() {
+  if (!MANIFEST) return;
+  const joinFiles = MANIFEST.projects.filter(p => p.join).map(p => p.join);
+  if (!joinFiles.length) return;
+  const idSet = new Set(NODES.map(n => n.id));
+  const joins = await Promise.all(joinFiles.map(f => jsonFetch('data/' + f)));
+  const added = [];
+  for (const j of joins) {
+    if (!j || !Array.isArray(j.links)) continue;
+    for (const link of j.links) {
+      if (link.matchStatus !== 'matched') continue;
+      if (!idSet.has(link.frontendNodeId) || !idSet.has(link.backendNodeId)) continue;
+      added.push({ source: link.frontendNodeId, target: link.backendNodeId,
+        mode: 'sync', kind: 'join', relation: 'http', confidence: link.confidence,
+        callSiteFile: null, callSiteLine: null });
+    }
+  }
+  if (added.length) EDGES = dedupEdges(EDGES.concat(added));
+}
+
+function buildIndexes() {
+  nodeById.clear(); outEdges.clear(); inEdges.clear();
+  for (const n of NODES) nodeById.set(n.id, n);
+  for (const id of nodeById.keys()) { outEdges.set(id, []); inEdges.set(id, []); }
+  for (const e of EDGES) {
+    if (outEdges.has(e.source)) outEdges.get(e.source).push(e);
+    if (inEdges.has(e.target)) inEdges.get(e.target).push(e);
+  }
 }
 
 // =========================================================================
@@ -631,7 +750,7 @@ function renderServiceView() {
   // 교차-경계 엣지를 source-서비스(out) / target-서비스(in) 별로 인덱싱
   const crossOut = new Map(), crossIn = new Map();
   for (const e of EDGES) {
-    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external') continue;
+    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external' && e.kind !== 'join') continue;
     const sn = nodeById.get(e.source), tn = nodeById.get(e.target);
     if (!sn || !tn) continue;
     if (sn.project && !isInfra(e.source, sn)) { (crossOut.get(sn.project) || crossOut.set(sn.project, []).get(sn.project)).push(e); }
@@ -920,10 +1039,10 @@ const INFRA_ICON = { kafka: '📨', redis: '🔴', db: '🗄️', external: '�
 function buildServiceGraph() {
   const agg = new Map();   // key → { source, target, kc, count, async }
   for (const e of EDGES) {
-    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external') continue;
+    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external' && e.kind !== 'join') continue;
     const ss = superId(e.source), st = superId(e.target);
     if (ss === st) continue;
-    const kc = e.kind === 's2s' ? 's2s' : kindClass(e);
+    const kc = e.kind === 's2s' ? 's2s' : e.kind === 'join' ? 'join' : kindClass(e);
     const key = ss + '|' + st + '|' + kc;
     let a = agg.get(key);
     if (!a) { a = { source: ss, target: st, kc, count: 0, async: false }; agg.set(key, a); }
@@ -949,7 +1068,7 @@ function renderOverview() {
   const svcs = META.projects.slice();
   const sAdj = new Map(svcs.map(s => [s, []]));
   for (const e of edges) {
-    if (e.kc !== 's2s') continue;
+    if (e.kc !== 's2s' && e.kc !== 'join') continue;
     if (e.source.startsWith('svc:') && e.target.startsWith('svc:'))
       sAdj.get(e.source.slice(4))?.push(e.target.slice(4));
   }
@@ -970,7 +1089,7 @@ function renderOverview() {
     for (const sup of [e.source, e.target]) if (sup.startsWith('infra:')) infraTypes.add(sup.slice(6));
   }
   for (const e of EDGES) {
-    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external') continue;
+    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external' && e.kind !== 'join') continue;
     for (const ep of [e.source, e.target]) {
       if (superId(ep).startsWith('infra:')) {
         const t = infraGroup(ep);
@@ -1992,6 +2111,7 @@ window.Flowmap = {
   get NODES() { return NODES; },
   get EDGES() { return EDGES; },
   get META() { return META; },
+  get MANIFEST() { return MANIFEST; },
   nodeById, inEdges, outEdges, state, cardEls,
   // 상수
   LAYER_CLASS, RES_ICON, KIND_COLOR, INFRA_LABEL, INFRA_ICON,

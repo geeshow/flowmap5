@@ -1,0 +1,165 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "bank-broker",
+    "version" : "1.0.0"
+  },
+  "tags" : [ {
+    "name" : "bank-broker"
+  } ],
+  "paths" : {
+    "/sib/customers/{userNo}" : {
+      "get" : {
+        "operationId" : "com.acme.bank.SibController#customerQuery",
+        "tags" : [ "bank-broker" ],
+        "summary" : "SIB 고객 단건 조회 (신한 내부은행 고객 정보 질의)",
+        "parameters" : [ {
+          "name" : "userNo",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "SIB 고객 단건 조회 (신한 내부은행 고객 정보 질의)",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sib/customers" : {
+      "post" : {
+        "operationId" : "com.acme.bank.SibController#customerRegister",
+        "tags" : [ "bank-broker" ],
+        "summary" : "SIB 고객 신규 등록",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "SIB 고객 신규 등록",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "operationId" : "com.acme.bank.SibController#customerUpdate",
+        "tags" : [ "bank-broker" ],
+        "summary" : "SIB 고객 정보 수정",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "SIB 고객 정보 수정",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sib/inquiry/customer" : {
+      "post" : {
+        "operationId" : "com.acme.bank.SibController#inquiryCustomer",
+        "tags" : [ "bank-broker" ],
+        "summary" : "SIB 고객 실명·계좌 조회 (출금가능액/원장 조회용)",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "SIB 고객 실명·계좌 조회 (출금가능액/원장 조회용)",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sib/fund/withdraw" : {
+      "post" : {
+        "operationId" : "com.acme.bank.SibController#fundWithdraw",
+        "tags" : [ "bank-broker" ],
+        "summary" : "SIB 펀드 출금 실행",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "SIB 펀드 출금 실행",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : { }
+  }
+}

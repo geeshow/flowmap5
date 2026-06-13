@@ -12,12 +12,32 @@
   let opIndex = null;     // Map<operationId, {path, method, op}>
   let baseIndex = null;   // Map<operationId에서 ~N 제거한 base id, entry[]>
 
+  // 매니페스트가 있으면 프로젝트별 <project>.openapi.json 들을 병합, 없으면 단일 openapi.json 폴백
+  function openapiFiles() {
+    const projs = FM.MANIFEST && FM.MANIFEST.projects;
+    if (projs && projs.length) {
+      const files = projs.filter((p) => p.openapi).map((p) => p.openapi);
+      if (files.length) return files;
+    }
+    return ['openapi.json'];
+  }
+  function mergeOpenapi(docs) {
+    const out = { openapi: '3.1.0', info: { title: 'flowmap', version: '1.0.0' }, paths: {}, components: { schemas: {} } };
+    for (const d of docs) {
+      if (!d) continue;
+      Object.assign(out.paths, d.paths || {});
+      if (d.components && d.components.schemas) Object.assign(out.components.schemas, d.components.schemas);
+    }
+    return out;
+  }
+
   function loadOpenapi() {
     if (!oaPromise) {
-      oaPromise = FM.fetchData('data/openapi.json').then((d) => {
-        oaData = d;
-        if (d) buildIndex(d);
-        return d;
+      oaPromise = Promise.all(openapiFiles().map((f) => FM.fetchData('data/' + f))).then((docs) => {
+        const ok = docs.filter(Boolean);
+        oaData = ok.length ? mergeOpenapi(ok) : null;
+        if (oaData) buildIndex(oaData);
+        return oaData;
       });
     }
     return oaPromise;

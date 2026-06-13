@@ -1,0 +1,12 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "notification-service",
+    "version" : "1.0.0"
+  },
+  "tags" : [ ],
+  "paths" : { },
+  "components" : {
+    "schemas" : { }
+  }
+}

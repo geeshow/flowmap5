@@ -1,0 +1,44 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "admin-portal",
+    "version" : "1.0.0"
+  },
+  "tags" : [ {
+    "name" : "admin-portal"
+  } ],
+  "paths" : {
+    "/admin/portal/users/{userNo}" : {
+      "get" : {
+        "operationId" : "com.acme.admin.AdminController#viewUser",
+        "tags" : [ "admin-portal" ],
+        "summary" : "관리자 포털 - 사용자 단건 조회 (tera-cloud-user 연동)",
+        "parameters" : [ {
+          "name" : "userNo",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "관리자 포털 - 사용자 단건 조회 (tera-cloud-user 연동)",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : { }
+  }
+}

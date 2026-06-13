@@ -3,13 +3,17 @@
 기능 모듈은 `docs/web/features/<이름>.js` + `docs/web/features/<이름>.css` 한 쌍이다.
 **메뉴 진입 시에만** 코어가 js/css를 동적으로 주입한다(lazy load). 모듈은 코어 파일(app.js 등)을 수정하지 않는다.
 
+## 데이터 소스 (매니페스트 기반 멀티-프로젝트)
+
+부팅 시 `data/manifest.json`을 읽어 프로젝트별 `<project>.json`을 병렬 로드·병합한다(브라우저에서 union + s2s 재현 + join 연결). 매니페스트가 없으면 단일 `data/graph.json`으로 폴백한다. `FM.MANIFEST`로 프로젝트 목록·아티팩트(graph/openapi/impact/join/screens)에 접근한다. 따라서 기능 모듈의 데이터는 **고정 파일명이 아니라 매니페스트가 가리키는 프로젝트별 파일들**이다.
+
 ## 등록된 모듈
 
 | 모듈 | 뷰(view=) | 데이터 | 진입점 |
 |---|---|---|---|
-| `impact` | `commits` | `data/impact.json` (없을 수 있음 → 빈 상태) | 헤더 nav `🧾 커밋 영향도` |
-| `topic` | `topic` | graph.json (이미 로드됨) | kafka 노드/배지에서 진입 |
-| `apidoc` | `api` | `data/openapi.json` | 헤더 nav `📖 API 문서` + 상세 패널 `📄 API 문서` 버튼 |
+| `impact` | `commits` | `MANIFEST.projects[].impact` (`<project>.impact.json` 들을 병합; 없으면 빈 상태) | 헤더 nav `🧾 커밋 영향도` |
+| `topic` | `topic` | 병합 그래프(이미 로드됨) | kafka 노드/배지에서 진입 |
+| `apidoc` | `api` | `MANIFEST.projects[].openapi` (`<project>.openapi.json` 들을 병합) | 헤더 nav `📖 API 문서` + 상세 패널 `📄 API 문서` 버튼 |
 
 ## 모듈 골격
 
@@ -33,7 +37,8 @@
 ## window.Flowmap API
 
 ### 데이터 (읽기 전용으로 취급)
-- `FM.NODES` / `FM.EDGES` / `FM.META` — graph.json 전체. 노드/엣지 스키마는 SCHEMA.md 참조
+- `FM.NODES` / `FM.EDGES` / `FM.META` — 병합된 전체 그래프. 노드/엣지 스키마는 SCHEMA.md 참조
+- `FM.MANIFEST` — `data/manifest.json`(`{version, generated, projects[]}`). 폴백 모드면 `null`. 각 project: `{name, type(backend|frontend), graph, openapi, impact, join, screens, nodes, edges}`
 - `FM.nodeById: Map<id, node>` / `FM.inEdges: Map<id, edge[]>` / `FM.outEdges: Map<id, edge[]>`
 - `FM.state` — 코어 상태. 모듈은 `state.view`(자기 뷰명), `state.sel`(상세 패널 선택)만 읽는다. **직접 쓰기 금지** (sel 변경은 `FM.setSel(id)`)
 

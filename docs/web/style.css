@@ -11,6 +11,11 @@
   --c-kafka:      #c026d3;
   --c-redis:      #db2777;
   --c-db:         #b45309;
+  /* 프론트엔드(react/vue) layer 색 */
+  --c-screen:     #e11d48;
+  --c-hook:       #0d9488;
+  --c-store:      #d97706;
+  --c-api:        #4f46e5;
 
   /* edge kind 색 */
   --e-internal: #94a3b8;
@@ -20,6 +25,7 @@
   --e-kafka:    #c026d3;
   --e-redis:    #db2777;
   --e-db:       #b45309;
+  --e-join:     #4f46e5;
 
   --bg:        #0f172a;
   --bg-panel:  #1e293b;
@@ -341,6 +347,10 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .nc-l-batch      { border-left-color: var(--c-batch); }
 .nc-l-external   { border-left-color: var(--c-external); }
 .nc-l-other      { border-left-color: var(--c-other); }
+.nc-l-screen     { border-left-color: var(--c-screen); }
+.nc-l-hook       { border-left-color: var(--c-hook); }
+.nc-l-store      { border-left-color: var(--c-store); }
+.nc-l-api        { border-left-color: var(--c-api); }
 .nc-r-kafka-topic { border-left-color: var(--c-kafka); }
 .nc-r-redis       { border-left-color: var(--c-redis); }
 .nc-r-db-table    { border-left-color: var(--c-db); }
@@ -419,6 +429,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .flow-rel.k-db { background: var(--e-db); }
 .flow-rel.k-batch { background: var(--e-batch); }
 .flow-rel.k-internal { background: var(--e-internal); }
+.flow-rel.k-join { background: var(--e-join); }
 .flow-async { font-size: 8px; color: #c4b5fd; font-weight: 700; flex-shrink: 0; }
 .flow-line { font-size: 9px; color: var(--text-dim); font-family: ui-monospace, monospace; flex-shrink: 0; }
 .flow-recenter {
@@ -439,6 +450,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .edge-path.k-kafka    { stroke: var(--e-kafka); }
 .edge-path.k-redis    { stroke: var(--e-redis); }
 .edge-path.k-db       { stroke: var(--e-db); }
+.edge-path.k-join     { stroke: var(--e-join); stroke-width: 2.6; }
 .edge-path.dim        { opacity: .06; }
 .edge-path.hot        { stroke-width: 3.4; opacity: 1; }
 
