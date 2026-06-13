@@ -109,6 +109,9 @@ async function loadGraphData() {
     if (!g || !Array.isArray(g.nodes)) { console.warn('[flowmap] 프로젝트 그래프 로드 실패, 건너뜀:', p.name, p.graph); continue; }
     okProjects.push(p.name);
     for (const n of g.nodes) {
+      // 프론트 외부호출 노드(게이트웨이/서드파티)는 project 가 비어 있다 → 프론트 서비스에 귀속시켜
+      // 공유 인프라가 아닌 그 프론트 프로젝트의 노드로 묶이게 한다 (front → backend join 이 서비스 단위로 보이도록)
+      if (p.type === 'frontend' && !n.project) n.project = p.name;
       const prev = nodeMap.get(n.id);
       if (!prev || (n.file && !prev.file)) nodeMap.set(n.id, n);
     }
@@ -165,21 +168,48 @@ function reconcileS2S() {
   }
 }
 
-// 프론트→백엔드 연결: <project>.join.json 의 matched 링크를 kind:'join' 엣지로 추가
+// 게이트웨이 프리픽스(첫 경로 세그먼트) 제거 후 백엔드 CONTROLLER 와 매칭.
+//   프론트는 게이트웨이 경로(/user/v3/rsa)로 호출하지만 백엔드는 프리픽스가 벗겨진 실제 경로(/v3/rsa)를
+//   기록하므로, join 의 정확매칭이 실패한다. 첫 세그먼트를 떼고 단일 후보일 때만 연결한다.
+function gatewayMatch(path, method, ctrlByPath) {
+  if (!path) return null;
+  const segs = normPath(path).split('/').filter(Boolean);
+  if (segs.length < 2) return null;                       // 프리픽스 + 최소 1세그먼트
+  const stripped = normPath('/' + segs.slice(1).join('/'));
+  const cands = (ctrlByPath.get(stripped) || []).filter(c => verbCompatible(method, c.httpMethod));
+  return cands.length === 1 ? cands[0].id : null;
+}
+
+// 프론트→백엔드 연결: <project>.join.json 의 matched 링크 + 게이트웨이 프리픽스 매칭을 kind:'join' 엣지로 추가
 async function loadAndApplyJoins() {
   if (!MANIFEST) return;
   const joinFiles = MANIFEST.projects.filter(p => p.join).map(p => p.join);
   if (!joinFiles.length) return;
   const idSet = new Set(NODES.map(n => n.id));
+  // 백엔드 CONTROLLER 인덱스 (게이트웨이 프리픽스 제거 매칭용)
+  const ctrlByPath = new Map();
+  for (const n of NODES) {
+    if (n.layer === 'CONTROLLER' && n.endpoint) {
+      const k = normPath(n.endpoint);
+      if (!ctrlByPath.has(k)) ctrlByPath.set(k, []);
+      ctrlByPath.get(k).push(n);
+    }
+  }
   const joins = await Promise.all(joinFiles.map(f => jsonFetch('data/' + f)));
   const added = [];
   for (const j of joins) {
     if (!j || !Array.isArray(j.links)) continue;
     for (const link of j.links) {
-      if (link.matchStatus !== 'matched') continue;
-      if (!idSet.has(link.frontendNodeId) || !idSet.has(link.backendNodeId)) continue;
-      added.push({ source: link.frontendNodeId, target: link.backendNodeId,
-        mode: 'sync', kind: 'join', relation: 'http', confidence: link.confidence,
+      if (!idSet.has(link.frontendNodeId)) continue;
+      let target = null, conf = link.confidence;
+      if (link.matchStatus === 'matched' && idSet.has(link.backendNodeId)) {
+        target = link.backendNodeId;                       // join 이 이미 매칭한 직접 경로
+      } else {
+        const t = gatewayMatch(link.normalizedPath, link.httpMethod, ctrlByPath);
+        if (t) { target = t; conf = conf || 'gateway'; } // 게이트웨이 프리픽스 매칭
+      }
+      if (target) added.push({ source: link.frontendNodeId, target,
+        mode: 'sync', kind: 'join', relation: 'http', confidence: conf,
         callSiteFile: null, callSiteLine: null });
     }
   }
@@ -383,7 +413,9 @@ function passFilter(id) {
 function isInfra(id, n) {
   n = n || nodeById.get(id);
   if (!n) return /^(kafka:|db:|redis$|ext:)/.test(id);
-  return n.layer === 'RESOURCE' || n.layer === 'EXTERNAL';
+  // RESOURCE 는 공유 인프라. EXTERNAL 은 project 가 없을 때만 공유 인프라(백엔드 서드파티 호출);
+  // project 가 붙은 프론트 외부호출 노드는 그 프론트 서비스의 노드로 취급한다.
+  return n.layer === 'RESOURCE' || (n.layer === 'EXTERNAL' && !n.project);
 }
 function kindClass(e) {
   if (e.kind === 'resource') {
