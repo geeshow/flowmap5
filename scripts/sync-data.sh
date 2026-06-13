@@ -7,7 +7,7 @@ ANALYZER_DIR="/Users/kyutaepark/study/flowmap-spring-kotlin/kotlin-analyzer"
 JSON_DIR="$ANALYZER_DIR/json"
 REPO="/Users/kyutaepark/study/flowmap-spring-kotlin/.repo/tera-cloud-user"
 FLOWMAP_DIR="/Users/kyutaepark/study/flowmap"
-DATA_DIR="$FLOWMAP_DIR/web/data"
+DATA_DIR="$FLOWMAP_DIR/docs/web/data"
 IMPACT_TMP="$ANALYZER_DIR/build/impact-sync.json"
 
 log()  { echo "[sync-data] $*"; }

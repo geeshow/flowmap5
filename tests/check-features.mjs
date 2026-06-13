@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 기능 모듈 정적 검증: web/features/*.js
+// 기능 모듈 정적 검증: docs/web/features/*.js
 // 사용법: node tests/check-features.mjs
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, basename } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const FEATURES = join(ROOT, 'web', 'features');
+const FEATURES = join(ROOT, 'docs', 'web', 'features');
 
 let failCount = 0;
 const pass = (msg) => console.log(`✅ ${msg}`);
