@@ -871,6 +871,11 @@ function renderServiceView() {
     const n = nodeById.get(id);
     if (n && n.project && !isInfra(id, n)) return { key: 'svc:' + n.project, label: '🧩 ' + n.project, rank: 0, svc: n.project };
     const t = infraGroup(id);
+    // 외부 API 는 id(ext:{client}#{method})의 두번째 세그먼트(클라이언트)별로 묶어 보여준다
+    if (t === 'external') {
+      const client = ((id.split(':')[1] || '').split('#')[0] || '외부').trim();
+      return { key: 'ext:' + client, label: '🌐 ' + client, rank: 4, svc: null };
+    }
     return { key: 'infra:' + t, label: INFRA_ICON[t] + ' ' + INFRA_LABEL[t], rank: ({ kafka: 1, redis: 2, db: 3, external: 4, other: 5 })[t] || 5, svc: null };
   };
   const orphan = new Set();          // 기준 컬럼에 보강할 호출부/내부 노드
@@ -938,13 +943,12 @@ function renderServiceView() {
   // 피호출 단계 (왼쪽, 깊은 단계가 가장 바깥)
   for (let i = bSteps.length - 1; i >= 0; i--) renderStep(bSteps[i], `피호출 ${i + 1}단계`);
 
-  // 기준 컬럼 (중앙): API 1단계 path 그룹 + (해석 안 된) 기타 호출부
+  // 기준 컬럼 (중앙): API 1단계 path 그룹만 (API 가 아닌 기타 호출부는 제외)
   const col0 = document.createElement('div');
   col0.className = 'column base svc-base';
   col0.appendChild(mkHead(`API 목록 · ${eps.length}`));
   const segKey = n => { const s = segsOf(n)[0]; return s ? '/' + s : '/'; };
   renderGroupedBoxes(col0, eps.map(n => n.id), onActivate, segKey, onPick);
-  if (orphan.size) appendGroupBox(col0, '기타 호출부', [...orphan].map(id => nodeById.get(id)).filter(Boolean).sort(byNodeName), onActivate, onPick);
   colsEl.appendChild(col0);
 
   // 호출 단계 (오른쪽)
@@ -1226,7 +1230,9 @@ function renderOverview() {
 
   for (let lv = 0; lv <= maxLevel; lv++) {
     const inLevel = svcs.filter(s => level.get(s) === lv).sort((a, b) => stats[b].eps - stats[a].eps);
-    if (!inLevel.length) continue;
+    // 외부 API 는 "제공 서비스"(가장 오른쪽) 단계에 함께 배치
+    const withExternal = lv === maxLevel && infraTypes.has('external');
+    if (!inLevel.length && !withExternal) continue;
     const col = document.createElement('div');
     col.className = 'column';
     const head = document.createElement('div');
@@ -1234,19 +1240,19 @@ function renderOverview() {
     head.textContent = lv === 0 ? '진입 / 호출' : lv === maxLevel ? '제공 서비스' : `의존 ${lv}`;
     col.appendChild(head);
     for (const s of inLevel) col.appendChild(makeServiceCard(s, stats[s]));
+    if (withExternal) col.appendChild(makeInfraTypeCard('external', (infraMembers['external'] || new Set()).size));
     colsEl.appendChild(col);
   }
-  if (infraTypes.size) {
+  // 공유 인프라 (kafka/redis/db/기타) — 외부는 제공 서비스 단계로 분리됨
+  const sharedTypes = ['kafka', 'redis', 'db', 'other'].filter(t => infraTypes.has(t));
+  if (sharedTypes.length) {
     const col = document.createElement('div');
     col.className = 'column infra-col';
     const head = document.createElement('div');
     head.className = 'column-head infra';
-    head.textContent = '공유 인프라 / 외부';
+    head.textContent = '공유 인프라';
     col.appendChild(head);
-    for (const t of ['kafka', 'redis', 'db', 'external', 'other']) {
-      if (!infraTypes.has(t)) continue;
-      col.appendChild(makeInfraTypeCard(t, (infraMembers[t] || new Set()).size));
-    }
+    for (const t of sharedTypes) col.appendChild(makeInfraTypeCard(t, (infraMembers[t] || new Set()).size));
     colsEl.appendChild(col);
   }
 
