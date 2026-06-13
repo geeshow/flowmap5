@@ -426,7 +426,10 @@ function kindClass(e) {
   return e.kind || 'internal';
 }
 function serviceEndpoints(svc) {
-  return NODES.filter(n => n.project === svc && n.layer === 'CONTROLLER' && n.endpoint);
+  const eps = NODES.filter(n => n.project === svc && n.layer === 'CONTROLLER' && n.endpoint);
+  if (eps.length) return eps;
+  // 컨트롤러가 없는 서비스(프론트엔드 등) → 화면(SCREEN) 페이지를 기준 목록으로 사용
+  return NODES.filter(n => n.project === svc && n.layer === 'SCREEN');
 }
 function segsOf(ep) { return (ep.endpoint || '').split('/').filter(Boolean); }
 
@@ -466,10 +469,13 @@ function pickLabelOf(n) {
 // =========================================================================
 // 3단계 체인 전체의 실행 그래프 수집 — 체인 시작점부터 경계(S2S/Kafka 등)를 넘어 끝까지.
 // 서비스가 바뀔 때마다 segment(컬럼 그룹)가 오른쪽으로 이어진다. 인프라 노드는 호출한 서비스의 segment 에 붙인다.
-function collectChainFlow(base) {
+// adjOut/adjIn 기본값 = 현재 컬럼 엣지(currentAdj). 기능 뷰는 실제 그래프 기준 인접을 넘겨 전체 체인을 그린다.
+function collectChainFlow(base, adjOut, adjIn) {
+  adjOut = adjOut || currentAdjOut;
+  adjIn = adjIn || currentAdjIn;
   // 3단계 활성 체인 + 체인 방향 레벨 (피호출 음수 ← 기준 0 → 호출 양수)
   const level = new Map([[base, 0]]);
-  for (const [adj, dir] of [[currentAdjOut, 1], [currentAdjIn, -1]]) {
+  for (const [adj, dir] of [[adjOut, 1], [adjIn, -1]]) {
     let frontier = [base];
     while (frontier.length) {
       const next = [];
@@ -515,7 +521,7 @@ function collectChainFlow(base) {
     }
   }
   // 체인 시작점(피호출 없는 노드)부터, 이어서 3단계의 모든 활성 노드를 빠짐없이 walk
-  const roots = active.filter(id => !(currentAdjIn.get(id) || []).some(s => level.has(s)));
+  const roots = active.filter(id => !(adjIn.get(id) || []).some(s => level.has(s)));
   const seeds = [...roots, ...active.sort((a, b) => level.get(a) - level.get(b))];
   for (const id of seeds) {
     if (nodeSet.has(id)) continue;
@@ -523,13 +529,36 @@ function collectChainFlow(base) {
     if (!n) continue;
     // 인프라 시드는 활성 호출자의 segment 에 붙임 (없으면 0)
     const callerSeg = isInfra(id, n)
-      ? (segOf.get((currentAdjIn.get(id) || []).find(s => segOf.has(s))) ?? 0)
+      ? (segOf.get((adjIn.get(id) || []).find(s => segOf.has(s))) ?? 0)
       : 0;
     place(id, callerSeg);
   }
   const segLabels = [];
   for (const [proj, idx] of segOfProject) segLabels[idx] = proj;
   return { nodes, edges, segOf, segLabels, truncated: count >= MAX };
+}
+
+// 기능 뷰(커밋 영향도 등) 프로세스 독용 — 실제 그래프에서 base 의 다운스트림 폐포로 제한한 인접.
+// 컬럼이 경계만 보여줘도, 독에서는 내부 실행 체인 전체(CONTROLLER→SERVICE→…→EXTERNAL)를 그린다.
+function downstreamChainAdj(base) {
+  const seen = new Set([base]);
+  let frontier = [base];
+  while (frontier.length) {
+    const next = [];
+    for (const id of frontier)
+      for (const e of (outEdges.get(id) || []))
+        if (nodeById.has(e.target) && !seen.has(e.target)) { seen.add(e.target); next.push(e.target); }
+    frontier = next;
+  }
+  const aOut = new Map(), aIn = new Map();
+  for (const e of EDGES) {
+    if (!seen.has(e.source) || !seen.has(e.target)) continue;
+    if (!aOut.has(e.source)) aOut.set(e.source, []);
+    if (!aIn.has(e.target)) aIn.set(e.target, []);
+    aOut.get(e.source).push(e.target);
+    aIn.get(e.target).push(e.source);
+  }
+  return { aOut, aIn };
 }
 
 const DOCK_COLS = [
@@ -547,16 +576,18 @@ function dockCardEl(id, rootId) {
   el.style.setProperty('--lc', (layerColor(n) || '#9ca3af').trim());
   let badge, ep = '', sub = n.fqcn && n.fqcn !== n.id ? shortClass(n.fqcn) : '';
   if (n.layer === 'CONTROLLER') {
-    badge = n.httpMethod ? `<span class="nc-badge http ${methodClass(n.httpMethod)}">${esc(n.httpMethod)}</span>` : `<span class="nc-badge">CTRL</span>`;
+    badge = n.httpMethod ? `<span class="nc-badge http ${methodClass(n.httpMethod)}">${esc(n.httpMethod)}</span>` : `<span class="nc-badge">CONTROLLER</span>`;
     if (n.endpoint) ep = `<div class="dn-ep">${esc(n.endpoint)}</div>`;
   } else if (n.layer === 'RESOURCE') {
     badge = `<span class="nc-badge">${RES_ICON[n.resourceType] || '⬡'} ${esc(n.resourceType || 'resource')}</span>`;
     sub = '';
   } else if (n.layer === 'EXTERNAL') {
-    badge = `<span class="nc-badge">EXT</span>`;
+    badge = `<span class="nc-badge">EXTERNAL</span>`;
     if (n.externalUrl) ep = `<div class="dn-ep">${esc(n.externalUrl)}</div>`;
+  } else if (n.layer === 'SCREEN') {
+    badge = `<span class="nc-badge screen">🖥 화면</span>`;
   } else {
-    badge = `<span class="nc-badge">${esc((n.layer || '').slice(0, 4))}</span>`;
+    badge = `<span class="nc-badge">${esc(n.layer || 'OTHER')}</span>`;   // 축약 없이 레이어 풀네임
   }
   const file = n.file ? `<div class="dn-file">${esc(n.file.split('/').pop())}${n.line ? ':' + n.line : ''}</div>` : '';
   const desc = n.description ? `<div class="dn-desc">${esc(n.description)}</div>` : '';
@@ -604,13 +635,18 @@ function drawDockConnectors(dock, edges, elOf, hoverId) {
   svg.innerHTML = defs + '</defs>' + paths + labels;
 }
 
-let dockDraw = null;   // 창 크기 변경 시 재그리기용
+let dockDraw = null;     // 창 크기 변경 시 재그리기용
+let dockFeature = false;  // 기능 뷰(커밋 영향도 등)가 state.sel 기준으로 프로세스 독을 요청
 function renderProcessDock() {
   const dock = document.getElementById('process-dock');
-  const base = state.service ? state.svcPick : null;
+  // 서비스 보기 = svcPick 기준(현재 컬럼 엣지), 기능 뷰 = 선택 노드(state.sel) 기준(실제 그래프 체인)
+  const svcMode = !!state.service;
+  const base = svcMode ? state.svcPick : (dockFeature ? state.sel : null);
   if (!base || !nodeById.has(base)) { dock.classList.add('hidden'); dock.innerHTML = ''; dockDraw = null; return; }
   const n = nodeById.get(base);
-  const { nodes, edges, segOf, segLabels, truncated } = collectChainFlow(base);
+  const { nodes, edges, segOf, segLabels, truncated } = svcMode
+    ? collectChainFlow(base)
+    : (() => { const { aOut, aIn } = downstreamChainAdj(base); return collectChainFlow(base, aOut, aIn); })();
 
   // 레이어 구성 요약 칩
   const counts = new Map();
@@ -670,7 +706,8 @@ function renderProcessDock() {
     colsEl.appendChild(segEl);
   }
 
-  dock.querySelector('.dock-close').addEventListener('click', () => setServicePick(state.svcPick));
+  dock.querySelector('.dock-close').addEventListener('click', () =>
+    svcMode ? setServicePick(state.svcPick) : setSel(null));
   const savedH = parseInt(localStorage.getItem('fm.dockH'), 10);
   if (savedH) dock.style.height = savedH + 'px';
   dock.querySelector('.dock-resizer').addEventListener('mousedown', e => startDockResize(e, dock));
@@ -877,11 +914,11 @@ function renderServiceView() {
   requestAnimationFrame(() => { pruneOrphans(); applyPickFilter(); drawConnectors(); applyHighlight(); });
 }
 
-// 내부 노드를 호출하는 같은 서비스의 controller 엔드포인트로 거슬러 해석 (없으면 자기 자신)
+// 내부 노드를 호출하는 같은 서비스의 진입점(controller 엔드포인트 / 프론트 화면)으로 거슬러 해석 (없으면 자기 자신)
 function resolveEndpoints(startId) {
   const start = nodeById.get(startId);
   if (!start) return [startId];
-  if (start.layer === 'CONTROLLER') return [startId];
+  if (start.layer === 'CONTROLLER' || start.layer === 'SCREEN') return [startId];
   const proj = start.project;
   const seen = new Set([startId]);
   const found = [];
@@ -890,11 +927,12 @@ function resolveEndpoints(startId) {
     const next = [];
     for (const id of frontier)
       for (const e of inEdges.get(id) || []) {
-        if (e.kind !== 'internal') continue;
         const s = e.source, sn = nodeById.get(s);
+        // 같은 프로젝트 안에서만 거슬러 올라간다 (s2s/resource 는 다른 프로젝트·인프라라 자동 제외).
+        // 프론트는 store→axios 가 internal 이 아니므로 kind 제한 없이 같은-프로젝트 체인을 따른다.
         if (!sn || sn.project !== proj || seen.has(s)) continue;
         seen.add(s);
-        if (sn.layer === 'CONTROLLER') { if (!found.includes(s)) found.push(s); }
+        if (sn.layer === 'CONTROLLER' || sn.layer === 'SCREEN') { if (!found.includes(s)) found.push(s); }
         else next.push(s);
       }
     frontier = next; if (!next.length) break;
@@ -1565,6 +1603,7 @@ function makeCard(id, opts) {
   if (n.layer === 'CONTROLLER' && n.httpMethod) badge = `<span class="nc-badge http ${methodClass(n.httpMethod)}">${esc(n.httpMethod)}</span>`;
   else if (n.layer === 'RESOURCE') badge = `<span class="nc-icon">${RES_ICON[n.resourceType] || '⬡'}</span>`;
   else if (n.layer === 'EXTERNAL') badge = `<span class="nc-badge">EXT</span>`;
+  else if (n.layer === 'SCREEN') badge = `<span class="nc-badge screen">🖥 화면</span>`;
   else badge = `<span class="nc-badge">${esc((n.layer || '').slice(0, 4))}</span>`;
   const asyncTag = n.async ? '<span class="nc-async">async</span>' : '';
 
@@ -1583,14 +1622,14 @@ function makeCard(id, opts) {
     if (n.externalUrl) body += `<div class="nc-endpoint">${esc(n.externalUrl)}</div>`;
     if (n.description) body += `<div class="nc-desc">${esc(n.description)}</div>`;
   }
-  const proj = (n.project && state.focus && !opts.inBrowser) ? `<span class="nc-proj">${esc(n.project)}</span>` : '';
+  const proj = (n.project && (state.focus || opts.showProject) && !opts.inBrowser) ? `<span class="nc-proj">${esc(n.project)}</span>` : '';
 
   // 액션 버튼
   let act = '';
   if (!opts.inBrowser) {
     if (isFocus) {
       act = `<button class="nc-act expand">${state.expanded ? '프로세스 접기 ▲' : '프로세스 상세보기 ▼'}</button>`;
-    } else if (!isInfra(id, n) || opts.onPick) {
+    } else if (!opts.noCenter && (!isInfra(id, n) || opts.onPick)) {
       act = `<button class="nc-act center" title="이 노드를 기준으로 분석">중심 ⟲</button>`;
     }
   }
@@ -1807,12 +1846,68 @@ function clearAlign() {
 // =========================================================================
 // 상세 패널
 // =========================================================================
+// 화면(SCREEN) 노드 → 분석 그래프로 간략한 화면 구성(주소·사용 스토어·호출 API) 도식 생성
+function screenComposition(n) {
+  const stores = [], seenStore = new Set();
+  for (const e of outEdges.get(n.id) || []) {
+    const t = nodeById.get(e.target);
+    if (!t || t.layer !== 'STORE') continue;
+    const mod = (t.method || t.id).split('#')[0];
+    if (mod && !seenStore.has(mod)) { seenStore.add(mod); stores.push(mod); }
+  }
+  // 다운스트림(같은 프로젝트)으로 내려가며 axios(EXTERNAL) 호출을 모으고, join 으로 백엔드 엔드포인트까지 해석
+  const apis = [], seenApi = new Set(), visited = new Set([n.id]);
+  let frontier = [n.id], guard = 0;
+  while (frontier.length && guard++ < 3000) {
+    const next = [];
+    for (const id of frontier) for (const e of outEdges.get(id) || []) {
+      const t = e.target, tn = nodeById.get(t);
+      if (!tn || visited.has(t)) continue;
+      visited.add(t);
+      if (tn.layer === 'EXTERNAL') {
+        const join = (outEdges.get(t) || []).find(je => je.kind === 'join');
+        const be = join ? nodeById.get(join.target) : null;
+        const method = ((be && be.httpMethod) || tn.httpMethod || '').toUpperCase();
+        const path = (be && be.endpoint) || tn.externalUrl || tn.method || t;
+        const key = method + ' ' + path;
+        if (!seenApi.has(key)) { seenApi.add(key); apis.push({ method, path, svc: be && be.project, epId: be && be.id }); }
+      } else if (tn.project === n.project) next.push(t);
+    }
+    frontier = next;
+  }
+  const chips = stores.length
+    ? stores.map(s => `<span class="sm-chip">${esc(s)}</span>`).join('')
+    : '<span class="sm-empty">의존 스토어 없음</span>';
+  const apiRows = apis.length
+    ? apis.map(a => `<div class="sm-api"${a.epId ? ` data-ep="${escAttr(a.epId)}"` : ''}>`
+        + `<span class="nc-badge http ${methodClass(a.method || 'any')}">${esc(a.method || 'ANY')}</span>`
+        + `<code class="sm-path">${esc(a.path)}</code>`
+        + (a.svc ? `<span class="sm-svc">${esc(a.svc)}</span>` : '') + `</div>`).join('')
+    : '<span class="sm-empty">호출 API 없음</span>';
+  return `
+    <div class="screen-mock">
+      <div class="sm-chrome"><span class="sm-dot r"></span><span class="sm-dot y"></span><span class="sm-dot g"></span>`
+        + `<span class="sm-addr">${esc(n.endpoint || n.method || '')}</span></div>
+      <div class="sm-screen">
+        <div class="sm-title">🖥 ${esc(n.method || '')}</div>
+        <div class="sm-block">
+          <div class="sm-block-h">🗃️ 상태 · 스토어 <span class="sm-n">${stores.length}</span></div>
+          <div class="sm-chips">${chips}</div>
+        </div>
+        <div class="sm-block">
+          <div class="sm-block-h">🔌 API 호출 <span class="sm-n">${apis.length}</span></div>
+          <div class="sm-apis">${apiRows}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderDetail() {
   const el = document.getElementById('detail');
   const id = state.sel;
   const n = id ? nodeById.get(id) : null;
-  // 엔드포인트 또는 인프라 노드를 선택했을 때만 패널 표시
-  const show = !!n && ((n.layer === 'CONTROLLER' && n.endpoint) || isInfra(id, n));
+  // 엔드포인트 · 인프라 · 화면(SCREEN) 노드를 선택했을 때 패널 표시
+  const show = !!n && ((n.layer === 'CONTROLLER' && n.endpoint) || isInfra(id, n) || n.layer === 'SCREEN');
   const toggled = el.classList.contains('hidden') === show;
   el.classList.toggle('hidden', !show);
   document.getElementById('detail-resizer').classList.toggle('hidden', !show);
@@ -1858,6 +1953,7 @@ function renderDetail() {
       </div>
     </div>
     ${n.description ? `<div class="nc-desc" style="color:var(--text-dim);margin-bottom:8px">${esc(n.description)}</div>` : ''}
+    ${n.layer === 'SCREEN' ? screenComposition(n) : ''}
     <div class="detail-actions">${actions}<button class="btn" data-act="share">🔗 이 화면 공유 링크 복사</button></div>
     <table class="detail-table">${rows.join('')}</table>`;
 
@@ -1866,6 +1962,9 @@ function renderDetail() {
   el.querySelector('[data-act="share"]')?.addEventListener('click', (e) => copyToClipboard(shareUrl(), e.target));
   el.querySelector('[data-act="apidoc"]')?.addEventListener('click', () => loadFeature('apidoc').then(() => renderDetail()).catch(() => {}));
   el.querySelector('[data-act="topicview"]')?.addEventListener('click', () => openView('topic', { topic: id }));
+  // 화면 구성도의 API 행 클릭 → 해당 백엔드 엔드포인트 선택
+  el.querySelectorAll('.sm-api[data-ep]').forEach(rowEl =>
+    rowEl.addEventListener('click', () => { const ep = rowEl.dataset.ep; if (nodeById.has(ep)) setSel(ep); }));
   // 기능 모듈의 상세 패널 확장 (영향 커밋 / API 문서 등)
   for (const fn of detailExtensions) { try { fn(n, el); } catch (err) { console.error('detail extension 오류', err); } }
 }
@@ -2050,7 +2149,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '1';                       // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '11';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
@@ -2110,6 +2209,7 @@ function renderFeatureView() {
   document.getElementById('analysis-bar').classList.add('hidden');
   document.getElementById('svc-filter-wrap')?.remove();
   document.getElementById('process-dock').classList.add('hidden');
+  dockFeature = false;   // 기능 전환 시 독 요청 초기화 — 해당 모듈이 다시 켠다
   currentEdges = []; buildCurrentAdj();
   document.getElementById('connectors').innerHTML = '';
   const cols = document.getElementById('columns');
@@ -2147,6 +2247,8 @@ window.Flowmap = {
   drawConnectors, pruneOrphans, applyHighlight,
   // 네비게이션 / 상태
   setFocus, setService, setOverview, setSel, setInfraType, clearFocus,
+  // 하단 프로세스 독 — 기능 뷰에서 state.sel 기준으로 표시 (on=true 후 setSel 로 base 지정)
+  setProcessDockEnabled(on) { dockFeature = !!on; renderProcessDock(); },
   openView, pushViewUrl, param: urlParamOf, renderDetail,
   // 모듈 등록 / 데이터 로드
   registerView(view, mod) { featureViews.set(view, mod); },

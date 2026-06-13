@@ -190,6 +190,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.imp-ext-item.clickable { cursor: pointer; }
+.imp-ext-item.clickable:hover code { color: var(--text); }
 
 /* ───────── 영향 그래프 (가로 스크롤 허용) ───────── */
 .imp-gwrap {
@@ -237,6 +239,10 @@
   color: var(--imp-changed);
   border: 1px solid var(--imp-changed);
 }
+/* 경계 노드 배지 — 레이어별 색 외곽선 */
+.imp-flag.screen { background: transparent; color: var(--c-screen);   border: 1px solid var(--c-screen); }
+.imp-flag.ext    { background: transparent; color: var(--c-external); border: 1px solid var(--c-external); }
+.imp-flag.res    { background: transparent; color: var(--c-kafka);    border: 1px solid var(--c-kafka); }
 
 /* ───────── 집계 테이블 (커밋 미선택) ───────── */
 .imp-epfilter {

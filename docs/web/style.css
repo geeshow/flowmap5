@@ -329,6 +329,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .node-card.sel  { box-shadow: 0 0 0 2px #38bdf8, 0 6px 16px rgba(0,0,0,.6); }
 .node-card.dim  { opacity: .14; filter: brightness(.6); border-color: #1e293b !important; border-left-color: #1e293b !important; }
 .node-card.orphan-hidden { display: none; }
+.path-group.orphan-hidden { display: none; }
 /* 서비스 보기 선택 필터: 선택 노드와 연결 안 된 노드/그룹/컬럼 숨김 */
 #columns .pick-hidden { display: none; }
 .node-card.picked { box-shadow: 0 0 0 2px #38bdf8, 0 0 14px rgba(56, 189, 248, .45); }
@@ -363,6 +364,7 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   background: #e2e8f0; color: #334155; text-transform: uppercase; letter-spacing: .3px;
 }
 .nc-badge.http { background: #dbeafe; color: #1e40af; }
+.nc-badge.screen { background: transparent; color: var(--c-screen); border: 1px solid var(--c-screen); text-transform: none; }
 /* HTTP 메서드별 색 */
 .nc-badge.m-get,    .tag.m-get    { background: #dcfce7; color: #166534; }
 .nc-badge.m-post,   .tag.m-post   { background: #dbeafe; color: #1e40af; }
@@ -379,6 +381,48 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   display: inline-block; margin-top: 5px; font-size: 9px; padding: 1px 6px;
   border-radius: 10px; background: #0b1220; color: var(--text-dim); border: 1px solid var(--border);
 }
+
+/* 화면(SCREEN) 구성 도식 — 상세 패널의 간략한 브라우저/페이지 와이어프레임 */
+.screen-mock {
+  margin: 4px 0 12px; border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; background: #0b1220;
+}
+.sm-chrome {
+  display: flex; align-items: center; gap: 5px; padding: 6px 9px;
+  background: #1e293b; border-bottom: 1px solid var(--border);
+}
+.sm-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; }
+.sm-dot.r { background: #ef4444; } .sm-dot.y { background: #eab308; } .sm-dot.g { background: #22c55e; }
+.sm-addr {
+  flex: 1; margin-left: 6px; font-family: ui-monospace, monospace; font-size: 10px;
+  color: var(--text-dim); background: #0b1220; border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sm-screen { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.sm-title {
+  font-size: 13px; font-weight: 700; color: var(--c-screen);
+  border-left: 3px solid var(--c-screen); padding-left: 8px;
+}
+.sm-block { background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 8px 9px; }
+.sm-block-h { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 7px; }
+.sm-n {
+  display: inline-block; min-width: 16px; text-align: center; font-size: 9px;
+  background: var(--border); color: var(--text-dim); border-radius: 8px; padding: 0 5px; margin-left: 2px;
+}
+.sm-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.sm-chip {
+  font-size: 10px; font-family: ui-monospace, monospace; padding: 2px 7px; border-radius: 6px;
+  background: #1e293b; color: #cbd5e1; border: 1px solid var(--border);
+}
+.sm-apis { display: flex; flex-direction: column; gap: 4px; }
+.sm-api {
+  display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px;
+}
+.sm-api[data-ep] { cursor: pointer; }
+.sm-api[data-ep]:hover { background: #1e293b; }
+.sm-path { font-family: ui-monospace, monospace; font-size: 10px; color: #93c5fd; flex: 1; word-break: break-all; }
+.sm-svc { font-size: 9px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
+.sm-empty { font-size: 10px; color: var(--text-dim); }
 
 /* route-first 카드 (호출관계분석 endpoint leaf) */
 .node-card.is-route { border-left-width: 4px; }

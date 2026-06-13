@@ -4,8 +4,9 @@
   'use strict';
   const FM = window.Flowmap;
   const DATA_URL = 'data/impact.json';
-  const MAX_NODES = 200;   // BFS 노드 폭증 가드 (기존 200호출 상한과 동일 정책)
-  const MAX_DEPTH = 3;     // 역방향(피호출) BFS 최대 단계
+  const MAX_NODES = 200;   // 노드 폭증 가드 (기존 200호출 상한과 동일 정책)
+  const MAX_UP = 3;        // 유입(피호출) 경계 투영 최대 hop — 변경 노드에 닿는 화면/서비스/엔드포인트
+  const MAX_DOWN = 3;      // 유출(호출) 경계 투영 최대 hop — 변경 노드가 호출하는 외부/다른 서비스
 
   // 모듈 상태 — render()는 항상 URL 파라미터에서 복원하므로 여기엔 데이터 캐시/필터만 둔다
   let data;                          // undefined=미로드, null=404/오류, object=로드 완료
@@ -30,6 +31,28 @@
 
   function shaChip(sha) {
     return `<span class="imp-sha">◆ ${FM.esc(sha)}</span>`;
+  }
+
+  // 프론트엔드 프로젝트 집합 — 프론트의 API 호출(EXTERNAL) 노드는 백엔드 endpoint와 join 으로 묶인
+  // "배선"일 뿐이므로 경계로 치지 않고 접어서 화면(SCREEN)까지 도달시킨다.
+  let _frontProjects;
+  function frontProjects() {
+    if (!_frontProjects) {
+      _frontProjects = new Set(((FM.MANIFEST && FM.MANIFEST.projects) || [])
+        .filter(p => p.type === 'frontend').map(p => p.name));
+    }
+    return _frontProjects;
+  }
+
+  // 경계 노드 = 어플리케이션 경계를 드러내는 노드만 표시 대상으로 삼는다:
+  //   SCREEN(화면) · CONTROLLER(endpoint 단위·s2s 대상) · 백엔드 EXTERNAL(외부 API) · kafka 토픽(서비스 간 이벤트).
+  //   그 외(SERVICE/COMPONENT/REPOSITORY/STORE/CONFIG/프론트 API 콜/…)는 내부 배선이라 접어 숨긴다.
+  function isBoundary(id) {
+    const n = FM.nodeById.get(id);
+    if (!n) return false;
+    if (n.layer === 'SCREEN' || n.layer === 'CONTROLLER') return true;
+    if (n.layer === 'EXTERNAL') return !frontProjects().has(n.project);
+    return n.layer === 'RESOURCE' && n.resourceType === 'kafka-topic';
   }
 
   // 매니페스트가 있으면 프로젝트별 <project>.impact.json 들을 병합, 없으면 단일 impact.json 폴백
@@ -235,6 +258,8 @@
   /* ───────── 커밋 미선택: endpointImpact 집계 테이블 ───────── */
 
   function renderAggregate(main, ep) {
+    FM.setProcessDockEnabled(false);   // 커밋 미선택 — 하단 프로세스 독 숨김
+    FM.state.sel = null; FM.renderDetail();   // 그래프 선택 패널도 닫음
     main.appendChild(el('div', 'imp-bar',
       `<span class="imp-bar-title">🧾 ${FM.esc(data.branch)} 브랜치</span>` +
       `<span class="imp-cc">최근 ${FM.esc(String(data.commitCount))} 커밋</span>` +
@@ -311,38 +336,85 @@
       (c.changedFiles || []).forEach(f => allFiles.push({ sha, file: f }));
     });
 
-    const bases = [...changedSha.keys()].filter(id => FM.nodeById.has(id));
+    const changedInGraph = [...changedSha.keys()].filter(id => FM.nodeById.has(id));
 
-    // 역방향(피호출) BFS — FM.inEdges, 최대 MAX_DEPTH 단계, MAX_NODES 가드
-    const level = new Map();        // id -> 0..MAX_DEPTH (0=변경 노드)
-    const edges = [];
+    // 경계 투영(boundary projection) — 어플리케이션 내부 호출/변경 메서드는 접어 숨기고,
+    // 변경이 영향을 준 endpoint(CONTROLLER)를 중심에 둔 채 s2s·화면(SCREEN)·외부/kafka 경계만 보여준다.
+    //   음수 레벨 = 유입(화면/s2s 호출원), 0 = 변경·영향 엔드포인트, 양수 레벨 = 유출(외부 API/다른 서비스/kafka).
+    const level = new Map();        // id -> 음수…0…양수 (표시 노드만)
+    const edges = [];               // 경계 노드 사이의 축약 엣지
     const edgeSeen = new Set();
     let truncated = false;
-    bases.forEach(id => level.set(id, 0));
-    let frontier = bases.slice();
-    for (let d = 0; d < MAX_DEPTH && frontier.length; d++) {
-      const next = [];
-      for (const id of frontier) {
-        for (const e of (FM.inEdges.get(id) || [])) {
-          const caller = e.source;
-          if (!FM.nodeById.has(caller)) continue;
-          if (!level.has(caller)) {
-            if (level.size >= MAX_NODES) { truncated = true; continue; }
-            level.set(caller, d + 1);
-            next.push(caller);
-          }
-          const key = `${e.source}→${e.target}·${e.relation}·${e.mode}`;
-          if (!edgeSeen.has(key)) { edgeSeen.add(key); edges.push(e); }
+    const addEdge = (source, target, e) => {
+      const key = source + '→' + target;
+      if (edgeSeen.has(key)) return;
+      edgeSeen.add(key);
+      edges.push({ source, target, kind: e.kind, relation: e.relation, mode: e.mode });
+    };
+
+    // anchor(표시 노드)에서 숨김(내부) 노드만 거쳐 닿는 경계 노드를 모은다 — 내부 체인 축약
+    const collectBoundary = (anchor, edgeMap, sign) => {
+      const found = [];
+      const seen = new Set([anchor]);
+      const stack = [anchor];
+      while (stack.length) {
+        const cur = stack.pop();
+        for (const e of (edgeMap.get(cur) || [])) {
+          const nb = sign > 0 ? e.target : e.source;
+          if (!FM.nodeById.has(nb) || seen.has(nb)) continue;
+          seen.add(nb);
+          if (isBoundary(nb)) found.push({ bid: nb, edge: e });
+          else stack.push(nb);   // 내부 노드 → 계속 접어 들어간다
         }
       }
-      frontier = next;
+      return found;
+    };
+
+    // 중심(level 0) = 변경이 직접 닿은 경계 노드 + 변경이 영향 준 endpoint(롤업).
+    // 내부 변경 메서드는 카드로 그리지 않고 그 영향 endpoint 로 대표시킨다.
+    const centerSet = new Set();
+    changedInGraph.forEach(id => { if (isBoundary(id)) centerSet.add(id); });
+    epIds.forEach(id => { if (FM.nodeById.has(id)) centerSet.add(id); });
+    let bases = [...centerSet];
+    // 폴백: endpoint 로 롤업되지 않는 변경(엔드포인트 없는 내부 코드 등) → 변경 노드의 인접 경계를 중심으로
+    if (!bases.length && changedInGraph.length) {
+      const fb = new Set();
+      changedInGraph.forEach(id => {
+        collectBoundary(id, FM.outEdges, 1).forEach(({ bid }) => fb.add(bid));
+        collectBoundary(id, FM.inEdges, -1).forEach(({ bid }) => fb.add(bid));
+      });
+      bases = [...fb];
     }
+    bases.forEach(id => level.set(id, 0));
+
+    const expand = (edgeMap, sign, maxHops) => {
+      let frontier = bases.slice();
+      for (let d = 0; d < maxHops && frontier.length; d++) {
+        const next = [];
+        for (const anchor of frontier) {
+          for (const { bid, edge } of collectBoundary(anchor, edgeMap, sign)) {
+            if (!level.has(bid)) {
+              if (level.size >= MAX_NODES) { truncated = true; continue; }
+              level.set(bid, sign * (d + 1));
+              next.push(bid);
+            }
+            if (sign > 0) addEdge(anchor, bid, edge); else addEdge(bid, anchor, edge);
+          }
+        }
+        frontier = next;
+      }
+    };
+
+    expand(FM.outEdges, 1, MAX_DOWN);   // 유출: 엔드포인트가 호출하는 외부 API/다른 서비스/kafka
+    expand(FM.inEdges, -1, MAX_UP);     // 유입: 엔드포인트에 닿는 화면/s2s 호출원
 
     // 상단 분석 바
     main.appendChild(buildBar(selected, changedSha, epIds, truncated, outOfGraph));
 
     if (!bases.length) {
-      // 그래프에 그릴 변경 노드 없음 — changedFiles는 보여줌
+      // 코드 영향 없음(예: nginx.conf 변경) — 상세 패널·프로세스 독을 닫고 changedFiles만 보여줌
+      FM.state.sel = null; FM.renderDetail();
+      FM.setProcessDockEnabled(false);
       const box = el('div', 'browse-empty imp-empty',
         '<div class="be-ico">∅</div><div class="be-msg">선택한 커밋의 변경이 호출 그래프에 닿지 않습니다 (코드 영향 없음)</div>');
       main.appendChild(box);
@@ -355,13 +427,15 @@
       return;
     }
 
-    // 컬럼 전개 — 왼쪽 끝 = 가장 먼 피호출(영향 엔드포인트), 오른쪽 = 변경 노드 기준
+    // 컬럼 전개 — 왼쪽 = 피호출(영향 범위), 가운데 = 변경 노드, 오른쪽 = 호출(다운스트림 체인)
     const byLevel = new Map();
     level.forEach((lv, id) => {
       if (!byLevel.has(lv)) byLevel.set(lv, []);
       byLevel.get(lv).push(id);
     });
-    const maxLv = Math.max(...byLevel.keys());
+    const lvs = [...byLevel.keys()];
+    const minLv = Math.min(...lvs);
+    const maxLv = Math.max(...lvs);
 
     const gwrap = el('div', 'imp-gwrap');
     const graph = el('div', 'imp-graph');
@@ -373,22 +447,50 @@
       scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; FM.drawConnectors(); });
     });
 
-    for (let lv = maxLv; lv >= 0; lv--) {
+    // 노드를 클릭해야만 상세 패널·프로세스 흐름이 열린다 (URL 오염 방지 위해 코어 setSel 대신 직접 제어).
+    const setSelection = (id) => {
+      FM.state.sel = (id && level.has(id)) ? id : null;
+      FM.renderDetail();
+      FM.setProcessDockEnabled(true);   // sel 있으면 독 표시, 없으면 숨김
+      FM.applyHighlight();
+    };
+    // 배경(빈 공간) 클릭 → 선택 해제 (카드 클릭은 카드 핸들러가 처리)
+    gwrap.addEventListener('click', (e) => {
+      if (e.target.closest('.node-card')) return;
+      if (FM.state.sel != null) setSelection(null);
+    });
+
+    for (let lv = minLv; lv <= maxLv; lv++) {
       const ids = byLevel.get(lv);
       if (!ids || !ids.length) continue;
+      const headLabel = lv === 0 ? `◆ 변경·영향 엔드포인트 (${ids.length})`
+        : lv < 0 ? `유입 ${-lv}단계`
+        : `유출 ${lv}단계`;
       const col = el('div', 'column' + (lv === 0 ? ' imp-base' : ''));
-      col.appendChild(FM.mkHead(lv === 0 ? `◆ 변경 노드 (${ids.length})` : `피호출 ${lv}단계`));
+      col.appendChild(FM.mkHead(headLabel));
       ids.forEach(id => {
-        const card = FM.makeCard(id, {});
+        const card = FM.makeCard(id, { noCenter: true, onPick: setSelection, showProject: true });
         const node = FM.nodeById.get(id);
+        const layer = node && node.layer;
         const shas = changedSha.get(id);
-        if (shas) {
+        if (lv === 0 && shas) {            // 직접 변경된 경계 노드(엔드포인트/화면 등)
           card.classList.add('imp-changed');
           card.prepend(el('div', 'imp-flag',
             `◆ ${FM.esc(shas[0])}${shas.length > 1 ? ` +${shas.length - 1}` : ''}`));
-        } else if (node && node.layer === 'CONTROLLER') {
+        } else if (lv === 0) {             // 변경이 롤업된 영향 엔드포인트
           card.classList.add('imp-endpoint');
-          card.prepend(el('div', 'imp-flag ep', '◇ 영향'));
+          card.prepend(el('div', 'imp-flag ep', '◇ 영향 엔드포인트'));
+        } else if (layer === 'SCREEN') {
+          card.classList.add('imp-endpoint');   // 화면 뱃지는 makeCard 가 표시 (전체보기와 동일)
+        } else if (layer === 'CONTROLLER') {
+          card.classList.add('imp-endpoint');
+          card.prepend(el('div', 'imp-flag ep', '↗ s2s 엔드포인트'));
+        } else if (layer === 'EXTERNAL') {
+          card.classList.add('imp-path');
+          card.prepend(el('div', 'imp-flag ext', '🌐 외부 API'));
+        } else if (layer === 'RESOURCE') {
+          card.classList.add('imp-path');
+          card.prepend(el('div', 'imp-flag res', '📨 Kafka'));
         } else {
           card.classList.add('imp-path');
         }
@@ -400,13 +502,15 @@
 
     FM.setCanvasEdges(edges);
 
-    // ep 역조회 진입: 해당 엔드포인트 카드로 스크롤 + 상세 패널
+    // 커밋 (재)선택 시엔 닫힌 상태로 시작 — ep 딥링크일 때만 해당 엔드포인트를 자동 선택해 연다.
     if (ep && level.has(ep)) {
+      setSelection(ep);
       requestAnimationFrame(() => {
         const card = FM.cardEls && FM.cardEls.get && FM.cardEls.get(ep);
         if (card && card.scrollIntoView) card.scrollIntoView({ block: 'center', inline: 'nearest' });
-        if (FM.state.sel !== ep) FM.setSel(ep);
       });
+    } else {
+      setSelection(null);
     }
   }
 
@@ -426,6 +530,23 @@
     bar.appendChild(el('span', 'imp-cc', `변경 ${changedSha.size}`));
     bar.appendChild(el('span', 'imp-cc', `영향 엔드포인트 ${epIds.size}`));
     if (truncated) bar.appendChild(el('span', 'imp-cc warn', `(일부만 표시 — ${MAX_NODES}노드 상한)`));
+
+    // 변경 노드는 endpoint 로 롤업해 그래프에서 카드로 그리지 않으므로, 무엇이 바뀌었는지는 접이식 목록으로 유지
+    if (changedSha.size) {
+      const det = el('details', 'imp-ext');
+      det.innerHTML = `<summary>변경 코드 ${changedSha.size}건</summary>`;
+      const body = el('div', 'imp-ext-body');
+      changedSha.forEach((shas, id) => {
+        const n = FM.nodeById.get(id);
+        const label = n && (n.layer === 'CONTROLLER' && n.endpoint
+          ? `${n.httpMethod || ''} ${n.endpoint}`.trim() : (n.method || id));
+        const row = el('div', 'imp-ext-item', `${shaChip(shas[0])} <code>${FM.esc(label)}</code>`);
+        if (FM.nodeById.has(id)) { row.classList.add('clickable'); row.onclick = () => FM.setSel(id); }
+        body.appendChild(row);
+      });
+      det.appendChild(body);
+      bar.appendChild(det);
+    }
 
     if (outOfGraph.length) {
       const det = el('details', 'imp-ext');
