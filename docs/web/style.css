@@ -563,8 +563,10 @@ body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
   border-left: 3px solid var(--lc, #9ca3af); border-radius: 8px;
   padding: 6px 8px;
 }
+.dock-node { cursor: pointer; }
 .dock-node:hover { border-color: var(--lc, #9ca3af); }
 .dock-node.root { box-shadow: 0 0 0 2px #fbbf24; }
+.dock-node.pinned { box-shadow: 0 0 0 2px #38bdf8; }
 .dock-node.dim { opacity: .3; }
 .dn-top { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
 .dn-name { font-size: 11px; font-weight: 600; color: #fff; word-break: break-all; }

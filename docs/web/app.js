@@ -527,6 +527,7 @@ function collectChainFlow(base, adjOut, adjIn) {
     if (nodeSet.has(id)) continue;
     const n = nodeById.get(id);
     if (!n) continue;
+    if (state.hideOther && n.layer === 'OTHER') continue;   // OTHER 노이즈는 프로세스 흐름에서도 숨김
     // 인프라 시드는 활성 호출자의 segment 에 붙임 (없으면 0)
     const callerSeg = isInfra(id, n)
       ? (segOf.get((adjIn.get(id) || []).find(s => segOf.has(s))) ?? 0)
@@ -635,6 +636,32 @@ function drawDockConnectors(dock, edges, elOf, hoverId) {
   svg.innerHTML = defs + '</defs>' + paths + labels;
 }
 
+// 같은 레이어 노드들을 호출 깊이별로 나눈다 — 예: service→service 호출이 있으면 옆 컬럼으로 확장
+// 반환: Map(depth → [nodeId…]). 호출 관계가 없으면 전부 depth 0.
+function layerCallDepth(nids, edgeList) {
+  const set = new Set(nids);
+  const adj = new Map(nids.map(id => [id, []]));
+  for (const e of edgeList)
+    if (e.source !== e.target && set.has(e.source) && set.has(e.target)) adj.get(e.source).push(e.target);
+  const level = new Map(nids.map(id => [id, 0]));
+  // 최장경로 레벨링 (사이클은 패스 수·상한으로 가드)
+  for (let pass = 0; pass < nids.length; pass++) {
+    let changed = false;
+    for (const u of nids) for (const v of adj.get(u)) {
+      const nl = Math.min(level.get(u) + 1, nids.length - 1);
+      if (level.get(v) < nl) { level.set(v, nl); changed = true; }
+    }
+    if (!changed) break;
+  }
+  const byLevel = new Map();
+  for (const id of nids) {
+    const lv = level.get(id);
+    if (!byLevel.has(lv)) byLevel.set(lv, []);
+    byLevel.get(lv).push(id);
+  }
+  return byLevel;
+}
+
 let dockDraw = null;     // 창 크기 변경 시 재그리기용
 let dockFeature = false;  // 기능 뷰(커밋 영향도 등)가 state.sel 기준으로 프로세스 독을 요청
 function renderProcessDock() {
@@ -701,7 +728,18 @@ function renderProcessDock() {
       for (const nid of list) { const card = dockCardEl(nid, base); col.appendChild(card); elOf.set(nid, card); }
       segCols.appendChild(col);
     };
-    for (const [key, label] of DOCK_COLS) if (groups.has(key)) { appendCol(label, groups.get(key)); groups.delete(key); }
+    for (const [key, label] of DOCK_COLS) {
+      if (!groups.has(key)) continue;
+      const list = groups.get(key);
+      groups.delete(key);
+      // SERVICE 가 다른 SERVICE 를 호출하면 호출 깊이별로 컬럼을 나눠 옆으로 펼친다
+      if (key === 'SERVICE' && list.length > 1) {
+        const byLevel = layerCallDepth(list, edges);
+        const lvs = [...byLevel.keys()].sort((a, b) => a - b);
+        if (lvs.length > 1) { lvs.forEach((lv, i) => appendCol(`${label} ${i + 1}`, byLevel.get(lv))); continue; }
+      }
+      appendCol(label, list);
+    }
     for (const [key, list] of groups) appendCol(key, list);   // 정의 밖 레이어 잔여
     colsEl.appendChild(segEl);
   }
@@ -713,24 +751,28 @@ function renderProcessDock() {
   dock.querySelector('.dock-resizer').addEventListener('mousedown', e => startDockResize(e, dock));
   dock.classList.remove('hidden');
 
-  // hover 강조: 연결선을 노드 위로 올려(.overlay) hot/dim 으로 어디와 연결됐는지 표시
-  let hoverId = null;
-  const applyDockHover = id => {
-    hoverId = id;
+  // hover/클릭 강조: 마우스 오버 시 연결 노드만 강조(.overlay+dim), 노드를 클릭하면 그 강조를 고정(pin)
+  let hoverId = null, pinnedId = null;
+  const applyDockHover = () => {
+    const active = hoverId || pinnedId;
     const neighbors = new Set();
-    if (id) for (const e of edges) {
-      if (e.source === id) neighbors.add(e.target);
-      if (e.target === id) neighbors.add(e.source);
+    if (active) for (const e of edges) {
+      if (e.source === active) neighbors.add(e.target);
+      if (e.target === active) neighbors.add(e.source);
     }
-    for (const [nid, el] of elOf) el.classList.toggle('dim', !!id && nid !== id && !neighbors.has(nid));
-    dock.querySelector('.dock-svg').classList.toggle('overlay', !!id);
-    drawDockConnectors(dock, edges, elOf, hoverId);
+    for (const [nid, el] of elOf) {
+      el.classList.toggle('dim', !!active && nid !== active && !neighbors.has(nid));
+      el.classList.toggle('pinned', nid === pinnedId);
+    }
+    dock.querySelector('.dock-svg').classList.toggle('overlay', !!active);
+    drawDockConnectors(dock, edges, elOf, active);
   };
   for (const [nid, el] of elOf) {
-    el.addEventListener('mouseenter', () => applyDockHover(nid));
-    el.addEventListener('mouseleave', () => applyDockHover(null));
+    el.addEventListener('mouseenter', () => { hoverId = nid; applyDockHover(); });
+    el.addEventListener('mouseleave', () => { hoverId = null; applyDockHover(); });
+    el.addEventListener('click', () => { pinnedId = pinnedId === nid ? null : nid; hoverId = null; applyDockHover(); });
   }
-  dockDraw = () => drawDockConnectors(dock, edges, elOf, hoverId);
+  dockDraw = () => drawDockConnectors(dock, edges, elOf, hoverId || pinnedId);
   requestAnimationFrame(dockDraw);
 }
 
