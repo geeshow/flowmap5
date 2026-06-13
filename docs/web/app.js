@@ -1657,8 +1657,9 @@ function drawConnectors() {
     }
   }
   let defs = '<defs>';
+  // markerUnits=userSpaceOnUse → 화살촉 크기를 stroke-width 와 무관하게 고정 (굵은 집계 엣지에서 화살표가 거대해지는 문제 방지)
   for (const kc of usedKinds)
-    defs += `<marker id="arr-${kc}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${KIND_COLOR[kc] || '#94a3b8'}"/></marker>`;
+    defs += `<marker id="arr-${kc}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${KIND_COLOR[kc] || '#94a3b8'}"/></marker>`;
   svg.innerHTML = defs + '</defs>' + paths + labels;
 }
 function highlightNeighbors(id) {
@@ -1741,68 +1742,57 @@ function currentTy(el) {
   if (!t || t === 'none') return 0;
   try { return new DOMMatrixReadOnly(t).m42; } catch (e) { return 0; }
 }
-// 카드가 속한 "이동 단위" — 그룹 박스(.path-group)가 있으면 박스 통째로, 없으면 카드 자신
-function moverOf(el) { return el.closest('.path-group') || el; }
 function resetMovers() {
   document.querySelectorAll('#columns .path-group[style*="transform"]').forEach(b => { b.style.transform = ''; b.classList.remove('aligning-box'); });
-  for (const [, el] of cardEls) if (el.style.transform) { el.style.transform = ''; el.classList.remove('aligning'); }
+  for (const [, el] of cardEls) if (el.style.transform) { el.style.transform = ''; el.classList.remove('aligning', 'card-lift'); }
 }
+// hover 시 연결된 이웃 "카드"를 hover 행으로 띄워 옆에 정렬한다.
+//   그룹 박스(.path-group)는 서비스 단위로 수백 개 카드를 담아 매우 클 수 있어,
+//   박스 통째로 옮기면 위치가 붕괴한다. 그래서 박스가 아니라 카드 한 장만 떠올린다(card-lift).
 function alignNeighbors(id) {
   hoverId = id;
   highlightNeighbors(id);
   const hc = cardEls.get(id);
   if (!hc || !currentEdges.length) { animateConnectors(); return; }
   const z = state.zoom || 1;
-  // 카드의 "기준(base) 중심 Y" — 자신과 그룹 박스의 현재 transform 을 모두 역산 (애니메이션 위치 무관)
+  // 카드의 "기준(base) 중심 Y" — 자신의 transform 만 역산 (박스는 이동하지 않음)
   const baseCenterOf = card => {
     const r = card.getBoundingClientRect();
-    let ty = currentTy(card);
-    const box = card.closest('.path-group');
-    if (box) ty += currentTy(box);
-    return r.top + r.height / 2 - ty * z;
+    return r.top + r.height / 2 - currentTy(card) * z;
   };
   const neighbors = new Set([...(currentAdjOut.get(id) || []), ...(currentAdjIn.get(id) || [])]);
-  const hoveredMover = moverOf(hc);
+  const hoverCol = hc.closest('.column');
 
-  // 연결된 노드들을 "이동 단위(그룹 박스)"로 묶음
-  const movers = new Map();   // moverEl -> [neighborCardEls]
+  // 연결된 이웃 카드를 컬럼별로 모음 (같은 컬럼 이웃은 띄울 필요 없음)
+  const byCol = new Map();
   for (const nid of neighbors) {
     const el = cardEls.get(nid);
     if (!el || el === hc || !el.offsetParent) continue;
-    const mv = moverOf(el);
-    if (mv === hoveredMover) continue;          // 같은 그룹 안의 이웃은 이동 불필요
-    if (!movers.has(mv)) movers.set(mv, []);
-    movers.get(mv).push(el);
+    const col = el.closest('.column') || el.parentElement;
+    if (col === hoverCol) continue;
+    if (!byCol.has(col)) byCol.set(col, []);
+    byCol.get(col).push(el);
   }
 
-  // 이번 hover와 무관한 이동단위/잔상 복귀
+  // 이번 hover와 무관한 잔상 복귀
   resetMovers();
   const hCenter = baseCenterOf(hc);
 
-  // 같은 컬럼에 이동단위가 여러 개면 hover 행 주변으로 분산 (겹침 방지)
-  const byCol = new Map();
-  for (const [mv, cards] of movers) {
-    const col = mv.closest('.column') || mv.parentElement;
-    if (!byCol.has(col)) byCol.set(col, []);
-    byCol.get(col).push({ mv, cards, anchor: cards.reduce((s, c) => s + baseCenterOf(c), 0) / cards.length });
-  }
-  for (const [col, items] of byCol) {
-    items.sort((p, q) => p.anchor - q.anchor);
-    const n = items.length;
-    const plan = items.map((it, i) => {
-      const h = it.mv.getBoundingClientRect().height;
-      return { it, h, center: hCenter + (i - (n - 1) / 2) * (h + 12) };
-    });
-    // hover 노드가 상단에 있으면 목표 위치가 컬럼 위로 벗어남 → 헤더 아래로 전체 보정
+  // 같은 컬럼에 이웃이 여럿이면 hover 행 주변으로 카드 한 장 높이씩 분산 (겹침 방지)
+  for (const [col, cards] of byCol) {
+    cards.sort((a, b) => baseCenterOf(a) - baseCenterOf(b));
+    const n = cards.length;
+    const row = cards[0].getBoundingClientRect().height + 10;   // 카드 행 간격 (박스 높이가 아니라 카드 높이 기준)
+    const plan = cards.map((el, i) => ({ el, anchor: baseCenterOf(el), center: hCenter + (i - (n - 1) / 2) * row }));
+    // hover 노드가 상단이면 목표가 컬럼 헤더 위로 벗어남 → 헤더 아래로 전체 보정
     const head = col.querySelector('.column-head');
     const minY = (head ? head.getBoundingClientRect().bottom : col.getBoundingClientRect().top) + 6 * z;
     let push = 0;
-    for (const p of plan) push = Math.max(push, minY - (p.center - p.h / 2));
+    for (const p of plan) push = Math.max(push, minY - (p.center - row / 2));
     for (const p of plan) {
-      const isBox = p.it.mv.classList.contains('path-group');
-      const delta = (p.center + push - p.it.anchor) / z;   // 연결 노드를 hover 행에 맞춤 (그룹 통째로 이동)
-      p.it.mv.classList.add(isBox ? 'aligning-box' : 'aligning');
-      p.it.mv.style.transform = `translateY(${delta.toFixed(1)}px)`;
+      const delta = (p.center + push - p.anchor) / z;          // 카드를 hover 행에 맞춰 띄움
+      p.el.classList.add('aligning', 'card-lift');
+      p.el.style.transform = `translateY(${delta.toFixed(1)}px)`;
     }
   }
   animateConnectors();
