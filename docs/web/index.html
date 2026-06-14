@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>flowmap — 호출관계분석</title>
-  <link rel="stylesheet" href="style.css?v=56">
+  <link rel="stylesheet" href="style.css?v=57">
 </head>
 <body>
   <!-- 좌측 사이드바: 브랜드 + 네비 + 통계 -->
@@ -15,6 +15,7 @@
         <span class="sb-title">flowmap</span>
         <span class="sb-sub">Screen × API Atlas</span>
       </span>
+      <button id="sidebar-collapse" class="panel-collapse" title="사이드바 접기">⟨</button>
     </div>
     <nav id="nav">
       <button id="overview-btn" class="nav-btn" title="전체 서비스 지도 — 서비스 간 s2s·이벤트·인프라 의존 관계"><span class="nb-ico">🗺️</span><span class="nb-label">전체보기</span></button>
@@ -24,6 +25,10 @@
     </nav>
     <div id="sidebar-stats" class="sb-stats"></div>
   </aside>
+  <!-- 사이드바 우측 가장자리 드래그 → 너비 조절 -->
+  <div id="sidebar-resizer"></div>
+  <!-- 사이드바 접힘 시 다시 여는 탭 -->
+  <button id="sidebar-reopen" class="panel-reopen left hidden" title="사이드바 열기">⟩</button>
 
   <!-- 우측 메인 컬럼: 상단바(검색) + 분석 캔버스 + 하단 독 -->
   <div id="main-col">
@@ -41,7 +46,8 @@
     <div id="layout">
       <!-- 메인: 호출관계분석 -->
       <main id="flow">
-        <div id="flow-canvas">
+        <!-- 빈 영역 드래그 → 캔버스 패닝(마우스로 슬라이드) -->
+        <div id="flow-canvas" class="pannable">
           <!-- 분석 모드 툴바 (focus 노드가 있을 때만) -->
           <div id="analysis-bar" class="hidden">
             <button id="back-to-browse" class="btn" title="서비스 목록으로">⟵ 목록</button>
@@ -67,22 +73,27 @@
             <div id="columns"></div>
           </div>
         </div>
-        <div id="zoom-ctl">
-          <button data-zoom="out" title="축소">−</button>
-          <button data-zoom="reset" title="100%로 초기화"><span id="zoom-pct">100%</span></button>
-          <button data-zoom="in" title="확대">＋</button>
-        </div>
       </main>
 
       <!-- 상세 패널 — 엔드포인트/인프라 노드 선택 시에만 표시 (왼쪽 가장자리 드래그로 너비 조절) -->
       <div id="detail-resizer" class="hidden"></div>
       <aside id="detail" class="hidden"></aside>
+      <button id="detail-collapse" class="detail-collapse hidden" title="상세 패널 접기">⟩</button>
+      <!-- 상세 패널 접힘 시 다시 여는 탭 -->
+      <button id="detail-reopen" class="panel-reopen right hidden" title="상세 패널 열기">⟨</button>
+
+      <!-- 줌/화면조절 — 캔버스 이동·스크롤과 무관하게 항상 하단 고정 -->
+      <div id="zoom-ctl">
+        <button data-zoom="out" title="축소">−</button>
+        <button data-zoom="reset" title="100%로 초기화"><span id="zoom-pct">100%</span></button>
+        <button data-zoom="in" title="확대">＋</button>
+      </div>
     </div>
 
     <!-- 하단 프로세스 독 — 서비스 보기에서 노드 선택 시 application 내부 흐름 -->
     <div id="process-dock" class="hidden"></div>
   </div>
 
-  <script src="app.js?v=92"></script>
+  <script src="app.js?v=101"></script>
 </body>
 </html>

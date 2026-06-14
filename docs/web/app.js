@@ -76,6 +76,7 @@ async function boot() {
   reconcileS2S();              // kind:external → s2s 재현 (서비스 간 호출 연결)
   await loadAndApplyJoins();   // join.json matched 링크 → kind:'join' 엣지 (프론트→백엔드)
   await loadAndApplyScreens(); // screens.json 정규 route/name → SCREEN 노드 보정 (sub-root 화면 식별)
+  reclassifyUnjoinedExternals(); // join 으로 백엔드에 안 붙은 프론트 외부호출 → 외부 API 로 환원
   buildIndexes();              // nodeById/outEdges/inEdges 1회 빌드
   renderSidebarStats();        // 좌측 사이드바 하단 통계
 
@@ -291,6 +292,20 @@ async function loadAndApplyScreens() {
       if (s.route) n.endpoint = normPath(s.route);   // 정규 route → 기준 경로(path 그룹·표시 공용)
       if (s.name) n.screenName = s.name;             // 화면 표시 이름(파일 경로 id 대신)
     }
+  }
+}
+
+// 프론트 외부호출(ext:) 노드 분류 — loadGraphData 가 프론트 노드에 일괄로 project 를 부여하므로,
+//   join 결과를 본 뒤 여기서 되돌린다.
+//   · join 으로 백엔드에 연결된 ext 노드 → project 유지(프론트 서비스에 흡수) → 깔끔한 front→backend.
+//   · 연결 안 된 ext 노드 → project 비움 → isInfra=true → superId=infra:external → 외부 API 로 표시.
+//   안 그러면 미연결 외부호출이 svc:front 끼리 합쳐져(ss===st) 전체보기/서비스보기에서 엣지가 사라진다.
+function reclassifyUnjoinedExternals() {
+  if (!MANIFEST) return;
+  const joined = new Set();
+  for (const e of EDGES) if (e.kind === 'join') joined.add(e.source);   // join 엣지 source = ext 노드 id
+  for (const n of NODES) {
+    if (n.layer === 'EXTERNAL' && n.project && !joined.has(n.id)) n.project = null;
   }
 }
 
@@ -911,6 +926,8 @@ function renderProcessDock() {
   }
   dockDraw = () => drawDockConnectors(dock, edges, elOf, hoverId || pinnedId);
   requestAnimationFrame(dockDraw);
+  const body = dock.querySelector('.dock-body');   // 빈 영역 드래그 → 프로세스 흐름 패닝(마우스로 슬라이드)
+  if (body) setupGrabPan(body, body, 'panning');
 }
 
 // ---- 패널 크기 조절 (하단 독 높이 / 상세 패널 너비) ----
@@ -951,8 +968,69 @@ function setupDetailResizer() {
       ev => {
         const w = Math.max(240, Math.min(window.innerWidth * 0.6, startW + (startX - ev.clientX)));
         detail.style.width = w + 'px';
+        document.getElementById('layout').style.setProperty('--detail-w', w + 'px');   // 줌 컨트롤 위치 동기화
       },
       () => localStorage.setItem('fm.detailW', Math.round(detail.getBoundingClientRect().width)));
+  });
+}
+
+// ---- 좌측 사이드바 너비 조절 + 접기/열기 ----
+function setSidebarCollapsed(on) {
+  document.body.classList.toggle('sidebar-collapsed', on);
+  document.getElementById('sidebar-reopen').classList.toggle('hidden', !on);
+  localStorage.setItem('fm.sbCollapsed', on ? '1' : '0');
+  if (currentEdges.length) requestAnimationFrame(drawConnectors);
+  if (dockDraw) requestAnimationFrame(dockDraw);
+}
+function setupSidebar() {
+  const sb = document.getElementById('sidebar');
+  const savedW = parseInt(localStorage.getItem('fm.sbW'), 10);
+  if (savedW) sb.style.width = savedW + 'px';
+  if (localStorage.getItem('fm.sbCollapsed') === '1') setSidebarCollapsed(true);
+  document.getElementById('sidebar-collapse').addEventListener('click', () => setSidebarCollapsed(true));
+  document.getElementById('sidebar-reopen').addEventListener('click', () => setSidebarCollapsed(false));
+  const handle = document.getElementById('sidebar-resizer');
+  handle.addEventListener('mousedown', e => {
+    const startX = e.clientX, startW = sb.getBoundingClientRect().width;
+    dragResize(e, handle,
+      ev => { sb.style.width = Math.max(150, Math.min(420, startW + (ev.clientX - startX))) + 'px'; },
+      () => localStorage.setItem('fm.sbW', Math.round(sb.getBoundingClientRect().width)));
+  });
+}
+
+// ---- 우측 상세 패널 접기/열기 (너비 조절은 setupDetailResizer) ----
+function setDetailCollapsed(on) {
+  document.body.classList.toggle('detail-collapsed', on);
+  localStorage.setItem('fm.detailCollapsed', on ? '1' : '0');
+  renderDetail();   // 표시·리오픈 탭·--detail-w 재계산
+}
+function setupDetailCollapse() {
+  if (localStorage.getItem('fm.detailCollapsed') === '1') document.body.classList.add('detail-collapsed');
+  document.getElementById('detail-collapse').addEventListener('click', () => setDetailCollapsed(true));
+  document.getElementById('detail-reopen').addEventListener('click', () => setDetailCollapsed(false));
+}
+
+// ---- 빈 영역 드래그 → 패닝 (마우스로 슬라이드). scroller 를 grab 으로 스크롤 ----
+function setupGrabPan(scroller, surface, pannableClass) {
+  surface.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    // 카드·버튼·핸들 위에서 시작한 드래그는 패닝이 아니다 (선택/클릭 보존)
+    if (e.target.closest('.node-card, .dock-node, button, a, input, .path-group .pg-head, .dock-resizer, #detail-resizer, #sidebar-resizer')) return;
+    const startX = e.clientX, startY = e.clientY, sl = scroller.scrollLeft, st = scroller.scrollTop;
+    let moved = false;
+    const move = ev => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      moved = true; surface.classList.add(pannableClass);
+      scroller.scrollLeft = sl - dx; scroller.scrollTop = st - dy;
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      surface.classList.remove(pannableClass);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
   });
 }
 
@@ -1034,9 +1112,9 @@ function renderServiceView() {
     const n = nodeById.get(id);
     if (n && n.project && !isInfra(id, n)) return { key: 'svc:' + n.project, label: n.project, rank: 0, svc: n.project };
     const t = infraGroup(id);
-    // 외부 API 는 id(ext:{client}#{method})의 두번째 세그먼트(클라이언트)별로 묶어 보여준다
+    // 외부 API 는 호출 대상 호스트(externalService) 단위로 묶어 단일 노드로 보여준다
     if (t === 'external') {
-      const client = ((id.split(':')[1] || '').split('#')[0] || '외부').trim();
+      const client = (n && n.externalService) || ((id.split(':')[1] || '').split(/[ #/]/)[1]) || '외부';
       return { key: 'ext:' + client, label: '🌐 ' + client, rank: 4, svc: null };
     }
     return { key: 'infra:' + t, label: INFRA_ICON[t] + ' ' + INFRA_LABEL[t], rank: ({ kafka: 1, redis: 2, db: 3, external: 4, other: 5 })[t] || 5, svc: null };
@@ -1046,18 +1124,14 @@ function renderServiceView() {
   const seen = new Set();
   const addEdge = (s, t, e) => { const k = s + '|' + t; if (s && t && !seen.has(k)) { seen.add(k); derived.push({ source: s, target: t, kind: e.kind, relation: e.relation, mode: e.mode }); } };
 
-  // 호출/피호출 단계 노드도 모두 서비스별 {path1}/{path2} 그룹 노드 하나로 묶는다 (base 와 동일 규칙).
-  //   프론트 호출부(store/component/ext)는 먼저 그 화면(SCREEN)으로 롤업한 뒤 경로 그룹으로 묶는다.
-  const frontProjects = new Set((MANIFEST ? MANIFEST.projects : []).filter(p => p.type === 'frontend').map(p => p.name));
+  // 관계(호출/피호출) 노드는 전체보기와 동일하게 "단일 서비스 노드" 로 축약한다.
+  //   기준(클릭한) 서비스만 base 컬럼에서 {path1}/{path2} 2-depth 그룹으로 펼치고,
+  //   나머지 연결 서비스는 그 서비스의 모든 노드를 svc:<project> 대표 노드 하나로 합친다.
   const displayFar = id => {
     const n = nodeById.get(id);
     if (!n) return [id];
-    if (frontProjects.has(n.project) && n.layer !== 'SCREEN') {   // 프론트 호출부 → 화면(SCREEN) 롤업
-      const scr = resolveEndpoints(id).filter(x => (nodeById.get(x) || {}).layer === 'SCREEN');
-      if (scr.length) return [...new Set(scr.map(s => pathGroupId(s)))];
-    }
-    if (n.project && !isInfra(id, n)) return [pathGroupId(id)];   // {path1}/{path2} 그룹
-    return [id];
+    if (n.project && !isInfra(id, n)) return ['svc:' + n.project];   // 연결 서비스 → 단일 서비스 노드
+    return [bucketOf(id).key];   // 외부/인프라 → 호스트/타입 단위 단일 대표 노드
   };
 
   // 방향별 스텝 BFS (서비스/인프라 단위로 한 단계씩 확장, 노드는 실제 대상)
@@ -1077,9 +1151,9 @@ function renderServiceView() {
           // 이걸 타면 rep(대표 노드) 배선이 서비스 내부에서 엉켜 가짜 엣지가 생기고 hover 강조가 전체를 끈다.
           if (b.svc === S || b.svc === svc) continue;
           if (hideInfra && b.key.startsWith('infra:')) continue;   // 프론트 뷰: DB/Redis/Kafka 인프라 숨김
-          const fars = displayFar(farId);                       // 프론트 호출부 → 화면(SCREEN) 롤업
-          if (!m.has(b.key)) m.set(b.key, { label: b.label, rank: b.rank, svc: b.svc, nodes: new Set() });
-          for (const f of fars) m.get(b.key).nodes.add(f);
+          const fars = displayFar(farId);                       // 연결 노드 → 서비스/외부 단일 대표
+          if (!m.has(b.key)) m.set(b.key, { key: b.key, label: b.label, rank: b.rank, svc: b.svc, members: new Set() });
+          m.get(b.key).members.add(farId);                      // 실제 대상 노드(카드 개수 표기용)
           // 연결선 (기준 화면은 path1 그룹 노드로 합쳐 연결)
           if (S === svc) {
             if (dir === 'out') {
@@ -1114,6 +1188,14 @@ function renderServiceView() {
     if (node) node.description = `${g.members.size}개 ${g.layer === 'SCREEN' ? '화면' : 'API'}`;
   }
 
+  // 서비스 카드용 통계(전체보기와 동일: endpoints / nodes)
+  const stats = {};
+  for (const s of META.projects) stats[s] = { eps: 0, nodes: 0 };
+  for (const n of NODES) if (n.project && stats[n.project]) {
+    stats[n.project].nodes++;
+    if (n.layer === 'CONTROLLER' && n.endpoint) stats[n.project].eps++;
+  }
+
   const colsEl = document.getElementById('columns');
   colsEl.className = 'svc-view';     // 노드 카드를 전체보기 카드 외형으로 통일(style.css)
   colsEl.innerHTML = '';
@@ -1122,8 +1204,10 @@ function renderServiceView() {
     const col = document.createElement('div');
     col.className = 'column step-col';
     col.appendChild(mkHead(headLabel));
-    for (const bkt of [...stepMap.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label)))
-      appendGroupBox(col, bkt.label, [...bkt.nodes].map(id => nodeById.get(id)).filter(Boolean).sort(byNodeName), onActivate, onPick);
+    for (const bkt of [...stepMap.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label))) {
+      if (bkt.svc) col.appendChild(makeServiceCard(bkt.svc, stats[bkt.svc] || { eps: 0, nodes: 0 }));   // 연결 서비스 = 단일 서비스 카드(전체보기와 동일)
+      else col.appendChild(makeStepBucketCard(bkt));   // 외부/인프라 = 단일 축약 카드
+    }
     colsEl.appendChild(col);
   };
 
@@ -1162,9 +1246,9 @@ function renderServiceView() {
   });
 }
 
-// 전체보기 → 서비스(프론트) → {path1} 그룹 드릴:
-//   그 경로의 화면들과 다운스트림(연관) 노드 전체를, 서비스(segment)별 레이어 컬럼으로 펼친 프로세스 흐름.
-//   (기존 하단 독에 있던 프로세스 흐름을 이 단계의 본 화면으로 옮긴 것)
+// 전체보기 → 서비스 → {path1} 그룹 드릴:
+//   이 단계는 경계 레이어(화면 / endpoint / infra / 외부 api)만 서비스별 컬럼으로 보여준다.
+//   내부 실행 체인(service/repository/component…)은 노드를 클릭하면 하단 프로세스 독에 펼쳐진다.
 const DRILL_LAYER_ORDER = ['SCREEN', 'STORE', 'HOOK', 'CONTROLLER', 'SERVICE', 'COMPONENT', 'REPOSITORY', 'CONFIG', 'BATCH', 'API', 'EXTERNAL', 'RESOURCE', 'OTHER'];
 function renderServicePathDrill() {
   const svc = state.service, key = state.svcPath;
@@ -1178,7 +1262,7 @@ function renderServicePathDrill() {
   document.getElementById('back-to-browse').textContent = '⟵ 전체보기';
   document.getElementById('ab-focus').innerHTML =
     `<span class="ab-focus-label svc">${unit} 그룹</span> <b>${esc(key)}</b>`
-    + `<span class="ab-proj">${members.length}개 ${unit} · 프로세스 흐름</span>`;
+    + `<span class="ab-proj">${members.length}개 ${unit} · 노드 클릭 시 프로세스 흐름</span>`;
 
   const bc = document.getElementById('breadcrumb');
   bc.style.display = 'flex';
@@ -1199,33 +1283,87 @@ function renderServicePathDrill() {
     return;
   }
 
-  // 실제 그래프 기준 다운스트림 체인(화면 → store/axios → 백엔드 → … → infra)
-  const { aOut, aIn } = downstreamChainAdj(members);
+  // 연관 폐포: 다운스트림(실행 흐름 전체) + 업스트림(이 엔드포인트를 부르는 화면/타서비스 엔드포인트까지만).
+  //   업스트림은 경계(화면 / 다른 서비스의 엔드포인트)에 닿으면 멈춰 무관한 전역 확장을 막는다.
+  const reach = new Set(members);
+  { let f = [...members]; while (f.length) { const nx = [];   // 다운스트림: 서비스→repo→infra→외부→s2s
+      for (const id of f) for (const e of outEdges.get(id) || []) { const t = e.target;
+        if (nodeById.has(t) && !reach.has(t)) { reach.add(t); nx.push(t); } } f = nx; } }
+  { let f = [...members]; while (f.length) { const nx = [];   // 업스트림: 호출자(화면/타서비스 엔드포인트)에서 정지
+      for (const id of f) for (const e of inEdges.get(id) || []) { const s = e.source, sn = nodeById.get(s);
+        if (!sn || reach.has(s)) continue; reach.add(s);
+        const stop = sn.layer === 'SCREEN' || (sn.layer === 'CONTROLLER' && sn.endpoint && sn.project !== svc);
+        if (!stop) nx.push(s); } f = nx; } }
+  const aOut = new Map(), aIn = new Map();
+  for (const e of EDGES) {
+    if (!reach.has(e.source) || !reach.has(e.target)) continue;
+    (aOut.get(e.source) || aOut.set(e.source, []).get(e.source)).push(e.target);
+    (aIn.get(e.target) || aIn.set(e.target, []).get(e.target)).push(e.source);
+  }
   const { nodes, edges, segOf, segLabels } = collectChainFlow(members, aOut, aIn);
 
-  // 다른 프론트(generic vuex id 충돌로 끼어드는) segment 는 제외 — 이 서비스 + 백엔드만 흐름에 남긴다.
-  const otherFront = new Set((MANIFEST ? MANIFEST.projects : [])
-    .filter(p => p.type === 'frontend' && p.name !== svc).map(p => p.name));
+  // 경계 노드 간 파생 엣지 — 내부(service/repo/hook/store…) 노드를 건너뛰고 경계끼리 잇는다.
+  //   도달 시점의 엣지 kind(resource/external/s2s/join)를 써서 연결선 색이 의미를 갖게 한다.
+  //   외부(EXTERNAL)는 join 으로 백엔드에 흡수되지 않은 "진짜 외부 api"(project 없음, isInfra)만 경계로 본다.
+  //   join 으로 흡수된 프론트 ext 노드는 내부 취급해 화면→백엔드 엔드포인트로 곧장 잇는다.
+  const isB = id => { const n = nodeById.get(id); return !!n && (n.layer === 'SCREEN' || n.layer === 'CONTROLLER' || isInfra(id, n)); };
+  const renderable = id => segOf.has(id) && reach.has(id) && isB(id);   // 컬럼에 실제로 그려지는 경계 노드
+  // reach 로 제한한 전역 그래프에서 직접 축약 (collectChainFlow 의 MAX=200 엣지 절단을 피한다)
+  const cAdj = new Map();
+  for (const e of EDGES) { if (!reach.has(e.source) || !reach.has(e.target)) continue;
+    (cAdj.get(e.source) || cAdj.set(e.source, []).get(e.source)).push(e); }
+  const boundaryEdges = [], beSeen = new Set();
+  for (const b of nodes) {
+    if (!renderable(b)) continue;
+    const visited = new Set([b]), stack = [...(cAdj.get(b) || [])];
+    while (stack.length) {
+      const e = stack.pop(), t = e.target;
+      if (visited.has(t)) continue; visited.add(t);
+      if (renderable(t)) { const k = b + '|' + t; if (!beSeen.has(k)) { beSeen.add(k); boundaryEdges.push({ source: b, target: t, kind: e.kind, relation: e.relation, mode: e.mode }); } }
+      else for (const e2 of cAdj.get(t) || []) stack.push(e2);   // 내부·미표시 노드는 통과
+    }
+  }
 
-  // 서비스(segment)별 컬럼 → 그 안에서 레이어별 박스 (호출 방향 왼→오)
+  // 프론트 드릴일 때만 다른 프론트(generic vuex id 충돌로 끼어드는) segment 를 제외한다.
+  //   백엔드 드릴이면 이 엔드포인트를 호출하는 화면(프론트)이 정당한 업스트림이므로 남긴다.
+  const svcIsFront = (MANIFEST?.projects || []).some(p => p.type === 'frontend' && p.name === svc);
+  const otherFront = new Set(svcIsFront
+    ? (MANIFEST?.projects || []).filter(p => p.type === 'frontend' && p.name !== svc).map(p => p.name)
+    : []);
+  const onPick = id => setServicePick(id);   // 노드 클릭 → 하단 프로세스 흐름(독)
+
+  // 서비스(segment)별 컬럼 → 경계 레이어 박스만. 레이어 라벨(Controller 등)은 표시 안 함, 핀 활성.
+  //   EXTERNAL(진짜 외부 api)은 segment 에서 빼서 맨 오른쪽 단일 컬럼으로 모은다.
+  const externalIds = [];
   for (let s = 0; s < segLabels.length; s++) {
     if (otherFront.has(segLabels[s])) continue;
-    const segNodes = nodes.filter(id => segOf.get(id) === s);
-    if (!segNodes.length) continue;
+    // reach(이 경로의 연관 폐포)로 제한 — collectChainFlow 의 전역 walk 가 끌어온 무관 노드(화면의 다른 외부호출 등) 제외
+    const segNodes = nodes.filter(id => segOf.get(id) === s && isB(id) && reach.has(id));
+    externalIds.push(...segNodes.filter(id => nodeById.get(id).layer === 'EXTERNAL'));
+    const svcNodes = segNodes.filter(id => nodeById.get(id).layer !== 'EXTERNAL');
+    if (!svcNodes.length) continue;
     const col = document.createElement('div');
     col.className = 'column';
-    col.appendChild(mkHead(segLabels[s]));
-    const present = [...new Set(segNodes.map(id => (nodeById.get(id) || {}).layer))]
+    col.appendChild(mkBadgeHead(segLabels[s], serviceHue(segLabels[s])));   // 서비스명 = 고유색 뱃지
+    const present = [...new Set(svcNodes.map(id => nodeById.get(id).layer))]
       .sort((a, b) => (DRILL_LAYER_ORDER.indexOf(a) + 1 || 99) - (DRILL_LAYER_ORDER.indexOf(b) + 1 || 99));
     for (const layer of present) {
-      const ids = segNodes.filter(id => (nodeById.get(id) || {}).layer === layer)
+      const ids = svcNodes.filter(id => nodeById.get(id).layer === layer)
         .sort((a, b) => byNodeName(nodeById.get(a), nodeById.get(b)));
-      appendGroupBox(col, STRUCT_LAYER_HEAD[layer] || layer, ids.map(id => nodeById.get(id)), null, null);
+      appendGroupBox(col, null, ids.map(id => nodeById.get(id)), null, onPick, true);   // 라벨 제거, 핀 활성
     }
     colsEl.appendChild(col);
   }
+  // EXTERNAL — 맨 오른쪽 단일 컬럼 (외부 api)
+  if (externalIds.length) {
+    const col = document.createElement('div');
+    col.className = 'column ext-col';
+    col.appendChild(mkBadgeHead('🌐 외부 API', 22));
+    appendGroupBox(col, null, externalIds.map(id => nodeById.get(id)).sort(byNodeName), null, onPick, true);
+    colsEl.appendChild(col);
+  }
 
-  currentEdges = edges.filter(e => cardEls.has(e.source) && cardEls.has(e.target));
+  currentEdges = boundaryEdges.filter(e => cardEls.has(e.source) && cardEls.has(e.target));
   buildCurrentAdj();
   requestAnimationFrame(() => { drawConnectors(); applyHighlight(); });
 }
@@ -1272,7 +1410,15 @@ function orphanToggleEl() {
   return wrap;
 }
 // 노드 목록을 테두리 박스로 (label=null 이면 헤더 없이 박스만)
-function appendGroupBox(col, label, nodeList, onActivate, onPick) {
+// 색상 뱃지형 컬럼 헤드 (hue = 서비스 고유색 / 외부 api 색). 서비스 보기·경로 드릴 공용.
+function mkBadgeHead(label, hue) {
+  const head = document.createElement('div');
+  head.className = 'column-head svc-badge';
+  head.style.setProperty('--bh', hue);
+  head.innerHTML = `<span class="svc-badge-dot"></span>${esc(label)}`;
+  return head;
+}
+function appendGroupBox(col, label, nodeList, onActivate, onPick, pin) {
   const box = document.createElement('div');
   box.className = 'path-group';
   box.dataset.path = label || '';
@@ -1281,7 +1427,7 @@ function appendGroupBox(col, label, nodeList, onActivate, onPick) {
   body.className = 'pg-body';
   for (const n of nodeList) {
     const isApi = n.layer === 'CONTROLLER' && n.endpoint;
-    const card = makeCard(n.id, { route: isApi, onActivate, onPick });
+    const card = makeCard(n.id, { route: isApi, onActivate, onPick, pin });
     card.dataset.filter = [n.endpoint, n.httpMethod, n.method, n.fqcn, n.description, n.externalUrl].filter(Boolean).join(' ').toLowerCase();
     body.appendChild(card);
   }
@@ -1835,6 +1981,22 @@ function makeServiceCard(svc, st, onClick) {
   card.addEventListener('mouseenter', () => alignNeighbors('svc:' + svc));
   card.addEventListener('mouseleave', () => clearAlign());
   cardEls.set('svc:' + svc, card);
+  return card;
+}
+
+// 서비스 보기 단계 컬럼: 외부/인프라 버킷을 전체보기처럼 단일 카드로 축약 (id = 버킷 key, 엣지 타깃과 일치)
+function makeStepBucketCard(bkt) {
+  const type = bkt.key.startsWith('ext:') ? 'external' : (bkt.key.split(':')[1] || 'other');
+  const clsMap = { external: 'nc-l-external', kafka: 'nc-r-kafka-topic', redis: 'nc-r-redis', db: 'nc-r-db-table', other: 'nc-l-other' };
+  const card = document.createElement('div');
+  card.className = `node-card ov-infra ${clsMap[type] || 'nc-l-other'}` + (bkt.key === state.sel ? ' sel' : '');
+  card.dataset.node = bkt.key;
+  const n = bkt.members.size;
+  card.innerHTML = `<div class="ov-svc-name">${esc(bkt.label)}</div>`
+    + `<div class="ov-svc-sub">${n} ${type === 'external' ? 'endpoints' : 'nodes'}</div>`;
+  card.addEventListener('mouseenter', () => alignNeighbors(bkt.key));
+  card.addEventListener('mouseleave', () => clearAlign());
+  cardEls.set(bkt.key, card);
   return card;
 }
 
@@ -2394,11 +2556,16 @@ function renderDetail() {
   const n = id ? nodeById.get(id) : null;
   // 엔드포인트 · 인프라 · 화면(SCREEN) · 코드 메서드(Controller/Service/Repository/Component 등) 노드 선택 시 패널 표시
   const show = !!n && ((n.layer === 'CONTROLLER' && n.endpoint) || isInfra(id, n) || n.layer === 'SCREEN' || !!n.fqcn);
-  const toggled = el.classList.contains('hidden') === show;
-  el.classList.toggle('hidden', !show);
-  document.getElementById('detail-resizer').classList.toggle('hidden', !show);
+  const collapsed = document.body.classList.contains('detail-collapsed');
+  const visible = show && !collapsed;
+  const toggled = el.classList.contains('hidden') === visible;
+  el.classList.toggle('hidden', !visible);
+  document.getElementById('detail-resizer').classList.toggle('hidden', !visible);
+  document.getElementById('detail-collapse').classList.toggle('hidden', !visible);
+  document.getElementById('detail-reopen').classList.toggle('hidden', !(show && collapsed));   // 접힘 + 표시할 내용 있을 때만 리오픈 탭
+  document.getElementById('layout').style.setProperty('--detail-w', visible ? (el.getBoundingClientRect().width || 340) + 'px' : '0px');
   if (toggled && currentEdges.length) requestAnimationFrame(drawConnectors);   // 패널 표시 여부 변경 → 캔버스 폭 변동
-  if (!show) { el.innerHTML = ''; return; }
+  if (!visible) { if (!show) el.innerHTML = ''; return; }
   const isFocus = id === state.focus;
   const rows = [];
   const row = (k, v) => { if (v != null && v !== '') rows.push(`<tr><td class="k">${k}</td><td class="v">${esc(String(v))}</td></tr>`); };
@@ -2517,6 +2684,9 @@ function attachHandlers() {
   document.querySelectorAll('#nav .nav-btn[data-view]').forEach(b =>
     b.addEventListener('click', () => openView(b.dataset.view)));
   setupDetailResizer();
+  setupSidebar();
+  setupDetailCollapse();
+  setupGrabPan(document.getElementById('flow'), document.getElementById('flow-canvas'), 'panning');
   document.getElementById('share-btn').addEventListener('click', e => copyToClipboard(shareUrl(), e.target));
   window.addEventListener('resize', () => {
     if (currentEdges.length) requestAnimationFrame(drawConnectors);
