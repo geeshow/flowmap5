@@ -76,6 +76,7 @@ async function boot() {
   reconcileS2S();              // kind:external → s2s 재현 (서비스 간 호출 연결)
   await loadAndApplyJoins();   // join.json matched 링크 → kind:'join' 엣지 (프론트→백엔드)
   await loadAndApplyScreens(); // screens.json 정규 route/name → SCREEN 노드 보정 (sub-root 화면 식별)
+  reclassifyUnjoinedExternals(); // join 으로 백엔드에 안 붙은 프론트 외부호출 → 외부 API 로 환원
   buildIndexes();              // nodeById/outEdges/inEdges 1회 빌드
   renderSidebarStats();        // 좌측 사이드바 하단 통계
 
@@ -291,6 +292,20 @@ async function loadAndApplyScreens() {
       if (s.route) n.endpoint = normPath(s.route);   // 정규 route → 기준 경로(path 그룹·표시 공용)
       if (s.name) n.screenName = s.name;             // 화면 표시 이름(파일 경로 id 대신)
     }
+  }
+}
+
+// 프론트 외부호출(ext:) 노드 분류 — loadGraphData 가 프론트 노드에 일괄로 project 를 부여하므로,
+//   join 결과를 본 뒤 여기서 되돌린다.
+//   · join 으로 백엔드에 연결된 ext 노드 → project 유지(프론트 서비스에 흡수) → 깔끔한 front→backend.
+//   · 연결 안 된 ext 노드 → project 비움 → isInfra=true → superId=infra:external → 외부 API 로 표시.
+//   안 그러면 미연결 외부호출이 svc:front 끼리 합쳐져(ss===st) 전체보기/서비스보기에서 엣지가 사라진다.
+function reclassifyUnjoinedExternals() {
+  if (!MANIFEST) return;
+  const joined = new Set();
+  for (const e of EDGES) if (e.kind === 'join') joined.add(e.source);   // join 엣지 source = ext 노드 id
+  for (const n of NODES) {
+    if (n.layer === 'EXTERNAL' && n.project && !joined.has(n.id)) n.project = null;
   }
 }
 
