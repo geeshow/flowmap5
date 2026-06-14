@@ -1049,9 +1049,9 @@ function renderServiceView() {
     const n = nodeById.get(id);
     if (n && n.project && !isInfra(id, n)) return { key: 'svc:' + n.project, label: n.project, rank: 0, svc: n.project };
     const t = infraGroup(id);
-    // 외부 API 는 id(ext:{client}#{method})의 두번째 세그먼트(클라이언트)별로 묶어 보여준다
+    // 외부 API 는 호출 대상 호스트(externalService) 단위로 묶어 단일 노드로 보여준다
     if (t === 'external') {
-      const client = ((id.split(':')[1] || '').split('#')[0] || '외부').trim();
+      const client = (n && n.externalService) || ((id.split(':')[1] || '').split(/[ #/]/)[1]) || '외부';
       return { key: 'ext:' + client, label: '🌐 ' + client, rank: 4, svc: null };
     }
     return { key: 'infra:' + t, label: INFRA_ICON[t] + ' ' + INFRA_LABEL[t], rank: ({ kafka: 1, redis: 2, db: 3, external: 4, other: 5 })[t] || 5, svc: null };
@@ -1061,18 +1061,14 @@ function renderServiceView() {
   const seen = new Set();
   const addEdge = (s, t, e) => { const k = s + '|' + t; if (s && t && !seen.has(k)) { seen.add(k); derived.push({ source: s, target: t, kind: e.kind, relation: e.relation, mode: e.mode }); } };
 
-  // 호출/피호출 단계 노드도 모두 서비스별 {path1}/{path2} 그룹 노드 하나로 묶는다 (base 와 동일 규칙).
-  //   프론트 호출부(store/component/ext)는 먼저 그 화면(SCREEN)으로 롤업한 뒤 경로 그룹으로 묶는다.
-  const frontProjects = new Set((MANIFEST ? MANIFEST.projects : []).filter(p => p.type === 'frontend').map(p => p.name));
+  // 관계(호출/피호출) 노드는 전체보기와 동일하게 "단일 서비스 노드" 로 축약한다.
+  //   기준(클릭한) 서비스만 base 컬럼에서 {path1}/{path2} 2-depth 그룹으로 펼치고,
+  //   나머지 연결 서비스는 그 서비스의 모든 노드를 svc:<project> 대표 노드 하나로 합친다.
   const displayFar = id => {
     const n = nodeById.get(id);
     if (!n) return [id];
-    if (frontProjects.has(n.project) && n.layer !== 'SCREEN') {   // 프론트 호출부 → 화면(SCREEN) 롤업
-      const scr = resolveEndpoints(id).filter(x => (nodeById.get(x) || {}).layer === 'SCREEN');
-      if (scr.length) return [...new Set(scr.map(s => pathGroupId(s)))];
-    }
-    if (n.project && !isInfra(id, n)) return [pathGroupId(id)];   // {path1}/{path2} 그룹
-    return [id];
+    if (n.project && !isInfra(id, n)) return ['svc:' + n.project];   // 연결 서비스 → 단일 서비스 노드
+    return [bucketOf(id).key];   // 외부/인프라 → 호스트/타입 단위 단일 대표 노드
   };
 
   // 방향별 스텝 BFS (서비스/인프라 단위로 한 단계씩 확장, 노드는 실제 대상)
@@ -1092,9 +1088,9 @@ function renderServiceView() {
           // 이걸 타면 rep(대표 노드) 배선이 서비스 내부에서 엉켜 가짜 엣지가 생기고 hover 강조가 전체를 끈다.
           if (b.svc === S || b.svc === svc) continue;
           if (hideInfra && b.key.startsWith('infra:')) continue;   // 프론트 뷰: DB/Redis/Kafka 인프라 숨김
-          const fars = displayFar(farId);                       // 프론트 호출부 → 화면(SCREEN) 롤업
-          if (!m.has(b.key)) m.set(b.key, { label: b.label, rank: b.rank, svc: b.svc, nodes: new Set() });
-          for (const f of fars) m.get(b.key).nodes.add(f);
+          const fars = displayFar(farId);                       // 연결 노드 → 서비스/외부 단일 대표
+          if (!m.has(b.key)) m.set(b.key, { key: b.key, label: b.label, rank: b.rank, svc: b.svc, members: new Set() });
+          m.get(b.key).members.add(farId);                      // 실제 대상 노드(카드 개수 표기용)
           // 연결선 (기준 화면은 path1 그룹 노드로 합쳐 연결)
           if (S === svc) {
             if (dir === 'out') {
@@ -1129,6 +1125,14 @@ function renderServiceView() {
     if (node) node.description = `${g.members.size}개 ${g.layer === 'SCREEN' ? '화면' : 'API'}`;
   }
 
+  // 서비스 카드용 통계(전체보기와 동일: endpoints / nodes)
+  const stats = {};
+  for (const s of META.projects) stats[s] = { eps: 0, nodes: 0 };
+  for (const n of NODES) if (n.project && stats[n.project]) {
+    stats[n.project].nodes++;
+    if (n.layer === 'CONTROLLER' && n.endpoint) stats[n.project].eps++;
+  }
+
   const colsEl = document.getElementById('columns');
   colsEl.className = 'svc-view';     // 노드 카드를 전체보기 카드 외형으로 통일(style.css)
   colsEl.innerHTML = '';
@@ -1137,8 +1141,10 @@ function renderServiceView() {
     const col = document.createElement('div');
     col.className = 'column step-col';
     col.appendChild(mkHead(headLabel));
-    for (const bkt of [...stepMap.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label)))
-      appendGroupBox(col, bkt.label, [...bkt.nodes].map(id => nodeById.get(id)).filter(Boolean).sort(byNodeName), onActivate, onPick);
+    for (const bkt of [...stepMap.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label))) {
+      if (bkt.svc) col.appendChild(makeServiceCard(bkt.svc, stats[bkt.svc] || { eps: 0, nodes: 0 }));   // 연결 서비스 = 단일 서비스 카드(전체보기와 동일)
+      else col.appendChild(makeStepBucketCard(bkt));   // 외부/인프라 = 단일 축약 카드
+    }
     colsEl.appendChild(col);
   };
 
@@ -1850,6 +1856,22 @@ function makeServiceCard(svc, st, onClick) {
   card.addEventListener('mouseenter', () => alignNeighbors('svc:' + svc));
   card.addEventListener('mouseleave', () => clearAlign());
   cardEls.set('svc:' + svc, card);
+  return card;
+}
+
+// 서비스 보기 단계 컬럼: 외부/인프라 버킷을 전체보기처럼 단일 카드로 축약 (id = 버킷 key, 엣지 타깃과 일치)
+function makeStepBucketCard(bkt) {
+  const type = bkt.key.startsWith('ext:') ? 'external' : (bkt.key.split(':')[1] || 'other');
+  const clsMap = { external: 'nc-l-external', kafka: 'nc-r-kafka-topic', redis: 'nc-r-redis', db: 'nc-r-db-table', other: 'nc-l-other' };
+  const card = document.createElement('div');
+  card.className = `node-card ov-infra ${clsMap[type] || 'nc-l-other'}` + (bkt.key === state.sel ? ' sel' : '');
+  card.dataset.node = bkt.key;
+  const n = bkt.members.size;
+  card.innerHTML = `<div class="ov-svc-name">${esc(bkt.label)}</div>`
+    + `<div class="ov-svc-sub">${n} ${type === 'external' ? 'endpoints' : 'nodes'}</div>`;
+  card.addEventListener('mouseenter', () => alignNeighbors(bkt.key));
+  card.addEventListener('mouseleave', () => clearAlign());
+  cardEls.set(bkt.key, card);
   return card;
 }
 
