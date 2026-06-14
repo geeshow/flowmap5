@@ -926,6 +926,8 @@ function renderProcessDock() {
   }
   dockDraw = () => drawDockConnectors(dock, edges, elOf, hoverId || pinnedId);
   requestAnimationFrame(dockDraw);
+  const body = dock.querySelector('.dock-body');   // 빈 영역 드래그 → 프로세스 흐름 패닝(마우스로 슬라이드)
+  if (body) setupGrabPan(body, body, 'panning');
 }
 
 // ---- 패널 크기 조절 (하단 독 높이 / 상세 패널 너비) ----
@@ -966,8 +968,69 @@ function setupDetailResizer() {
       ev => {
         const w = Math.max(240, Math.min(window.innerWidth * 0.6, startW + (startX - ev.clientX)));
         detail.style.width = w + 'px';
+        document.getElementById('layout').style.setProperty('--detail-w', w + 'px');   // 줌 컨트롤 위치 동기화
       },
       () => localStorage.setItem('fm.detailW', Math.round(detail.getBoundingClientRect().width)));
+  });
+}
+
+// ---- 좌측 사이드바 너비 조절 + 접기/열기 ----
+function setSidebarCollapsed(on) {
+  document.body.classList.toggle('sidebar-collapsed', on);
+  document.getElementById('sidebar-reopen').classList.toggle('hidden', !on);
+  localStorage.setItem('fm.sbCollapsed', on ? '1' : '0');
+  if (currentEdges.length) requestAnimationFrame(drawConnectors);
+  if (dockDraw) requestAnimationFrame(dockDraw);
+}
+function setupSidebar() {
+  const sb = document.getElementById('sidebar');
+  const savedW = parseInt(localStorage.getItem('fm.sbW'), 10);
+  if (savedW) sb.style.width = savedW + 'px';
+  if (localStorage.getItem('fm.sbCollapsed') === '1') setSidebarCollapsed(true);
+  document.getElementById('sidebar-collapse').addEventListener('click', () => setSidebarCollapsed(true));
+  document.getElementById('sidebar-reopen').addEventListener('click', () => setSidebarCollapsed(false));
+  const handle = document.getElementById('sidebar-resizer');
+  handle.addEventListener('mousedown', e => {
+    const startX = e.clientX, startW = sb.getBoundingClientRect().width;
+    dragResize(e, handle,
+      ev => { sb.style.width = Math.max(150, Math.min(420, startW + (ev.clientX - startX))) + 'px'; },
+      () => localStorage.setItem('fm.sbW', Math.round(sb.getBoundingClientRect().width)));
+  });
+}
+
+// ---- 우측 상세 패널 접기/열기 (너비 조절은 setupDetailResizer) ----
+function setDetailCollapsed(on) {
+  document.body.classList.toggle('detail-collapsed', on);
+  localStorage.setItem('fm.detailCollapsed', on ? '1' : '0');
+  renderDetail();   // 표시·리오픈 탭·--detail-w 재계산
+}
+function setupDetailCollapse() {
+  if (localStorage.getItem('fm.detailCollapsed') === '1') document.body.classList.add('detail-collapsed');
+  document.getElementById('detail-collapse').addEventListener('click', () => setDetailCollapsed(true));
+  document.getElementById('detail-reopen').addEventListener('click', () => setDetailCollapsed(false));
+}
+
+// ---- 빈 영역 드래그 → 패닝 (마우스로 슬라이드). scroller 를 grab 으로 스크롤 ----
+function setupGrabPan(scroller, surface, pannableClass) {
+  surface.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    // 카드·버튼·핸들 위에서 시작한 드래그는 패닝이 아니다 (선택/클릭 보존)
+    if (e.target.closest('.node-card, .dock-node, button, a, input, .path-group .pg-head, .dock-resizer, #detail-resizer, #sidebar-resizer')) return;
+    const startX = e.clientX, startY = e.clientY, sl = scroller.scrollLeft, st = scroller.scrollTop;
+    let moved = false;
+    const move = ev => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      moved = true; surface.classList.add(pannableClass);
+      scroller.scrollLeft = sl - dx; scroller.scrollTop = st - dy;
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      surface.classList.remove(pannableClass);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
   });
 }
 
@@ -1269,22 +1332,34 @@ function renderServicePathDrill() {
     : []);
   const onPick = id => setServicePick(id);   // 노드 클릭 → 하단 프로세스 흐름(독)
 
-  // 서비스(segment)별 컬럼 → 경계 레이어(화면/endpoint/infra/외부api) 박스만 (호출 방향 왼→오)
+  // 서비스(segment)별 컬럼 → 경계 레이어 박스만. 레이어 라벨(Controller 등)은 표시 안 함, 핀 활성.
+  //   EXTERNAL(진짜 외부 api)은 segment 에서 빼서 맨 오른쪽 단일 컬럼으로 모은다.
+  const externalIds = [];
   for (let s = 0; s < segLabels.length; s++) {
     if (otherFront.has(segLabels[s])) continue;
     // reach(이 경로의 연관 폐포)로 제한 — collectChainFlow 의 전역 walk 가 끌어온 무관 노드(화면의 다른 외부호출 등) 제외
     const segNodes = nodes.filter(id => segOf.get(id) === s && isB(id) && reach.has(id));
-    if (!segNodes.length) continue;
+    externalIds.push(...segNodes.filter(id => nodeById.get(id).layer === 'EXTERNAL'));
+    const svcNodes = segNodes.filter(id => nodeById.get(id).layer !== 'EXTERNAL');
+    if (!svcNodes.length) continue;
     const col = document.createElement('div');
     col.className = 'column';
-    col.appendChild(mkHead(segLabels[s]));
-    const present = [...new Set(segNodes.map(id => nodeById.get(id).layer))]
+    col.appendChild(mkBadgeHead(segLabels[s], serviceHue(segLabels[s])));   // 서비스명 = 고유색 뱃지
+    const present = [...new Set(svcNodes.map(id => nodeById.get(id).layer))]
       .sort((a, b) => (DRILL_LAYER_ORDER.indexOf(a) + 1 || 99) - (DRILL_LAYER_ORDER.indexOf(b) + 1 || 99));
     for (const layer of present) {
-      const ids = segNodes.filter(id => nodeById.get(id).layer === layer)
+      const ids = svcNodes.filter(id => nodeById.get(id).layer === layer)
         .sort((a, b) => byNodeName(nodeById.get(a), nodeById.get(b)));
-      appendGroupBox(col, STRUCT_LAYER_HEAD[layer] || layer, ids.map(id => nodeById.get(id)), null, onPick);
+      appendGroupBox(col, null, ids.map(id => nodeById.get(id)), null, onPick, true);   // 라벨 제거, 핀 활성
     }
+    colsEl.appendChild(col);
+  }
+  // EXTERNAL — 맨 오른쪽 단일 컬럼 (외부 api)
+  if (externalIds.length) {
+    const col = document.createElement('div');
+    col.className = 'column ext-col';
+    col.appendChild(mkBadgeHead('🌐 외부 API', 22));
+    appendGroupBox(col, null, externalIds.map(id => nodeById.get(id)).sort(byNodeName), null, onPick, true);
     colsEl.appendChild(col);
   }
 
@@ -1335,7 +1410,15 @@ function orphanToggleEl() {
   return wrap;
 }
 // 노드 목록을 테두리 박스로 (label=null 이면 헤더 없이 박스만)
-function appendGroupBox(col, label, nodeList, onActivate, onPick) {
+// 색상 뱃지형 컬럼 헤드 (hue = 서비스 고유색 / 외부 api 색). 서비스 보기·경로 드릴 공용.
+function mkBadgeHead(label, hue) {
+  const head = document.createElement('div');
+  head.className = 'column-head svc-badge';
+  head.style.setProperty('--bh', hue);
+  head.innerHTML = `<span class="svc-badge-dot"></span>${esc(label)}`;
+  return head;
+}
+function appendGroupBox(col, label, nodeList, onActivate, onPick, pin) {
   const box = document.createElement('div');
   box.className = 'path-group';
   box.dataset.path = label || '';
@@ -1344,7 +1427,7 @@ function appendGroupBox(col, label, nodeList, onActivate, onPick) {
   body.className = 'pg-body';
   for (const n of nodeList) {
     const isApi = n.layer === 'CONTROLLER' && n.endpoint;
-    const card = makeCard(n.id, { route: isApi, onActivate, onPick });
+    const card = makeCard(n.id, { route: isApi, onActivate, onPick, pin });
     card.dataset.filter = [n.endpoint, n.httpMethod, n.method, n.fqcn, n.description, n.externalUrl].filter(Boolean).join(' ').toLowerCase();
     body.appendChild(card);
   }
@@ -2473,11 +2556,16 @@ function renderDetail() {
   const n = id ? nodeById.get(id) : null;
   // 엔드포인트 · 인프라 · 화면(SCREEN) · 코드 메서드(Controller/Service/Repository/Component 등) 노드 선택 시 패널 표시
   const show = !!n && ((n.layer === 'CONTROLLER' && n.endpoint) || isInfra(id, n) || n.layer === 'SCREEN' || !!n.fqcn);
-  const toggled = el.classList.contains('hidden') === show;
-  el.classList.toggle('hidden', !show);
-  document.getElementById('detail-resizer').classList.toggle('hidden', !show);
+  const collapsed = document.body.classList.contains('detail-collapsed');
+  const visible = show && !collapsed;
+  const toggled = el.classList.contains('hidden') === visible;
+  el.classList.toggle('hidden', !visible);
+  document.getElementById('detail-resizer').classList.toggle('hidden', !visible);
+  document.getElementById('detail-collapse').classList.toggle('hidden', !visible);
+  document.getElementById('detail-reopen').classList.toggle('hidden', !(show && collapsed));   // 접힘 + 표시할 내용 있을 때만 리오픈 탭
+  document.getElementById('layout').style.setProperty('--detail-w', visible ? (el.getBoundingClientRect().width || 340) + 'px' : '0px');
   if (toggled && currentEdges.length) requestAnimationFrame(drawConnectors);   // 패널 표시 여부 변경 → 캔버스 폭 변동
-  if (!show) { el.innerHTML = ''; return; }
+  if (!visible) { if (!show) el.innerHTML = ''; return; }
   const isFocus = id === state.focus;
   const rows = [];
   const row = (k, v) => { if (v != null && v !== '') rows.push(`<tr><td class="k">${k}</td><td class="v">${esc(String(v))}</td></tr>`); };
@@ -2596,6 +2684,9 @@ function attachHandlers() {
   document.querySelectorAll('#nav .nav-btn[data-view]').forEach(b =>
     b.addEventListener('click', () => openView(b.dataset.view)));
   setupDetailResizer();
+  setupSidebar();
+  setupDetailCollapse();
+  setupGrabPan(document.getElementById('flow'), document.getElementById('flow-canvas'), 'panning');
   document.getElementById('share-btn').addEventListener('click', e => copyToClipboard(shareUrl(), e.target));
   window.addEventListener('resize', () => {
     if (currentEdges.length) requestAnimationFrame(drawConnectors);
