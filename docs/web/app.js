@@ -1183,9 +1183,9 @@ function renderServiceView() {
   });
 }
 
-// 전체보기 → 서비스(프론트) → {path1} 그룹 드릴:
-//   그 경로의 화면들과 다운스트림(연관) 노드 전체를, 서비스(segment)별 레이어 컬럼으로 펼친 프로세스 흐름.
-//   (기존 하단 독에 있던 프로세스 흐름을 이 단계의 본 화면으로 옮긴 것)
+// 전체보기 → 서비스 → {path1} 그룹 드릴:
+//   이 단계는 경계 레이어(화면 / endpoint / infra / 외부 api)만 서비스별 컬럼으로 보여준다.
+//   내부 실행 체인(service/repository/component…)은 노드를 클릭하면 하단 프로세스 독에 펼쳐진다.
 const DRILL_LAYER_ORDER = ['SCREEN', 'STORE', 'HOOK', 'CONTROLLER', 'SERVICE', 'COMPONENT', 'REPOSITORY', 'CONFIG', 'BATCH', 'API', 'EXTERNAL', 'RESOURCE', 'OTHER'];
 function renderServicePathDrill() {
   const svc = state.service, key = state.svcPath;
@@ -1199,7 +1199,7 @@ function renderServicePathDrill() {
   document.getElementById('back-to-browse').textContent = '⟵ 전체보기';
   document.getElementById('ab-focus').innerHTML =
     `<span class="ab-focus-label svc">${unit} 그룹</span> <b>${esc(key)}</b>`
-    + `<span class="ab-proj">${members.length}개 ${unit} · 프로세스 흐름</span>`;
+    + `<span class="ab-proj">${members.length}개 ${unit} · 노드 클릭 시 프로세스 흐름</span>`;
 
   const bc = document.getElementById('breadcrumb');
   bc.style.display = 'flex';
@@ -1220,33 +1220,75 @@ function renderServicePathDrill() {
     return;
   }
 
-  // 실제 그래프 기준 다운스트림 체인(화면 → store/axios → 백엔드 → … → infra)
-  const { aOut, aIn } = downstreamChainAdj(members);
+  // 연관 폐포: 다운스트림(실행 흐름 전체) + 업스트림(이 엔드포인트를 부르는 화면/타서비스 엔드포인트까지만).
+  //   업스트림은 경계(화면 / 다른 서비스의 엔드포인트)에 닿으면 멈춰 무관한 전역 확장을 막는다.
+  const reach = new Set(members);
+  { let f = [...members]; while (f.length) { const nx = [];   // 다운스트림: 서비스→repo→infra→외부→s2s
+      for (const id of f) for (const e of outEdges.get(id) || []) { const t = e.target;
+        if (nodeById.has(t) && !reach.has(t)) { reach.add(t); nx.push(t); } } f = nx; } }
+  { let f = [...members]; while (f.length) { const nx = [];   // 업스트림: 호출자(화면/타서비스 엔드포인트)에서 정지
+      for (const id of f) for (const e of inEdges.get(id) || []) { const s = e.source, sn = nodeById.get(s);
+        if (!sn || reach.has(s)) continue; reach.add(s);
+        const stop = sn.layer === 'SCREEN' || (sn.layer === 'CONTROLLER' && sn.endpoint && sn.project !== svc);
+        if (!stop) nx.push(s); } f = nx; } }
+  const aOut = new Map(), aIn = new Map();
+  for (const e of EDGES) {
+    if (!reach.has(e.source) || !reach.has(e.target)) continue;
+    (aOut.get(e.source) || aOut.set(e.source, []).get(e.source)).push(e.target);
+    (aIn.get(e.target) || aIn.set(e.target, []).get(e.target)).push(e.source);
+  }
   const { nodes, edges, segOf, segLabels } = collectChainFlow(members, aOut, aIn);
 
-  // 다른 프론트(generic vuex id 충돌로 끼어드는) segment 는 제외 — 이 서비스 + 백엔드만 흐름에 남긴다.
-  const otherFront = new Set((MANIFEST ? MANIFEST.projects : [])
-    .filter(p => p.type === 'frontend' && p.name !== svc).map(p => p.name));
+  // 경계 노드 간 파생 엣지 — 내부(service/repo/hook/store…) 노드를 건너뛰고 경계끼리 잇는다.
+  //   도달 시점의 엣지 kind(resource/external/s2s/join)를 써서 연결선 색이 의미를 갖게 한다.
+  //   외부(EXTERNAL)는 join 으로 백엔드에 흡수되지 않은 "진짜 외부 api"(project 없음, isInfra)만 경계로 본다.
+  //   join 으로 흡수된 프론트 ext 노드는 내부 취급해 화면→백엔드 엔드포인트로 곧장 잇는다.
+  const isB = id => { const n = nodeById.get(id); return !!n && (n.layer === 'SCREEN' || n.layer === 'CONTROLLER' || isInfra(id, n)); };
+  const renderable = id => segOf.has(id) && reach.has(id) && isB(id);   // 컬럼에 실제로 그려지는 경계 노드
+  // reach 로 제한한 전역 그래프에서 직접 축약 (collectChainFlow 의 MAX=200 엣지 절단을 피한다)
+  const cAdj = new Map();
+  for (const e of EDGES) { if (!reach.has(e.source) || !reach.has(e.target)) continue;
+    (cAdj.get(e.source) || cAdj.set(e.source, []).get(e.source)).push(e); }
+  const boundaryEdges = [], beSeen = new Set();
+  for (const b of nodes) {
+    if (!renderable(b)) continue;
+    const visited = new Set([b]), stack = [...(cAdj.get(b) || [])];
+    while (stack.length) {
+      const e = stack.pop(), t = e.target;
+      if (visited.has(t)) continue; visited.add(t);
+      if (renderable(t)) { const k = b + '|' + t; if (!beSeen.has(k)) { beSeen.add(k); boundaryEdges.push({ source: b, target: t, kind: e.kind, relation: e.relation, mode: e.mode }); } }
+      else for (const e2 of cAdj.get(t) || []) stack.push(e2);   // 내부·미표시 노드는 통과
+    }
+  }
 
-  // 서비스(segment)별 컬럼 → 그 안에서 레이어별 박스 (호출 방향 왼→오)
+  // 프론트 드릴일 때만 다른 프론트(generic vuex id 충돌로 끼어드는) segment 를 제외한다.
+  //   백엔드 드릴이면 이 엔드포인트를 호출하는 화면(프론트)이 정당한 업스트림이므로 남긴다.
+  const svcIsFront = (MANIFEST?.projects || []).some(p => p.type === 'frontend' && p.name === svc);
+  const otherFront = new Set(svcIsFront
+    ? (MANIFEST?.projects || []).filter(p => p.type === 'frontend' && p.name !== svc).map(p => p.name)
+    : []);
+  const onPick = id => setServicePick(id);   // 노드 클릭 → 하단 프로세스 흐름(독)
+
+  // 서비스(segment)별 컬럼 → 경계 레이어(화면/endpoint/infra/외부api) 박스만 (호출 방향 왼→오)
   for (let s = 0; s < segLabels.length; s++) {
     if (otherFront.has(segLabels[s])) continue;
-    const segNodes = nodes.filter(id => segOf.get(id) === s);
+    // reach(이 경로의 연관 폐포)로 제한 — collectChainFlow 의 전역 walk 가 끌어온 무관 노드(화면의 다른 외부호출 등) 제외
+    const segNodes = nodes.filter(id => segOf.get(id) === s && isB(id) && reach.has(id));
     if (!segNodes.length) continue;
     const col = document.createElement('div');
     col.className = 'column';
     col.appendChild(mkHead(segLabels[s]));
-    const present = [...new Set(segNodes.map(id => (nodeById.get(id) || {}).layer))]
+    const present = [...new Set(segNodes.map(id => nodeById.get(id).layer))]
       .sort((a, b) => (DRILL_LAYER_ORDER.indexOf(a) + 1 || 99) - (DRILL_LAYER_ORDER.indexOf(b) + 1 || 99));
     for (const layer of present) {
-      const ids = segNodes.filter(id => (nodeById.get(id) || {}).layer === layer)
+      const ids = segNodes.filter(id => nodeById.get(id).layer === layer)
         .sort((a, b) => byNodeName(nodeById.get(a), nodeById.get(b)));
-      appendGroupBox(col, STRUCT_LAYER_HEAD[layer] || layer, ids.map(id => nodeById.get(id)), null, null);
+      appendGroupBox(col, STRUCT_LAYER_HEAD[layer] || layer, ids.map(id => nodeById.get(id)), null, onPick);
     }
     colsEl.appendChild(col);
   }
 
-  currentEdges = edges.filter(e => cardEls.has(e.source) && cardEls.has(e.target));
+  currentEdges = boundaryEdges.filter(e => cardEls.has(e.source) && cardEls.has(e.target));
   buildCurrentAdj();
   requestAnimationFrame(() => { drawConnectors(); applyHighlight(); });
 }
