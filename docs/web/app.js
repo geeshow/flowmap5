@@ -75,6 +75,7 @@ async function boot() {
   await loadGraphData();       // manifest + 프로젝트별 graph 병렬 로드 → NODES/EDGES/META 병합
   reconcileS2S();              // kind:external → s2s 재현 (서비스 간 호출 연결)
   await loadAndApplyJoins();   // join.json matched 링크 → kind:'join' 엣지 (프론트→백엔드)
+  await loadAndApplyScreens(); // screens.json 정규 route/name → SCREEN 노드 보정 (sub-root 화면 식별)
   buildIndexes();              // nodeById/outEdges/inEdges 1회 빌드
   renderSidebarStats();        // 좌측 사이드바 하단 통계
 
@@ -126,25 +127,40 @@ async function loadGraphData() {
   const results = await Promise.all(manifest.projects.map(p =>
     jsonFetch('data/' + p.graph).then(g => ({ p, g }))));
 
+  // 프론트 정규 이름 결정 (1차 스캔): 그래프 노드들의 다수결 project.
+  //   매니페스트 name 은 그래프 파일명(graph-*) 기준이라 노드 project 와 어긋날 수 있어, 다수결 값을
+  //   깔끔한 정규 이름으로 쓴다. 단, 모노레포(프론트 sub-root)에서는 여러 패키지 노드가 모두 루트
+  //   이름(예: fe-service-workspace) 하나로 찍혀 다수결 값이 겹친다 → 그대로 쓰면 패키지들이 한
+  //   서비스로 합쳐져 전체보기에서 동일 카드로 보인다. 따라서 겹치는 이름은 매니페스트 name 으로 분리한다.
+  const rawCanon = new Map();   // p.name → 그 그래프의 다수결 project (없으면 p.name)
+  for (const { p, g } of results) {
+    if (p.type !== 'frontend' || !g || !Array.isArray(g.nodes)) continue;
+    const c = new Map();
+    for (const n of g.nodes) if (n.project) c.set(n.project, (c.get(n.project) || 0) + 1);
+    rawCanon.set(p.name, c.size ? [...c.entries()].sort((a, b) => b[1] - a[1])[0][0] : p.name);
+  }
+  const canonFreq = new Map();  // 다수결 이름별 등장 프로젝트 수 (2+ = 모노레포 충돌)
+  for (const v of rawCanon.values()) canonFreq.set(v, (canonFreq.get(v) || 0) + 1);
+
   const nodeMap = new Map();    // id → node (file 채워진 노드 우선)
   const okProjects = [];
   let edgeAccum = [];
   for (const { p, g } of results) {
     if (!g || !Array.isArray(g.nodes)) { console.warn('[flowmap] 프로젝트 그래프 로드 실패, 건너뜀:', p.name, p.graph); continue; }
-    // 매니페스트 name 은 그래프 파일명(graph-*) 기준이라 노드의 실제 project 와 어긋날 수 있다.
-    // 그래프 노드에서 가장 많이 쓰인 project 를 정규 이름으로 채택해, project 없는 외부호출 노드까지
-    // 같은 이름으로 귀속시킨다 — 안 그러면 프론트 한 서비스가 graph-* / 실제이름 둘로 쪼개진다.
-    let canon = p.name;
+    // 다수결 이름이 유일하면 그걸 정규 이름으로(깔끔). 여러 프로젝트와 겹치면(모노레포 sub-root)
+    // 매니페스트 name 을 유지해 패키지별로 분리한다.
+    let canon = p.name, forceProject = false;
     if (p.type === 'frontend') {
-      const c = new Map();
-      for (const n of g.nodes) if (n.project) c.set(n.project, (c.get(n.project) || 0) + 1);
-      if (c.size) canon = [...c.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const raw = rawCanon.get(p.name);
+      if (raw && canonFreq.get(raw) === 1) canon = raw;        // 유일 → 실제 프로젝트명 채택(기존 동작)
+      else forceProject = true;                                // 겹침 → 매니페스트 name 으로 분리
       p.name = canon;   // 다운스트림(서비스 보기·티어 분류·join)도 동일 이름을 쓰게 매니페스트도 정규화
     }
     okProjects.push(canon);
     for (const n of g.nodes) {
-      // 프론트 외부호출 노드(게이트웨이/서드파티)는 project 가 비어 있다 → 프론트 서비스(정규 이름)에 귀속
-      if (p.type === 'frontend' && !n.project) n.project = canon;
+      // 분리 모드면 노드 project 를 그래프 파일 단위(매니페스트 name)로 통일 — 모노레포 패키지 분리.
+      // 일반 모드면 외부호출 등 project 없는 노드만 프론트 서비스(정규 이름)에 귀속(기존 동작).
+      if (p.type === 'frontend' && (forceProject || !n.project)) n.project = canon;
       const prev = nodeMap.get(n.id);
       if (!prev || (n.file && !prev.file)) nodeMap.set(n.id, n);
     }
@@ -254,6 +270,28 @@ async function loadAndApplyJoins() {
     }
   }
   if (added.length) EDGES = dedupEdges(EDGES.concat(added));
+}
+
+// 화면(SCREEN) 식별 보정: <project>.screens.json 의 정규 route/name 을 그래프 SCREEN 노드에 덮어쓴다.
+//   그래프 build 의 endpoint 는 프론트 sub-root(예: src/pages, apps/web)를 못 벗기면 모든 화면이 같은
+//   {path1} 로 뭉쳐 전체보기/서비스보기에서 동일하게 보인다(경로 그룹 키 = endpoint 기반).
+//   manifest 가 가리키는 screens 결과의 route 가 정규값이므로, 이를 기준으로 endpoint·표시 이름을 맞춘다.
+//   screens 에 없는 화면은 그래프 endpoint 를 그대로 유지 — 정상 동작 프로젝트는 무변(route===endpoint).
+async function loadAndApplyScreens() {
+  if (!MANIFEST) return;
+  const files = MANIFEST.projects.filter(p => p.screens).map(p => p.screens);
+  if (!files.length) return;
+  const byId = new Map(NODES.map(n => [n.id, n]));
+  const docs = await Promise.all(files.map(f => jsonFetch('data/' + f)));
+  for (const d of docs) {
+    if (!d || !Array.isArray(d.screens)) continue;
+    for (const s of d.screens) {
+      const n = byId.get(s.id);
+      if (!n || n.layer !== 'SCREEN') continue;
+      if (s.route) n.endpoint = normPath(s.route);   // 정규 route → 기준 경로(path 그룹·표시 공용)
+      if (s.name) n.screenName = s.name;             // 화면 표시 이름(파일 경로 id 대신)
+    }
+  }
 }
 
 // 좌측 사이드바 하단 통계 — 로드된 그래프에서 집계
@@ -2032,7 +2070,9 @@ function makeCard(id, opts) {
       + `<div class="nc-submethod">${esc(n.method || n.id)}${n.fqcn && n.fqcn !== n.id ? ' · ' + esc(shortClass(n.fqcn)) : ''}</div>`;
     if (n.description) body += `<div class="nc-desc">${esc(n.description)}</div>`;
   } else {
-    body = `<div class="nc-method">${esc(n.method || n.id)}</div>`;
+    // SCREEN 은 파일경로 id 대신 screens.json 의 화면 이름을, 없으면 method/id 폴백
+    const primary = n.layer === 'SCREEN' ? (n.screenName || n.method || n.id) : (n.method || n.id);
+    body = `<div class="nc-method">${esc(primary)}</div>`;
     if (n.layer !== 'RESOURCE' && n.fqcn && n.fqcn !== n.id) body += `<div class="nc-class">${esc(shortClass(n.fqcn))}</div>`;
     if (n.endpoint) body += `<div class="nc-endpoint">${esc(n.endpoint)}</div>`;
     if (n.externalUrl) body += `<div class="nc-endpoint">${esc(n.externalUrl)}</div>`;
