@@ -4,70 +4,85 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>flowmap — 호출관계분석</title>
-  <link rel="stylesheet" href="style.css?v=47">
+  <link rel="stylesheet" href="style.css?v=55">
 </head>
 <body>
-  <header id="topbar">
-    <div class="brand">flowmap</div>
+  <!-- 좌측 사이드바: 브랜드 + 네비 + 통계 -->
+  <aside id="sidebar">
+    <div class="sb-brand">
+      <span class="sb-logo">F</span>
+      <span class="sb-brand-text">
+        <span class="sb-title">flowmap</span>
+        <span class="sb-sub">Screen × API Atlas</span>
+      </span>
+    </div>
     <nav id="nav">
-      <button id="overview-btn" class="nav-btn" title="전체 서비스 지도 — 서비스 간 s2s·이벤트·인프라 의존 관계">🗺️ 전체보기</button>
-      <button class="nav-btn" data-view="commits" title="git 커밋별 변경 메서드 → 영향받는 API 엔드포인트 분석">🧾 커밋 영향도</button>
-      <button class="nav-btn" data-view="api" title="OpenAPI 기반 API 카탈로그 — 파라미터·요청/응답 스키마 문서">📖 API 문서</button>
+      <button id="overview-btn" class="nav-btn" title="전체 서비스 지도 — 서비스 간 s2s·이벤트·인프라 의존 관계"><span class="nb-ico">🗺️</span><span class="nb-label">전체보기</span></button>
+      <button class="nav-btn" data-view="commits" title="git 커밋별 변경 메서드 → 영향받는 API 엔드포인트 분석"><span class="nb-ico">🧾</span><span class="nb-label">커밋 영향도</span></button>
+      <button class="nav-btn" data-view="api" title="OpenAPI 기반 API 카탈로그 — 파라미터·요청/응답 스키마 문서"><span class="nb-ico">📖</span><span class="nb-label">API 문서</span></button>
+      <button id="structure-btn" class="nav-btn" title="서비스별 어플리케이션 구조 — API + 호출/피호출 관계"><span class="nb-ico">🏗️</span><span class="nb-label">어플리케이션구조</span></button>
     </nav>
-    <div class="search-wrap">
-      <input id="search" type="text" autocomplete="off" spellcheck="false"
-             placeholder="API 검색 후 선택 → 그 노드 기준 호출관계분석 (메서드 / 클래스 / 엔드포인트 / 설명)">
-      <div id="search-results" class="hidden"></div>
-    </div>
-    <div class="topbar-actions">
-      <button id="share-btn" class="btn" title="현재 화면 URL을 클립보드로 복사">🔗 공유 링크 복사</button>
-    </div>
-  </header>
+    <div id="sidebar-stats" class="sb-stats"></div>
+  </aside>
 
-  <div id="layout">
-    <!-- 메인: 호출관계분석 -->
-    <main id="flow">
-      <div id="flow-canvas">
-        <!-- 분석 모드 툴바 (focus 노드가 있을 때만) -->
-        <div id="analysis-bar" class="hidden">
-          <button id="back-to-browse" class="btn" title="서비스 목록으로">⟵ 목록</button>
-          <div class="ab-focus" id="ab-focus"></div>
-          <div class="ab-depth">
-            <span class="depth-label">피호출</span>
-            <div class="stepper">
-              <button data-depth="up" data-dir="-1">−</button>
-              <span id="up-val">2</span>
-              <button data-depth="up" data-dir="1">+</button>
-            </div>
-            <span class="depth-label">호출</span>
-            <div class="stepper">
-              <button data-depth="down" data-dir="-1">−</button>
-              <span id="down-val">2</span>
-              <button data-depth="down" data-dir="1">+</button>
+  <!-- 우측 메인 컬럼: 상단바(검색) + 분석 캔버스 + 하단 독 -->
+  <div id="main-col">
+    <header id="topbar">
+      <div class="search-wrap">
+        <input id="search" type="text" autocomplete="off" spellcheck="false"
+               placeholder="API 검색 후 선택 → 그 노드 기준 호출관계분석 (메서드 / 클래스 / 엔드포인트 / 설명)">
+        <div id="search-results" class="hidden"></div>
+      </div>
+      <div class="topbar-actions">
+        <button id="share-btn" class="btn" title="현재 화면 URL을 클립보드로 복사">🔗 공유 링크 복사</button>
+      </div>
+    </header>
+
+    <div id="layout">
+      <!-- 메인: 호출관계분석 -->
+      <main id="flow">
+        <div id="flow-canvas">
+          <!-- 분석 모드 툴바 (focus 노드가 있을 때만) -->
+          <div id="analysis-bar" class="hidden">
+            <button id="back-to-browse" class="btn" title="서비스 목록으로">⟵ 목록</button>
+            <div class="ab-focus" id="ab-focus"></div>
+            <div class="ab-depth">
+              <span class="depth-label">피호출</span>
+              <div class="stepper">
+                <button data-depth="up" data-dir="-1">−</button>
+                <span id="up-val">2</span>
+                <button data-depth="up" data-dir="1">+</button>
+              </div>
+              <span class="depth-label">호출</span>
+              <div class="stepper">
+                <button data-depth="down" data-dir="-1">−</button>
+                <span id="down-val">2</span>
+                <button data-depth="down" data-dir="1">+</button>
+              </div>
             </div>
           </div>
+          <div id="breadcrumb"></div>
+          <div id="zoom-layer">
+            <svg id="connectors"></svg>
+            <div id="columns"></div>
+          </div>
         </div>
-        <div id="breadcrumb"></div>
-        <div id="zoom-layer">
-          <svg id="connectors"></svg>
-          <div id="columns"></div>
+        <div id="zoom-ctl">
+          <button data-zoom="out" title="축소">−</button>
+          <button data-zoom="reset" title="100%로 초기화"><span id="zoom-pct">100%</span></button>
+          <button data-zoom="in" title="확대">＋</button>
         </div>
-      </div>
-      <div id="zoom-ctl">
-        <button data-zoom="out" title="축소">−</button>
-        <button data-zoom="reset" title="100%로 초기화"><span id="zoom-pct">100%</span></button>
-        <button data-zoom="in" title="확대">＋</button>
-      </div>
-    </main>
+      </main>
 
-    <!-- 상세 패널 — 엔드포인트/인프라 노드 선택 시에만 표시 (왼쪽 가장자리 드래그로 너비 조절) -->
-    <div id="detail-resizer" class="hidden"></div>
-    <aside id="detail" class="hidden"></aside>
+      <!-- 상세 패널 — 엔드포인트/인프라 노드 선택 시에만 표시 (왼쪽 가장자리 드래그로 너비 조절) -->
+      <div id="detail-resizer" class="hidden"></div>
+      <aside id="detail" class="hidden"></aside>
+    </div>
+
+    <!-- 하단 프로세스 독 — 서비스 보기에서 노드 선택 시 application 내부 흐름 -->
+    <div id="process-dock" class="hidden"></div>
   </div>
 
-  <!-- 하단 프로세스 독 — 서비스 보기에서 노드 선택 시 application 내부 흐름 -->
-  <div id="process-dock" class="hidden"></div>
-
-  <script src="app.js?v=62"></script>
+  <script src="app.js?v=83"></script>
 </body>
 </html>
