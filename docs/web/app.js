@@ -156,7 +156,8 @@ function reconcileS2S() {
     const ext = nodeIndex.get(e.target);
     if (!ext || !ext.endpoint) continue;        // endpoint 없는 서드파티(외부 URL만)는 external 유지
     const cands = (ctrlByPath.get(normPath(ext.endpoint)) || [])
-      .filter(c => verbCompatible(ext.httpMethod, c.httpMethod) && c.project !== ext.project);
+      // 서비스 단위(프로젝트 또는 모듈)가 다르면 S2S 후보 — 멀티모듈 모노레포(모듈=서비스) 지원
+      .filter(c => verbCompatible(ext.httpMethod, c.httpMethod) && (c.project !== ext.project || c.module !== ext.module));
     if (cands.length !== 1) continue;            // 0=미매칭 유지, 2+=ambiguous 보수적 유지
     e.kind = 's2s'; e.relation = 'call'; e.target = cands[0].id;
     absorbed.add(ext.id);
@@ -205,8 +206,14 @@ async function loadAndApplyJoins() {
       if (link.matchStatus === 'matched' && idSet.has(link.backendNodeId)) {
         target = link.backendNodeId;                       // join 이 이미 매칭한 직접 경로
       } else {
-        const t = gatewayMatch(link.normalizedPath, link.httpMethod, ctrlByPath);
-        if (t) { target = t; conf = conf || 'gateway'; } // 게이트웨이 프리픽스 매칭
+        // 직접매칭 폴백: 프론트 normalizedPath 가 백엔드 CONTROLLER 엔드포인트와 정확히 일치 (프리픽스 없는 직접 호출)
+        const direct = (ctrlByPath.get(normPath(link.normalizedPath)) || [])
+          .filter(c => verbCompatible(link.httpMethod, c.httpMethod));
+        if (direct.length === 1) { target = direct[0].id; conf = conf || 'direct'; }
+        else {
+          const t = gatewayMatch(link.normalizedPath, link.httpMethod, ctrlByPath);
+          if (t) { target = t; conf = conf || 'gateway'; } // 게이트웨이 프리픽스 매칭
+        }
       }
       if (target) added.push({ source: link.frontendNodeId, target,
         mode: 'sync', kind: 'join', relation: 'http', confidence: conf,
