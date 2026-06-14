@@ -192,7 +192,7 @@
     head.innerHTML =
       '<span class="tpc-chip ' + (side === 'produce' ? 'tpc-chip-produce' : 'tpc-chip-consume') + '">' +
       (side === 'produce' ? 'PRODUCE ⟶' : '⟶ CONSUME') + '</span>' +
-      '<span class="tpc-svc">🧩 ' + FM.esc(svc) + '</span>' +
+      '<span class="tpc-svc">' + FM.esc(svc) + '</span>' +
       '<span class="pg-count">' + ids.length + '</span>';
     box.appendChild(head);
     const body = document.createElement('div');

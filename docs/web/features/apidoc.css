@@ -8,7 +8,7 @@
 .doc-none { font-size: 11px; color: var(--text-dim); opacity: .8; margin-top: 14px; }
 .doc-none code, .doc-cmd {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px; background: #0b1220; border: 1px solid var(--border);
+  font-size: 10px; background: var(--bg-input); border: 1px solid var(--border);
   border-radius: 4px; padding: 1px 5px;
 }
 
@@ -53,7 +53,7 @@
 .doc-ftype-map { color: var(--text-dim); font-style: italic; }
 .doc-chip {
   font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--text-dim); background: #0b1220; border: 1px solid var(--border);
+  color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border);
   border-radius: 8px; padding: 0 5px; line-height: 1.6; white-space: nowrap;
 }
 .doc-chip-enum { color: #cbd5e1; }
@@ -63,7 +63,7 @@
   color: var(--c-controller); background: none; border: none; cursor: pointer;
   padding: 0 2px; line-height: 1;
 }
-.doc-toggle:hover { color: #fff; }
+.doc-toggle:hover { color: var(--text); }
 .doc-warn { color: var(--c-external); opacity: .85; font-size: 11px; }
 .doc-dim { color: var(--text-dim); font-size: 11px; opacity: .8; }
 
@@ -77,7 +77,7 @@
 .doc-st-ok   { background: rgba(22,163,74,.18);  color: #4ade80; border: 1px solid rgba(22,163,74,.45); }
 .doc-st-warn { background: rgba(251,191,36,.14); color: #fbbf24; border: 1px solid rgba(251,191,36,.4); }
 .doc-st-err  { background: rgba(220,38,38,.16);  color: #f87171; border: 1px solid rgba(220,38,38,.45); }
-.doc-st-etc  { background: #0b1220; color: var(--text-dim); border: 1px solid var(--border); }
+.doc-st-etc  { background: var(--bg-input); color: var(--text-dim); border: 1px solid var(--border); }
 
 /* ---------- 카탈로그 뷰 (view=api) ---------- */
 #columns.doc-host { display: block; width: 100%; max-width: 1080px; }
@@ -102,7 +102,7 @@
 /* 필터 툴바 */
 .doc-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .doc-filter {
-  flex: 0 1 340px; background: #0b1220; border: 1px solid var(--border);
+  flex: 0 1 340px; background: var(--bg-input); border: 1px solid var(--border);
   border-radius: 8px; color: var(--text); font-size: 12px; padding: 6px 10px; outline: none;
 }
 .doc-filter:focus { border-color: var(--c-controller); }
@@ -114,7 +114,7 @@
 .doc-group-head {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
-  color: var(--text-dim); background: #0b1220; padding: 5px 12px;
+  color: var(--text-dim); background: var(--bg-input); padding: 5px 12px;
   border-bottom: 1px solid var(--border);
 }
 .doc-group-body { display: flex; flex-direction: column; }
@@ -123,8 +123,8 @@
   border-bottom: 1px solid rgba(51,65,85,.5); cursor: pointer; min-width: 0;
 }
 .doc-ep-row:last-child { border-bottom: none; }
-.doc-ep-row:hover { background: #0b1220; }
-.doc-ep-row.doc-ep-sel { box-shadow: inset 2px 0 0 #38bdf8; background: #0b1220; }
+.doc-ep-row:hover { background: var(--bg-input); }
+.doc-ep-row.doc-ep-sel { box-shadow: inset 2px 0 0 #38bdf8; background: var(--bg-input); }
 .doc-ep-path {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px; color: var(--text); white-space: nowrap;
@@ -140,11 +140,11 @@
 }
 .doc-ep-go {
   display: none; margin-left: auto; flex-shrink: 0;
-  background: #0b1220; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px;
   color: var(--text-dim); font-size: 11px; padding: 1px 7px; cursor: pointer;
 }
 .doc-ep-row:hover .doc-ep-go { display: inline-block; }
-.doc-ep-go:hover { border-color: var(--c-controller); color: #fff; }
+.doc-ep-go:hover { border-color: var(--c-controller); color: var(--c-controller); }
 .doc-ep-nograph + .doc-ep-go { margin-left: 0; }
 
 /* 그래프 미존재 행의 인라인 문서 전개 */

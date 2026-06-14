@@ -8,6 +8,15 @@
   const MAX_UP = 3;        // 유입(피호출) 경계 투영 최대 hop — 변경 노드에 닿는 화면/서비스/엔드포인트
   const MAX_DOWN = 3;      // 유출(호출) 경계 투영 최대 hop — 변경 노드가 호출하는 외부/다른 서비스
 
+  // 커밋 링크 — impact.json이 커밋마다 제공하는 commitUrl(저장소의 해당 커밋 페이지)을 그대로 쓴다.
+  // 없으면 top-level repoUrl + '/commit/<sha>' 로 폴백, 그것도 없으면 링크 버튼을 숨긴다.
+  function commitUrl(c) {
+    if (!c) return null;
+    if (c.commitUrl) return c.commitUrl;
+    if (c._repoUrl && c.sha) return c._repoUrl.replace(/\/+$/, '') + '/commit/' + c.sha;
+    return null;
+  }
+
   // 모듈 상태 — render()는 항상 URL 파라미터에서 복원하므로 여기엔 데이터 캐시/필터만 둔다
   let data;                          // undefined=미로드, null=404/오류, object=로드 완료
   const commitBySha = new Map();     // shortSha -> commit
@@ -28,9 +37,33 @@
     if (isNaN(d)) return '';
     return `${String(d.getFullYear()).slice(2)}.${d.getMonth() + 1}.${d.getDate()}`;
   }
+  const WD = ['일', '월', '화', '수', '목', '금', '토'];
+  // 날짜 그룹 헤더용 — "2026-06-02 (월)"
+  function fmtDay(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} (${WD[d.getDay()]})`;
+  }
+  // 커밋 행 시각 — "20:47"
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const p = n => String(n).padStart(2, '0');
+    return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  // 프로젝트명 → 고정 색상(hue). 같은 프로젝트는 항상 같은 색.
+  // 접두사가 비슷해도(예: tera-cloud-*) 잘 흩어지도록 FNV-1a 해시로 섞는다.
+  function projectHue(name) {
+    let h = 2166136261;
+    for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0) % 360;
+  }
 
+  // PR 식별자('PR<번호>')는 화면에 '#<번호>'로 표시한다 (커밋 shortSha는 그대로).
+  function shaLabel(sha) { return /^PR\d+$/.test(sha) ? '#' + sha.slice(2) : sha; }
   function shaChip(sha) {
-    return `<span class="imp-sha">◆ ${FM.esc(sha)}</span>`;
+    return `<span class="imp-sha">◆ ${FM.esc(shaLabel(sha))}</span>`;
   }
 
   // 프론트엔드 프로젝트 집합 — 프론트의 API 호출(EXTERNAL) 노드는 백엔드 endpoint와 join 으로 묶인
@@ -64,14 +97,46 @@
     }
     return [DATA_URL.replace('data/', '')];
   }
+  // PR 기반 impact.json(pulls/base/pullCount)을 커밋 기반 형태(commits/branch/commitCount)로 정규화.
+  // 두 스키마를 한 타임라인에 섞어 보여주기 위해 PR을 "커밋처럼" 매핑한다.
+  //   - shortSha 키: 'PR<번호>' (URL-안전), 화면 표시는 '#<번호>'
+  //   - 링크: repoUrl + '/pull/<번호>'
+  //   - endpointImpact[].pulls(정수 PR번호) → .commits(['PR<번호>']) 로 키 정렬
+  function normalizePart(part) {
+    if (!part || Array.isArray(part.commits) || !Array.isArray(part.pulls)) return part;
+    const repo = part.repoUrl ? part.repoUrl.replace(/\/+$/, '') : '';
+    part.branch = part.base;
+    part.commitCount = part.pullCount != null ? part.pullCount : part.pulls.length;
+    part.commits = part.pulls.map(p => ({
+      sha: p.mergeCommit,
+      shortSha: 'PR' + p.number,
+      author: p.author,
+      date: p.mergedAt,
+      subject: p.title,
+      commitUrl: repo ? repo + '/pull/' + p.number : null,
+      changedFiles: p.changedFiles || [],
+      changedNodes: p.changedNodes || [],
+      deletedNodes: p.deletedNodes || [],
+      deletedEndpoints: p.deletedEndpoints || [],
+      impactedEndpoints: p.impactedEndpoints || [],
+      impactedServices: p.impactedServices || [],
+      _pull: p.number,
+    }));
+    (part.endpointImpact || []).forEach(e => {
+      if (!e.commits && Array.isArray(e.pulls)) e.commits = e.pulls.map(n => 'PR' + n);
+    });
+    return part;
+  }
   function mergeImpact(parts) {
     const out = { branch: parts[0].branch, depth: parts[0].depth, commits: [], endpointImpact: [],
-      commitCount: 0, changedNodeCount: 0 };
+      commitCount: 0, changedNodeCount: 0, deletedEndpointCount: 0, breakingDeletionCount: 0 };
     for (const p of parts) {
       if (Array.isArray(p.commits)) out.commits.push(...p.commits);
       if (Array.isArray(p.endpointImpact)) out.endpointImpact.push(...p.endpointImpact);
       out.commitCount += p.commitCount || (p.commits ? p.commits.length : 0);
       out.changedNodeCount += p.changedNodeCount || 0;
+      out.deletedEndpointCount += p.deletedEndpointCount || 0;
+      out.breakingDeletionCount += p.breakingDeletionCount || 0;
     }
     return out;
   }
@@ -80,9 +145,25 @@
     if (data === undefined) {
       const files = impactFiles();
       if (!files) { data = null; return data; }
-      const parts = (await Promise.all(files.map(f => FM.fetchData('data/' + f)))).filter(Boolean);
+      const parts = (await Promise.all(files.map(async f => {
+        const part = normalizePart(await FM.fetchData('data/' + f));   // PR 기반이면 커밋 형태로 정규화
+        // 커밋에 출처 프로젝트/저장소를 태깅 — 병합 후에도 프로젝트 칩·커밋 링크를 만들 수 있도록.
+        // 프로젝트명은 repoUrl 마지막 경로, 없으면 파일명(<project>.impact.json)에서 유도.
+        if (part && Array.isArray(part.commits)) {
+          const proj = part.repoUrl
+            ? part.repoUrl.replace(/\/+$/, '').split('/').pop()
+            : f.replace(/\.impact\.json$/, '');
+          part.commits.forEach(c => {
+            if (part.repoUrl && !c._repoUrl) c._repoUrl = part.repoUrl;
+            if (!c._project) c._project = proj;
+          });
+        }
+        return part;
+      }))).filter(Boolean);
       data = parts.length ? mergeImpact(parts) : null;
       if (data && Array.isArray(data.commits)) {
+        // 최근 날짜순(내림차순) 정렬 — 여러 프로젝트가 병합되어도 한 타임라인으로 보이도록
+        data.commits.sort((a, b) => new Date(b.date) - new Date(a.date));
         data.commits.forEach(c => commitBySha.set(c.shortSha, c));
       }
     }
@@ -140,6 +221,9 @@
 
   function paint() {
     const cols = document.getElementById('columns');
+    // 재렌더 전 커밋 레일 스크롤 위치 보존 (클릭 시 맨 위로 튀지 않도록)
+    const prevList = cols.querySelector('.imp-list');
+    const prevScroll = prevList ? prevList.scrollTop : 0;
     cols.className = 'imp-view';
     cols.innerHTML = '';
     FM.setCanvasEdges([]);
@@ -151,6 +235,8 @@
     drawBreadcrumb(selected);
 
     cols.appendChild(buildRail(selected));
+    const newList = cols.querySelector('.imp-list');
+    if (newList) newList.scrollTop = prevScroll;
 
     const main = el('div', 'imp-main');
     cols.appendChild(main);
@@ -166,7 +252,7 @@
     let html = '<span class="bc-link" data-imp-root>🧾 커밋 영향도</span>';
     if (selected.length) {
       html += '<span class="bc-sep">›</span>' +
-        `<span class="bc-focus">◆ ${FM.esc(selected[0])}${selected.length > 1 ? ` (+${selected.length - 1})` : ''}</span>`;
+        `<span class="bc-focus">◆ ${FM.esc(shaLabel(selected[0]))}${selected.length > 1 ? ` (+${selected.length - 1})` : ''}</span>`;
     }
     bc.innerHTML = html;
     const root = bc.querySelector('[data-imp-root]');
@@ -193,7 +279,7 @@
     const selSet = new Set(selected);
 
     const head = el('div', 'imp-rail-head',
-      `<div class="imp-rail-title">커밋 <span class="grid-count">${FM.esc(String(data.commitCount))}</span></div>`);
+      `<div class="imp-rail-title">변경이력 <span class="grid-count">${FM.esc(String(data.commitCount))}</span></div>`);
     const filter = el('input', 'imp-filter');
     filter.type = 'text';
     filter.placeholder = '작성자 / 메시지 / 파일 필터…';
@@ -207,15 +293,31 @@
     empty.style.display = 'none';
     list.appendChild(empty);
 
-    data.commits.forEach(c => list.appendChild(commitCard(c, selSet, selected)));
+    // 날짜(일자)별 그룹 헤더를 끼워가며 커밋을 타임라인으로 렌더
+    let lastDay = null;
+    data.commits.forEach(c => {
+      const day = fmtDay(c.date);
+      if (day !== lastDay) {
+        const hdr = el('div', 'imp-datehdr', FM.esc(day));
+        hdr.dataset.day = day;
+        list.appendChild(hdr);
+        lastDay = day;
+      }
+      list.appendChild(commitCard(c, selSet));
+    });
 
     const apply = () => {
       const q = railFilter.trim().toLowerCase();
       let shown = 0;
+      const dayShown = {};
       list.querySelectorAll('.imp-commit').forEach(card => {
         const hit = !q || card.dataset.search.includes(q);
         card.style.display = hit ? '' : 'none';
-        if (hit) shown++;
+        if (hit) { shown++; dayShown[card.dataset.day] = true; }
+      });
+      // 보이는 커밋이 없는 날짜 헤더는 숨긴다
+      list.querySelectorAll('.imp-datehdr').forEach(h => {
+        h.style.display = dayShown[h.dataset.day] ? '' : 'none';
       });
       empty.style.display = shown ? 'none' : '';
     };
@@ -224,33 +326,41 @@
     return rail;
   }
 
-  function commitCard(c, selSet, selected) {
+  function commitCard(c, selSet) {
     const on = selSet.has(c.shortSha);
     const card = el('div', 'imp-commit' + (on ? ' on' : ''));
     card.dataset.search =
       (c.author + ' ' + c.subject + ' ' + c.shortSha + ' ' + (c.changedFiles || []).join(' ')).toLowerCase();
+    card.dataset.day = fmtDay(c.date);
 
     const noCode = !(c.changedNodes && c.changedNodes.length);
+    const link = commitUrl(c);
+    const proj = c._project || '';
+    const h = projectHue(proj);
+    const projChip = proj
+      ? `<span class="imp-proj" title="${FM.escAttr(proj)}" ` +
+        `style="color:hsl(${h} 55% 38%);border-color:hsl(${h} 50% 55% / .45);background:hsl(${h} 70% 55% / .12)">${FM.esc(proj)}</span>`
+      : '';
     card.innerHTML =
-      `<label class="imp-ck"><input type="checkbox" ${on ? 'checked' : ''}></label>` +
+      `<span class="imp-dot" style="background:hsl(${h} 60% 62%)"></span>` +
       `<div class="imp-cbody">` +
-        `<div class="imp-crow1">${shaChip(c.shortSha)}<span class="imp-csubj" title="${FM.escAttr(c.subject)}">${FM.esc(c.subject)}</span></div>` +
-        `<div class="imp-cmeta">${FM.esc(c.author)} · ${FM.esc(fmtDate(c.date))}</div>` +
+        `<div class="imp-crow1">${projChip}<span class="imp-csha">${FM.esc(c._pull != null ? '#' + c._pull : c.shortSha)}</span>` +
+          `<span class="imp-time">${FM.esc(fmtTime(c.date))}</span></div>` +
+        `<div class="imp-csubj" title="${FM.escAttr(c.subject)}">${FM.esc(c.subject)}</div>` +
         `<div class="imp-cchips">` +
           (noCode
             ? `<span class="imp-cc none">코드 영향 없음</span><span class="imp-cc">파일 ${c.changedFiles.length}</span>`
             : `<span class="imp-cc">변경 ${c.changedNodes.length}</span><span class="imp-cc">영향 ${c.impactedEndpoints.length}</span>`) +
         `</div>` +
-      `</div>`;
+      `</div>` +
+      (link
+        ? `<a class="imp-clink" href="${FM.escAttr(link)}" target="_blank" rel="noopener noreferrer" title="저장소에서 이 커밋 보기">↗</a>`
+        : '');
 
-    const ck = card.querySelector('input');
-    ck.onclick = e => e.stopPropagation();
-    ck.onchange = () => {
-      const next = selected.filter(s => s !== c.shortSha);
-      if (ck.checked) next.push(c.shortSha);
-      pushSel(next, '');
-    };
-    // 카드 본문 클릭 = 단일 선택 (기존 선택 대체)
+    // 링크 버튼 클릭은 카드 선택으로 번지지 않게 한다
+    const a = card.querySelector('.imp-clink');
+    if (a) a.onclick = e => e.stopPropagation();
+    // 카드 클릭 = 단일 선택 (기존 선택 대체)
     card.onclick = () => pushSel([c.shortSha], '');
     return card;
   }
@@ -260,12 +370,25 @@
   function renderAggregate(main, ep) {
     FM.setProcessDockEnabled(false);   // 커밋 미선택 — 하단 프로세스 독 숨김
     FM.state.sel = null; FM.renderDetail();   // 그래프 선택 패널도 닫음
-    main.appendChild(el('div', 'imp-bar',
-      `<span class="imp-bar-title">🧾 ${FM.esc(data.branch)} 브랜치</span>` +
-      `<span class="imp-cc">최근 ${FM.esc(String(data.commitCount))} 커밋</span>` +
-      `<span class="imp-cc">추적 깊이 ${FM.esc(String(data.depth))}</span>` +
-      `<span class="imp-cc">변경 노드 ${FM.esc(String(data.changedNodeCount))}</span>` +
-      `<span class="hint">커밋을 선택하면 영향 그래프가 표시됩니다 — 체크박스로 여러 커밋을 묶어볼 수 있습니다</span>`));
+
+    // 상단 타이틀 + 통계 숫자 카드 (FLOW MAP "Impact Flow" 헤더 스타일)
+    main.appendChild(el('div', 'imp-flowhead',
+      `<div class="imp-flowtitle">${FM.esc(data.branch)} — 변경 영향도</div>` +
+      `<div class="imp-flowsub">최근 ${FM.esc(String(data.commitCount))}건 변경이력 · 추적 깊이 ${FM.esc(String(data.depth))} | 변경된 코드와 영향받는 API 분석</div>`));
+
+    const epCount = (data.endpointImpact || []).length;
+    const statCards = [
+      { n: data.commitCount, label: '변경이력', cls: 'a' },
+      { n: data.changedNodeCount, label: '변경 노드', cls: 'b' },
+      { n: epCount, label: '영향 엔드포인트', cls: 'c' },
+      { n: data.deletedEndpointCount || 0, label: '삭제 API', cls: 'd' },
+      { n: data.breakingDeletionCount || 0, label: 'Breaking', cls: 'e' },
+    ];
+    main.appendChild(el('div', 'imp-stats',
+      statCards.map(s =>
+        `<div class="imp-statcard imp-stat-${s.cls}"><div class="imp-statnum">${FM.esc(String(s.n))}</div>` +
+        `<div class="imp-statlabel">${FM.esc(s.label)}</div></div>`).join('')));
+    main.appendChild(el('div', 'hint imp-flowhint', '왼쪽 타임라인에서 변경이력을 선택하면 그 변경이 닿는 영향 그래프가 펼쳐집니다.'));
 
     let rows = (data.endpointImpact || []).slice()
       .sort((a, b) => b.commits.length - a.commits.length);
@@ -286,7 +409,7 @@
 
     const table = el('div', 'imp-table');
     table.appendChild(el('div', 'imp-trow imp-thead',
-      '<span class="imp-tep">영향 엔드포인트</span><span class="imp-tsvc">서비스</span><span class="imp-tcommits">영향 커밋</span>'));
+      '<span class="imp-tep">영향 엔드포인트</span><span class="imp-tsvc">서비스</span><span class="imp-tcommits">영향 변경이력</span>'));
 
     rows.forEach(r => {
       const row = el('div', 'imp-trow');
@@ -300,7 +423,7 @@
 
       const cell = row.querySelector('.imp-tcommits');
       r.commits.forEach(sha => {
-        const chip = el('button', 'imp-sha imp-sha-btn', `◆ ${FM.esc(sha)}`);
+        const chip = el('button', 'imp-sha imp-sha-btn', `◆ ${FM.esc(shaLabel(sha))}`);
         const c = commitBySha.get(sha);
         if (c) chip.title = c.subject;
         chip.onclick = e => { e.stopPropagation(); pushSel([sha], ''); };

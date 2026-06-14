@@ -39,7 +39,7 @@
   width: 100%;
   box-sizing: border-box;
   padding: 6px 9px;
-  background: #0b1220;
+  background: var(--bg-input);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -53,33 +53,102 @@
 }
 .imp-rail-empty { padding: 14px 12px; color: var(--text-dim); font-size: 12px; }
 
-/* 커밋 카드 */
+/* 날짜 그룹 헤더 — 스크롤 시 상단에 고정 */
+.imp-datehdr {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 7px 12px 6px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--text-dim);
+}
+
+/* 커밋 카드 — 좌측 타임라인(세로선 + 점) */
 .imp-commit {
+  position: relative;
   display: flex;
   gap: 8px;
-  padding: 9px 10px;
+  padding: 10px 10px 10px 24px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
 }
+.imp-commit::before {            /* 타임라인 세로선 */
+  content: '';
+  position: absolute;
+  left: 11px; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+.imp-dot {                       /* 타임라인 점 — 프로젝트 색 */
+  position: absolute;
+  left: 5px; top: 13px;
+  width: 10px; height: 10px;
+  box-sizing: content-box;
+  border-radius: 50%;
+  border: 2px solid var(--bg-panel);
+}
 .imp-commit:last-child { border-bottom: none; }
-.imp-commit:hover { background: #0b1220; }
+.imp-commit:hover { background: var(--bg-input); }
 .imp-commit.on {
   background: var(--imp-tint);
   box-shadow: inset 2px 0 0 var(--imp-changed); /* .search-item.kb-active 패턴의 주황 변형 */
 }
-.imp-ck { flex-shrink: 0; padding-top: 1px; }
-.imp-ck input { accent-color: var(--imp-changed); cursor: pointer; }
 .imp-cbody { min-width: 0; flex: 1; }
+/* 커밋 → 저장소 링크 버튼 */
+.imp-clink {
+  flex-shrink: 0;
+  align-self: flex-start;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.imp-clink:hover { color: #fff; background: var(--imp-changed); border-color: var(--imp-changed); }
 .imp-crow1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.imp-csubj {
-  font-size: 12px;
-  color: var(--text);
+/* 프로젝트 칩 — 색상은 인라인 style(hsl)로 주입 */
+.imp-proj {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid;
   white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.imp-cmeta { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
-.imp-cchips { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+.imp-csha {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.imp-time {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.imp-csubj {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 6px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.imp-cchips { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 
 /* shortSha 칩 — 모든 위치 동일 형태 (mono 10px, 주황 1px 보더) */
 .imp-sha {
@@ -102,7 +171,7 @@
   font-size: 10px;
   padding: 2px 7px;
   border-radius: 10px;
-  background: #0b1220;
+  background: var(--bg-input);
   color: var(--text-dim);
   border: 1px solid var(--border);
   white-space: nowrap;
@@ -118,6 +187,33 @@
   flex-direction: column;
   gap: 14px;
 }
+
+/* 집계 헤더 (Impact Flow 타이틀) */
+.imp-flowhead { padding: 2px 2px 0; }
+.imp-flowtitle { font-size: 20px; font-weight: 800; color: var(--c-controller); letter-spacing: -.01em; }
+.imp-flowsub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.imp-flowhint { margin: 2px 2px 0; }
+
+/* 통계 숫자 카드 */
+.imp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.imp-statcard {
+  padding: 14px 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border-top: 3px solid var(--border);
+}
+.imp-statnum { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.imp-statlabel { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+.imp-statcard.imp-stat-a { border-top-color: var(--c-controller); }
+.imp-statcard.imp-stat-b { border-top-color: var(--c-service); }
+.imp-statcard.imp-stat-c { border-top-color: var(--imp-changed); }
+.imp-statcard.imp-stat-d { border-top-color: var(--c-batch); }
+.imp-statcard.imp-stat-e { border-top-color: var(--c-external); }
 
 /* 상단 분석 바 */
 .imp-bar {
@@ -138,7 +234,7 @@
   max-width: 260px;
   padding: 4px 6px;
   border-radius: 8px;
-  background: #0b1220;
+  background: var(--bg-input);
   border: 1px solid var(--border);
 }
 .imp-barsubj {
@@ -274,14 +370,14 @@
 }
 .imp-trow:last-child { border-bottom: none; }
 .imp-trow.clickable { cursor: pointer; }
-.imp-trow.clickable:hover { background: #0b1220; }
+.imp-trow.clickable:hover { background: var(--bg-input); }
 .imp-thead {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .06em;
   color: var(--text-dim);
-  background: #0b1220;
+  background: var(--bg-input);
 }
 .imp-tep {
   flex: 1;
@@ -343,7 +439,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   color: var(--text);
-  background: #0b1220;
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 16px;

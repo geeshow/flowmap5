@@ -39,13 +39,18 @@ const cardEls = new Map();
 let currentEdges = [];
 const currentAdjOut = new Map();
 const currentAdjIn = new Map();
+// 뷰 전용 합성(aggregate) 노드 — 프론트 화면을 {path1} 그룹 노드로 묶을 때 nodeById 에 임시 등록한다.
+// 다음 render 에서 정리(cleanSynthNodes)해 다른 뷰를 오염시키지 않는다.
+let synthNodeIds = [];
+function cleanSynthNodes() { for (const id of synthNodeIds) nodeById.delete(id); synthNodeIds = []; }
 
 const state = {
   view: null,                // 기능 모듈 뷰 (commits/topic/api — features/*.js lazy load)
   overview: false,           // 전체 서비스 지도 모드
   structure: false,          // 어플리케이션구조 메뉴 컨텍스트 (3단계 드릴다운)
   structSvc: null,           //   ② 선택 서비스 — endpoint path {path1}/{path2} 그룹 보기
-  structPath: null,          //   ③ 선택 경로 — 그 경로의 레이어별 프로세스 흐름
+  structPath: null,          //   ③ 선택 경로 — 그 경로 관련 파일 단위 그래프
+  structFile: null,          //   ④ 선택 파일 — 그 파일이 쓰는 메서드 구조(레이어 흐름)
   service: null,             // 서비스 단위 보기(전체보기 → 서비스 드릴다운)
   svcPick: null,             // 서비스 보기에서 선택한 노드(활성화된 연결 노드만 단계 필터)
   infraType: null,           // 인프라/외부 타입 보기(전체보기 → 타입 노드 드릴다운)
@@ -125,11 +130,20 @@ async function loadGraphData() {
   let edgeAccum = [];
   for (const { p, g } of results) {
     if (!g || !Array.isArray(g.nodes)) { console.warn('[flowmap] 프로젝트 그래프 로드 실패, 건너뜀:', p.name, p.graph); continue; }
-    okProjects.push(p.name);
+    // 매니페스트 name 은 그래프 파일명(graph-*) 기준이라 노드의 실제 project 와 어긋날 수 있다.
+    // 그래프 노드에서 가장 많이 쓰인 project 를 정규 이름으로 채택해, project 없는 외부호출 노드까지
+    // 같은 이름으로 귀속시킨다 — 안 그러면 프론트 한 서비스가 graph-* / 실제이름 둘로 쪼개진다.
+    let canon = p.name;
+    if (p.type === 'frontend') {
+      const c = new Map();
+      for (const n of g.nodes) if (n.project) c.set(n.project, (c.get(n.project) || 0) + 1);
+      if (c.size) canon = [...c.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      p.name = canon;   // 다운스트림(서비스 보기·티어 분류·join)도 동일 이름을 쓰게 매니페스트도 정규화
+    }
+    okProjects.push(canon);
     for (const n of g.nodes) {
-      // 프론트 외부호출 노드(게이트웨이/서드파티)는 project 가 비어 있다 → 프론트 서비스에 귀속시켜
-      // 공유 인프라가 아닌 그 프론트 프로젝트의 노드로 묶이게 한다 (front → backend join 이 서비스 단위로 보이도록)
-      if (p.type === 'frontend' && !n.project) n.project = p.name;
+      // 프론트 외부호출 노드(게이트웨이/서드파티)는 project 가 비어 있다 → 프론트 서비스(정규 이름)에 귀속
+      if (p.type === 'frontend' && !n.project) n.project = canon;
       const prev = nodeMap.get(n.id);
       if (!prev || (n.file && !prev.file)) nodeMap.set(n.id, n);
     }
@@ -288,6 +302,7 @@ function parseUrl() {
   const appSvc = rawParam('app');
   state.structSvc = state.structure && appSvc && (META.projects || []).includes(decodeURIComponent(appSvc)) ? decodeURIComponent(appSvc) : null;
   state.structPath = state.structSvc && rawParam('p') ? decodeURIComponent(rawParam('p')) : null;
+  state.structFile = state.structPath && rawParam('f') ? decodeURIComponent(rawParam('f')) : null;
   const infraView = rawParam('infra');
   state.infraType = infraView && INFRA_LABEL[infraView] ? infraView : null;
   if (state.service || state.infraType) state.overview = false;
@@ -317,6 +332,7 @@ function pushUrl() {
     parts.push('view=structure');
     if (state.structSvc) parts.push('app=' + encodeURIComponent(state.structSvc));
     if (state.structSvc && state.structPath) parts.push('p=' + encodeURIComponent(state.structPath));
+    if (state.structPath && state.structFile) parts.push('f=' + encodeURIComponent(state.structFile));
     if (state.sel) parts.push('sel=' + encodeURIComponent(state.sel));
     history.pushState({}, '', location.pathname + '?' + parts.join('&'));
     return;
@@ -347,27 +363,34 @@ function shareUrl() { return location.origin + location.pathname + location.sear
 function setOverview(on) {
   state.view = null;
   state.overview = !!on;
-  if (on) { state.structure = false; state.structSvc = null; state.structPath = null; state.focus = null; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null; }
+  if (on) { state.structure = false; state.structSvc = null; state.structPath = null; state.structFile = null; state.focus = null; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null; }
   pushUrl(); render(); renderDetail();
 }
 function setStructure(on) {                     // 어플리케이션구조 메뉴 — ① 프로젝트 유형별 서비스 picker
   state.view = null;
   state.structure = !!on;
-  state.structSvc = null; state.structPath = null;
+  state.structSvc = null; state.structPath = null; state.structFile = null;
   if (on) { state.overview = false; state.focus = null; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null; }
   pushUrl(); render(); renderDetail();
 }
 function setStructSvc(svc) {                    // ② 서비스 선택 → endpoint path {path1}/{path2} 그룹 보기
   if (!svc) return;
   state.view = null;
-  state.structure = true; state.structSvc = svc; state.structPath = null;
+  state.structure = true; state.structSvc = svc; state.structPath = null; state.structFile = null;
   state.overview = false; state.service = null; state.infraType = null; state.svcPick = null; state.focus = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null;
   pushUrl(); render(); renderDetail();
 }
-function setStructPath(svc, path) {             // ③ 경로 선택 → 레이어별 프로세스 흐름
+function setStructPath(svc, path) {             // ③ 경로 선택 → 파일 단위 그래프
   if (!svc || !path) return;
   state.view = null;
-  state.structure = true; state.structSvc = svc; state.structPath = path;
+  state.structure = true; state.structSvc = svc; state.structPath = path; state.structFile = null;
+  state.overview = false; state.service = null; state.infraType = null; state.svcPick = null; state.focus = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null;
+  pushUrl(); render(); renderDetail();
+}
+function setStructFile(svc, path, file) {       // ④ 파일 선택 → 그 파일이 쓰는 메서드 구조
+  if (!svc || !path || !file) return;
+  state.view = null;
+  state.structure = true; state.structSvc = svc; state.structPath = path; state.structFile = file;
   state.overview = false; state.service = null; state.infraType = null; state.svcPick = null; state.focus = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null;
   pushUrl(); render(); renderDetail();
 }
@@ -490,6 +513,8 @@ function segsOf(ep) { return (ep.endpoint || '').split('/').filter(Boolean); }
 // =========================================================================
 function render() {
   cardEls.clear();
+  pinned.clear();          // 핀(강조 고정)은 뷰 컨텍스트 한정 — 다른 단계로 이동하면 해제
+  cleanSynthNodes();       // 이전 뷰의 합성(화면 그룹) 노드 제거
   // 기본 홈 = 전체 서비스 지도. 어떤 뷰도 활성이 아니면(빈 상태/홈 복귀) 전체보기로 떨어진다.
   // (토글 active 표시보다 먼저 처리해야 메뉴 하이라이트가 맞는다.)
   if (!state.view && !state.overview && !state.service && !state.structure && !state.infraType
@@ -778,7 +803,7 @@ function renderProcessDock() {
     }
     const segEl = document.createElement('div');
     segEl.className = 'dock-seg';
-    segEl.innerHTML = `<div class="dock-seg-head">🧩 ${esc(segLabels[s])}</div><div class="dock-seg-cols"></div>`;
+    segEl.innerHTML = `<div class="dock-seg-head">${esc(segLabels[s])}</div><div class="dock-seg-cols"></div>`;
     const segCols = segEl.querySelector('.dock-seg-cols');
     const appendCol = (label, list) => {
       const col = document.createElement('div');
@@ -887,7 +912,29 @@ const byNodeName = (a, b) => String(a.endpoint || a.method || a.id).localeCompar
 function renderServiceView() {
   const svc = state.service;
   const eps = serviceEndpoints(svc);                 // 1단계 path로 그룹할 기준 API
-  const epIds = new Set(eps.map(n => n.id));
+  // 프론트엔드(컨트롤러 없음→화면 목록): 화면이 너무 많으므로 {path1} 단위로 묶어 하나의 노드로 그린다.
+  // 또 이 뷰에서는 DB/Redis/Kafka 같은 인프라는 숨긴다.
+  const epsAreScreens = eps.length > 0 && eps.every(n => n.layer === 'SCREEN');
+  const hideInfra = epsAreScreens;
+  const pathGroups = new Map();   // gid → { key, members:[screenId] }
+  const epOf = new Map();         // screenId → gid (path1 그룹 합성노드)
+  if (epsAreScreens) {
+    for (const ep of eps) {
+      const s = segsOf(ep)[0];
+      const key = s ? '/' + s : '/';
+      const gid = 'spath:' + svc + ':' + key;
+      if (!pathGroups.has(gid)) pathGroups.set(gid, { key, members: [] });
+      pathGroups.get(gid).members.push(ep.id);
+      epOf.set(ep.id, gid);
+    }
+    for (const [gid, g] of pathGroups) {             // 합성 그룹 노드를 nodeById 에 임시 등록(다음 render에서 정리)
+      nodeById.set(gid, { id: gid, layer: 'SCREEN', project: svc, method: g.key,
+        endpoint: null, fqcn: null, description: `${g.members.length}개 화면`, _synthetic: 'pathgroup' });
+      synthNodeIds.push(gid);
+    }
+  }
+  const epId = id => epOf.get(id) || id;             // 화면 → path1 그룹 id (백엔드 노드는 그대로)
+  const epIds = new Set(epsAreScreens ? [...pathGroups.keys()] : eps.map(n => n.id));
   const onActivate = id => setFocus(id, svc);        // 중심 ⟲ 버튼 → 호출관계분석 드릴다운
   const onPick = id => {                             // 카드 클릭 → 활성화된 연결 노드만 단계 필터
     // 3단계(기준 노드 선택 후)에서는 어떤 노드를 클릭해도 기준 유지 — 선택만 이동(하단 흐름도 갱신)
@@ -928,7 +975,7 @@ function renderServiceView() {
   }
   const bucketOf = id => {
     const n = nodeById.get(id);
-    if (n && n.project && !isInfra(id, n)) return { key: 'svc:' + n.project, label: '🧩 ' + n.project, rank: 0, svc: n.project };
+    if (n && n.project && !isInfra(id, n)) return { key: 'svc:' + n.project, label: n.project, rank: 0, svc: n.project };
     const t = infraGroup(id);
     // 외부 API 는 id(ext:{client}#{method})의 두번째 세그먼트(클라이언트)별로 묶어 보여준다
     if (t === 'external') {
@@ -941,6 +988,37 @@ function renderServiceView() {
   const derived = [];
   const seen = new Set();
   const addEdge = (s, t, e) => { const k = s + '|' + t; if (s && t && !seen.has(k)) { seen.add(k); derived.push({ source: s, target: t, kind: e.kind, relation: e.relation, mode: e.mode }); } };
+
+  // 프론트(frontend) 호출부는 STORE/COMPONENT·외부호출(ext) 컴포넌트 레벨 대신 그 화면(SCREEN)으로 롤업해 보여준다.
+  //   (store→ext→join 으로만 닿는 노드도 화면으로 거슬러 올려 한 단위로 표시 → 화면 기준 의존이 한눈에).
+  const frontProjects = new Set((MANIFEST ? MANIFEST.projects : []).filter(p => p.type === 'frontend').map(p => p.name));
+  // 프론트 뷰: 호출/피호출 단계의 백엔드 엔드포인트도 서비스별 {path1} 그룹 노드 하나로 묶는다.
+  const backendGroups = new Map();   // gid → { key, project, members:[id] }
+  const backendPathGroup = (id, n) => {
+    const seg = segsOf(n)[0];
+    const key = seg ? '/' + seg : '/';
+    const gid = 'spath:' + n.project + ':' + key;
+    let g = backendGroups.get(gid);
+    if (!g) {
+      g = { key, project: n.project, members: [] };
+      backendGroups.set(gid, g);
+      nodeById.set(gid, { id: gid, layer: 'CONTROLLER', project: n.project, method: key,
+        endpoint: null, httpMethod: null, fqcn: null, description: null, _synthetic: 'pathgroup' });
+      synthNodeIds.push(gid);
+    }
+    g.members.push(id);
+    return gid;
+  };
+  const displayFar = id => {
+    const n = nodeById.get(id);
+    if (!n) return [id];
+    if (frontProjects.has(n.project) && n.layer !== 'SCREEN') {   // 프론트 호출부 → 화면(SCREEN) 롤업
+      const scr = resolveEndpoints(id).filter(x => (nodeById.get(x) || {}).layer === 'SCREEN');
+      if (scr.length) return scr;
+    }
+    if (epsAreScreens && n.project && !isInfra(id, n)) return [backendPathGroup(id, n)];   // 프론트 뷰: 백엔드 → path1 그룹
+    return [id];
+  };
 
   // 방향별 스텝 BFS (서비스/인프라 단위로 한 단계씩 확장, 노드는 실제 대상)
   function bfsSteps(dir) {
@@ -955,24 +1033,29 @@ function renderServiceView() {
           const fn = nodeById.get(farId);
           if (!fn) continue;
           const b = bucketOf(farId);
-          if (b.svc === svc) continue;                          // 원점으로 되돌아가는 건 제외
+          // 같은 서비스 안에 머무는 엣지(원점 복귀 + 프론트 store→ext 같은 서비스-내부 호출)는 단계 확장 대상이 아니다.
+          // 이걸 타면 rep(대표 노드) 배선이 서비스 내부에서 엉켜 가짜 엣지가 생기고 hover 강조가 전체를 끈다.
+          if (b.svc === S || b.svc === svc) continue;
+          if (hideInfra && b.key.startsWith('infra:')) continue;   // 프론트 뷰: DB/Redis/Kafka 인프라 숨김
+          const fars = displayFar(farId);                       // 프론트 호출부 → 화면(SCREEN) 롤업
           if (!m.has(b.key)) m.set(b.key, { label: b.label, rank: b.rank, svc: b.svc, nodes: new Set() });
-          m.get(b.key).nodes.add(farId);
-          // 연결선
+          for (const f of fars) m.get(b.key).nodes.add(f);
+          // 연결선 (기준 화면은 path1 그룹 노드로 합쳐 연결)
           if (S === svc) {
             if (dir === 'out') {
-              const reps = resolveEndpoints(e.source).filter(x => epIds.has(x));
-              if (reps.length) reps.forEach(ep => addEdge(ep, farId, e));
-              else { orphan.add(e.source); addEdge(e.source, farId, e); }
+              const reps = [...new Set(resolveEndpoints(e.source).map(epId))].filter(x => epIds.has(x));
+              if (reps.length) reps.forEach(ep => fars.forEach(f => addEdge(ep, f, e)));
+              else { orphan.add(e.source); fars.forEach(f => addEdge(e.source, f, e)); }
             } else {
-              if (epIds.has(e.target)) addEdge(farId, e.target, e);
-              else { orphan.add(e.target); addEdge(farId, e.target, e); }
+              const tgt = epId(e.target);
+              if (epIds.has(tgt)) fars.forEach(f => addEdge(f, tgt, e));
+              else { orphan.add(e.target); fars.forEach(f => addEdge(f, e.target, e)); }
             }
           } else {
             const r = rep.get('svc:' + S);
-            if (r) dir === 'out' ? addEdge(r, farId, e) : addEdge(farId, r, e);
+            if (r) fars.forEach(f => dir === 'out' ? addEdge(r, f, e) : addEdge(f, r, e));
           }
-          if (b.svc && !rep.has('svc:' + b.svc)) rep.set('svc:' + b.svc, farId);
+          if (b.svc && !rep.has('svc:' + b.svc)) rep.set('svc:' + b.svc, fars[0]);
         }
       }
       if (!m.size) break;
@@ -985,6 +1068,11 @@ function renderServiceView() {
   }
   const fSteps = bfsSteps('out');   // 호출 단계 (오른쪽)
   const bSteps = bfsSteps('in');    // 피호출 단계 (왼쪽)
+  // 백엔드 path1 그룹 노드의 멤버 수(중복 제거)를 카드 설명으로 표기
+  for (const [gid, g] of backendGroups) {
+    const node = nodeById.get(gid);
+    if (node) node.description = `${new Set(g.members).size}개 API`;
+  }
 
   const colsEl = document.getElementById('columns');
   colsEl.className = 'svc-view';     // 노드 카드를 전체보기 카드 외형으로 통일(style.css)
@@ -1002,12 +1090,22 @@ function renderServiceView() {
   // 피호출 단계 (왼쪽, 깊은 단계가 가장 바깥)
   for (let i = bSteps.length - 1; i >= 0; i--) renderStep(bSteps[i], `피호출 ${i + 1}단계`);
 
-  // 기준 컬럼 (중앙): API 1단계 path 그룹만 (API 가 아닌 기타 호출부는 제외)
+  // 기준 컬럼 (중앙): 백엔드는 API 1단계 path 그룹, 프론트는 {path1} 화면 그룹 노드 한 장씩
   const col0 = document.createElement('div');
   col0.className = 'column base svc-base';
-  col0.appendChild(mkHead(`API 목록 · ${eps.length}`));
-  const segKey = n => { const s = segsOf(n)[0]; return s ? '/' + s : '/'; };
-  renderGroupedBoxes(col0, eps.map(n => n.id), onActivate, segKey, onPick);
+  if (epsAreScreens) {
+    col0.appendChild(mkHead(`화면 그룹 · ${pathGroups.size}`));
+    for (const [gid, g] of [...pathGroups.entries()].sort((a, b) =>
+        a[1].key === '/' ? 1 : b[1].key === '/' ? -1 : a[1].key.localeCompare(b[1].key))) {
+      const card = makeCard(gid, { onPick });
+      card.dataset.filter = g.key.toLowerCase();
+      col0.appendChild(card);
+    }
+  } else {
+    col0.appendChild(mkHead(`API 목록 · ${eps.length}`));
+    const segKey = n => { const s = segsOf(n)[0]; return s ? '/' + s : '/'; };
+    renderGroupedBoxes(col0, eps.map(n => n.id), onActivate, segKey, onPick);
+  }
   colsEl.appendChild(col0);
 
   // 호출 단계 (오른쪽)
@@ -1015,7 +1113,7 @@ function renderServiceView() {
 
   currentEdges = derived.filter(e => cardEls.has(e.source) && cardEls.has(e.target));
   buildCurrentAdj();
-  setupServiceFilter(eps.length);
+  setupServiceFilter(epsAreScreens ? pathGroups.size : eps.length);
   requestAnimationFrame(() => { pruneOrphans(); applyPickFilter(); drawConnectors(); applyHighlight(); });
 }
 
@@ -1339,7 +1437,8 @@ function renderStructure() {
   document.getElementById('flow-canvas').querySelector('#grid-toolbar')?.remove();
   if (!state.structSvc) renderStructurePicker();
   else if (!state.structPath) renderStructPaths();
-  else renderStructFlow();
+  else if (!state.structFile) renderStructFiles();   // ③ 파일 단위 그래프
+  else renderStructFlow();                            // ④ 파일이 쓰는 메서드 구조
 }
 
 // 서비스별 통계 (endpoints / nodes)
@@ -1362,7 +1461,7 @@ function pathKeyOf(node) {
 }
 
 // ① 프로젝트 유형(프론트엔드/백엔드)별 서비스 picker
-const STRUCT_TYPE = { frontend: '🖥 프론트엔드', backend: '⚙️ 백엔드', other: '🧩 기타' };
+const STRUCT_TYPE = { frontend: '🖥 프론트엔드', backend: '⚙️ 백엔드', other: '기타' };
 function renderStructurePicker() {
   currentEdges = []; buildCurrentAdj();
   document.getElementById('connectors').innerHTML = '';
@@ -1408,7 +1507,7 @@ function renderStructPaths() {
     + `<span class="bc-sep">›</span>`
     + `<span class="bc-focus">${esc(svc)}</span>`
     + `<span class="bc-sep">·</span>`
-    + `<span class="ov-hint">경로를 선택하면 그 경로의 <b>Controller·Service·Repository·Component·Infra</b> 흐름을 보여줍니다</span>`;
+    + `<span class="ov-hint">경로를 선택하면 그 경로에 관련된 <b>파일 단위</b> 노드·관계를 보여줍니다</span>`;
   bc.querySelector('#bc-struct').addEventListener('click', () => setStructure(true));
 
   const groups = new Map();   // key → [endpoint node]
@@ -1435,12 +1534,43 @@ function renderStructPaths() {
     colsEl.innerHTML = `<div class="browse-empty">이 서비스에는 endpoint 가 없습니다.</div>`;
 }
 
-// ③ {path1}/{path2} 경로에 속한 전체 노드를 레이어별 프로세스 흐름으로
 const STRUCT_LAYER_HEAD = {
-  CONTROLLER: 'Controller', SERVICE: 'Service', COMPONENT: 'Component',
-  REPOSITORY: 'Repository', CONFIG: 'Config', BATCH: 'Batch', EXTERNAL: 'External', RESOURCE: 'Infra',
+  CONTROLLER: 'CONTROLLER', SERVICE: 'SERVICE', COMPONENT: 'COMPONENT',
+  REPOSITORY: 'REPOSITORY', CONFIG: 'CONFIG', BATCH: 'BATCH', EXTERNAL: 'EXTERNAL', RESOURCE: 'INFRA',
 };
-function renderStructFlow() {
+
+// 시작 노드들에서 같은 프로젝트 내부 호출을 따라가며 닿는 노드 수집(인프라/외부는 포함하되 더 진행 안 함)
+function collectDownstream(rootIds, svc) {
+  const set = new Set(rootIds);
+  let frontier = [...set];
+  while (frontier.length) {
+    const next = [];
+    for (const id of frontier)
+      for (const e of outEdges.get(id) || []) {
+        if (set.has(e.target)) continue;
+        const t = nodeById.get(e.target);
+        if (!t) continue;
+        const infra = isInfra(e.target, t);
+        if (t.project === svc || infra) {
+          set.add(e.target);
+          if (t.project === svc && !infra) next.push(e.target);
+        }
+      }
+    frontier = next;
+  }
+  return set;
+}
+
+// 노드 → 파일 단위 키 (인프라는 타입 단위로, 파일 없으면 노드 단위 폴백)
+function fileKeyOf(id) {
+  const n = nodeById.get(id);
+  if (!n) return id;
+  if (isInfra(id, n)) return 'infra:' + infraGroup(id);
+  return n.file ? 'file:' + n.file : 'node:' + id;
+}
+
+// ③ {path1}/{path2} 경로에 관련된 노드를 "파일 단위" 그래프로 (레이어 컬럼 배치 + 파일 간 관계)
+function renderStructFiles() {
   const svc = state.structSvc, key = state.structPath;
   const bc = document.getElementById('breadcrumb');
   bc.style.display = 'flex';
@@ -1448,30 +1578,108 @@ function renderStructFlow() {
     + `<span class="bc-sep">›</span>`
     + `<a class="bc-link" id="bc-svc">${esc(svc)}</a>`
     + `<span class="bc-sep">›</span>`
-    + `<span class="bc-focus">📁 ${esc(key)}</span>`;
+    + `<span class="bc-focus">📁 ${esc(key)}</span>`
+    + `<span class="bc-sep">·</span>`
+    + `<span class="ov-hint">파일 단위 노드 — 파일을 누르면 그 파일이 쓰는 <b>Controller·Service·Repository·Infra</b> 구조를 보여줍니다</span>`;
   bc.querySelector('#bc-struct').addEventListener('click', () => setStructure(true));
   bc.querySelector('#bc-svc').addEventListener('click', () => setStructSvc(svc));
 
-  // 시작점: 경로에 속한 컨트롤러 엔드포인트
-  const roots = serviceEndpoints(svc).filter(ep => pathKeyOf(ep) === key);
-  // 같은 프로젝트 내부 호출은 따라가고, 인프라/외부(RESOURCE/EXTERNAL)는 포함하되 더 진행하지 않음
-  const nodeSet = new Set(roots.map(r => r.id));
-  let frontier = [...nodeSet];
-  while (frontier.length) {
-    const next = [];
-    for (const id of frontier)
-      for (const e of outEdges.get(id) || []) {
-        if (nodeSet.has(e.target)) continue;
-        const t = nodeById.get(e.target);
-        if (!t) continue;
-        const infra = isInfra(e.target, t);
-        if (t.project === svc || infra) {
-          nodeSet.add(e.target);
-          if (t.project === svc && !infra) next.push(e.target);   // 비즈니스 노드만 더 탐색
-        }
-      }
-    frontier = next;
+  const roots = serviceEndpoints(svc).filter(ep => pathKeyOf(ep) === key).map(r => r.id);
+  const nodeSet = collectDownstream(roots, svc);
+
+  // 파일 단위 그룹: key → { layer(대표), members:[id], isInfra, label, dir }
+  const files = new Map();
+  for (const id of nodeSet) {
+    const n = nodeById.get(id); if (!n) continue;
+    const fk = fileKeyOf(id);
+    let g = files.get(fk);
+    if (!g) {
+      const infra = isInfra(id, n);
+      g = { layer: infra ? (n.layer === 'EXTERNAL' ? 'EXTERNAL' : 'RESOURCE') : n.layer, members: [], isInfra: infra,
+            label: infra ? INFRA_LABEL[infraGroup(id)] : (n.file ? n.file.split('/').pop() : (n.method || id)),
+            dir: (!infra && n.file) ? n.file.split('/').slice(-3, -1).join('/') : '' };
+      files.set(fk, g);
+    }
+    g.members.push(id);
+    if (!g.isInfra && LAYER_FLOW.indexOf(n.layer) >= 0 && LAYER_FLOW.indexOf(n.layer) < LAYER_FLOW.indexOf(g.layer)) g.layer = n.layer;
   }
+
+  const colsEl = document.getElementById('columns');
+  colsEl.className = 'struct-flow';
+  colsEl.innerHTML = '';
+  for (const layer of LAYER_FLOW) {
+    const fks = [...files.keys()].filter(fk => files.get(fk).layer === layer)
+      .sort((a, b) => files.get(a).label.localeCompare(files.get(b).label));
+    if (!fks.length) continue;
+    const col = document.createElement('div');
+    col.className = 'column';
+    col.appendChild(mkHead(`${STRUCT_LAYER_HEAD[layer] || layer} · ${fks.length}`));
+    for (const fk of fks) col.appendChild(makeFileCard(fk, files.get(fk), () => setStructFile(svc, key, fk)));
+    colsEl.appendChild(col);
+  }
+  if (!files.size)
+    colsEl.innerHTML = `<div class="browse-empty">이 경로에 연결된 노드가 없습니다.</div>`;
+
+  // 파일 간 관계로 엣지 집계
+  const agg = new Map();
+  for (const e of EDGES) {
+    if (!nodeSet.has(e.source) || !nodeSet.has(e.target)) continue;
+    const s = fileKeyOf(e.source), t = fileKeyOf(e.target);
+    if (s === t || !files.has(s) || !files.has(t)) continue;
+    const kc = kindClass(e), k = s + '|' + t + '|' + kc;
+    let a = agg.get(k);
+    if (!a) { a = { source: s, target: t, kc, count: 0, mode: e.mode }; agg.set(k, a); }
+    a.count++;
+  }
+  currentEdges = [...agg.values()];
+  buildCurrentAdj();
+  requestAnimationFrame(() => { drawConnectors(); applyHighlight(); });
+}
+
+// 파일 단위 노드 카드 (레이어색 보더 + 풀네임 뱃지 + 파일명 + 디렉터리·멤버수)
+const INFRA_CLS = { kafka: 'nc-r-kafka-topic', redis: 'nc-r-redis', db: 'nc-r-db-table', external: 'nc-l-external', other: 'nc-l-other' };
+function makeFileCard(fk, g, onClick) {
+  const card = document.createElement('div');
+  const layerCls = g.isInfra ? (INFRA_CLS[infraGroup(g.members[0])] || 'nc-l-other')
+                             : ('nc-l-' + (LAYER_CLASS[g.layer] || 'other'));
+  card.className = 'node-card struct-file-card ' + layerCls + (fk === state.sel ? ' sel' : '');
+  card.dataset.node = fk;
+  const badge = `<span class="nc-badge">${esc(STRUCT_LAYER_HEAD[g.layer] || g.layer)}</span>`;
+  card.innerHTML = `<div class="nc-top">${badge}<span class="sf-count">${g.members.length}</span></div>`
+    + `<div class="nc-method">${g.isInfra ? '🗄 ' : '📄 '}${esc(g.label)}</div>`
+    + (g.dir ? `<div class="nc-class">${esc(g.dir)}</div>` : '');
+  card.addEventListener('click', onClick);
+  card.addEventListener('mouseenter', () => alignNeighbors(fk));
+  card.addEventListener('mouseleave', () => clearAlign());
+  cardEls.set(fk, card);
+  return card;
+}
+
+// ④ 선택 파일이 쓰는 메서드 구조 — Controller·Service·Repository·Infra 레이어 컬럼
+function renderStructFlow() {
+  const svc = state.structSvc, key = state.structPath, fk = state.structFile;
+  const file = fk && fk.startsWith('file:') ? fk.slice(5) : null;
+  const fileLabel = file ? file.split('/').pop() : (fk || '');
+  const bc = document.getElementById('breadcrumb');
+  bc.style.display = 'flex';
+  bc.innerHTML = `<a class="bc-link" id="bc-struct">🏗️ 어플리케이션구조</a>`
+    + `<span class="bc-sep">›</span>`
+    + `<a class="bc-link" id="bc-svc">${esc(svc)}</a>`
+    + `<span class="bc-sep">›</span>`
+    + `<a class="bc-link" id="bc-path">📁 ${esc(key)}</a>`
+    + `<span class="bc-sep">›</span>`
+    + `<span class="bc-focus">📄 ${esc(fileLabel)}</span>`
+    + `<span class="bc-sep">·</span>`
+    + `<span class="ov-hint">노드의 📌 를 누르면 강조 상태가 고정됩니다 — 여러 노드를 핀으로 누적할 수 있어요</span>`;
+  bc.querySelector('#bc-struct').addEventListener('click', () => setStructure(true));
+  bc.querySelector('#bc-svc').addEventListener('click', () => setStructSvc(svc));
+  bc.querySelector('#bc-path').addEventListener('click', () => setStructPath(svc, key));
+
+  // 시작점: 그 파일에 정의된 메서드들 → 같은 프로젝트 내부 호출 + 인프라까지
+  const roots = file
+    ? NODES.filter(n => n.file === file && n.project === svc).map(n => n.id)
+    : (fk && fk.startsWith('infra:') ? [fk.slice(6)] : []);
+  const nodeSet = collectDownstream(roots, svc);
 
   const colsEl = document.getElementById('columns');
   colsEl.className = 'struct-flow';
@@ -1483,12 +1691,12 @@ function renderStructFlow() {
     const col = document.createElement('div');
     col.className = 'column';
     col.appendChild(mkHead(`${STRUCT_LAYER_HEAD[layer] || layer} · ${ids.length}`));
-    // 노드 클릭 → 메서드 상세를 오른쪽 패널에 표시 (호출관계분석으로 이동하지 않음)
-    for (const id of ids) col.appendChild(makeCard(id, { noCenter: true }));
+    // 노드 클릭 → 메서드 상세를 오른쪽 패널에 표시. 📌 핀으로 강조 상태를 고정(누적)할 수 있다.
+    for (const id of ids) col.appendChild(makeCard(id, { noCenter: true, pin: true }));
     colsEl.appendChild(col);
   }
   if (!nodeSet.size)
-    colsEl.innerHTML = `<div class="browse-empty">이 경로에 연결된 노드가 없습니다.</div>`;
+    colsEl.innerHTML = `<div class="browse-empty">이 파일에서 사용되는 노드가 없습니다.</div>`;
 
   currentEdges = EDGES.filter(e => nodeSet.has(e.source) && nodeSet.has(e.target));
   buildCurrentAdj();
@@ -1686,10 +1894,6 @@ function makeProcessFlow(rootId) {
       const id = r.dataset.node;
       if (nodeById.has(id)) setSel(id);
     });
-    r.querySelector('.flow-recenter')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setFocus(r.dataset.node);
-    });
   });
   return wrap;
 }
@@ -1716,7 +1920,6 @@ function flowRowHtml(id, e, depth) {
     + (cls && n.layer !== 'RESOURCE' && n.layer !== 'EXTERNAL' ? `<span class="flow-class">${esc(cls)}</span>` : '')
     + (relLabel ? `<span class="flow-rel k-${kc}">${esc(relLabel)}</span>` : '')
     + asyncTag + line
-    + `<button class="flow-recenter" title="이 노드를 기준으로 분석">중심 ⟲</button>`
     + `</div>`;
 }
 
@@ -1741,9 +1944,9 @@ function makeCard(id, opts) {
   let badge;
   if (n.layer === 'CONTROLLER' && n.httpMethod) badge = `<span class="nc-badge http ${methodClass(n.httpMethod)}">${esc(n.httpMethod)}</span>`;
   else if (n.layer === 'RESOURCE') badge = `<span class="nc-icon">${RES_ICON[n.resourceType] || '⬡'}</span>`;
-  else if (n.layer === 'EXTERNAL') badge = `<span class="nc-badge">EXT</span>`;
+  else if (n.layer === 'EXTERNAL') badge = `<span class="nc-badge">EXTERNAL</span>`;
   else if (n.layer === 'SCREEN') badge = `<span class="nc-badge screen">🖥 화면</span>`;
-  else badge = `<span class="nc-badge">${esc((n.layer || '').slice(0, 4))}</span>`;
+  else badge = `<span class="nc-badge">${esc(n.layer || 'OTHER')}</span>`;   // 레이어 풀네임
   const asyncTag = n.async ? '<span class="nc-async">async</span>' : '';
 
   let body;
@@ -1762,19 +1965,18 @@ function makeCard(id, opts) {
   }
   const proj = (n.project && (state.focus || opts.showProject) && !opts.inBrowser) ? `<span class="nc-proj">${esc(n.project)}</span>` : '';
 
-  // 액션 버튼
+  // 액션 버튼 (기준 노드 프로세스 펼치기 / 핀 — '중심 ⟲' 재중심 버튼은 제거, 카드 클릭으로 동작)
   let act = '';
-  if (!opts.inBrowser) {
-    if (isFocus) {
-      act = `<button class="nc-act expand">${state.expanded ? '프로세스 접기 ▲' : '프로세스 상세보기 ▼'}</button>`;
-    } else if (!opts.noCenter && (!isInfra(id, n) || opts.onPick)) {
-      act = `<button class="nc-act center" title="이 노드를 기준으로 분석">중심 ⟲</button>`;
-    }
+  if (!opts.inBrowser && isFocus) {
+    act = `<button class="nc-act expand">${state.expanded ? '프로세스 접기 ▲' : '프로세스 상세보기 ▼'}</button>`;
+  } else if (opts.pin) {
+    act = `<button class="nc-act pin" title="핀 — 강조(연결 노드/엣지)를 고정. 여러 노드 핀 가능">📌</button>`;
   }
   card.innerHTML = `${act}<div class="nc-top">${badge}${asyncTag}</div>${body}${proj}`;
+  if (opts.pin && pinned.has(id)) card.classList.add('pinned');
   card.addEventListener('click', (e) => {
     if (e.target.classList.contains('expand')) { toggleExpand(); return; }
-    if (e.target.classList.contains('center')) { opts.onActivate ? opts.onActivate(id) : setFocus(id); return; }
+    if (e.target.classList.contains('pin')) { e.stopPropagation(); togglePin(id); return; }
     if (opts.onPick) { opts.onPick(id); return; }           // 서비스 보기: 노드 클릭 → 활성화된 연결 노드만 단계 필터
     if (opts.onActivate) { opts.onActivate(id); return; }   // 그룹(서비스/인프라) 보기: 노드 클릭 → 드릴다운
     if (opts.inBrowser) { setFocus(id, null); return; }     // 브라우저 엔드포인트 → 호출관계분석
@@ -1807,6 +2009,7 @@ function drawConnectors() {
   svg.setAttribute('width', layer.scrollWidth);
   svg.setAttribute('height', layer.scrollHeight);
   const usedKinds = new Set();
+  const anchors = anchorSet();   // 핀 ∪ hover — 연결된 엣지는 hot, 나머지는 dim
   let paths = '', labels = '';
   for (const e of currentEdges) {
     const sc = cardEls.get(e.source), tc = cardEls.get(e.target);
@@ -1830,7 +2033,7 @@ function drawConnectors() {
     }
     const kc = e.kc || kindClass(e); usedKinds.add(kc);
     const asyncCls = (e.async || e.mode === 'async') ? ' async' : '';
-    const stateCls = hoverId ? (e.source === hoverId || e.target === hoverId ? ' hot' : ' dim') : '';
+    const stateCls = anchors.size ? (anchors.has(e.source) || anchors.has(e.target) ? ' hot' : ' dim') : '';
     const wStyle = e.count ? ` style="stroke-width:${Math.min(7, 1.8 + e.count * 0.7).toFixed(1)}"` : '';
     paths += `<path class="edge-path k-${kc}${asyncCls}${stateCls}" data-s="${escAttr(e.source)}" data-t="${escAttr(e.target)}"${wStyle} `
       + `d="M${x1.toFixed(1)},${y1.toFixed(1)} C${c1x.toFixed(1)},${y1.toFixed(1)} ${c2x.toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" `
@@ -1846,26 +2049,37 @@ function drawConnectors() {
     defs += `<marker id="arr-${kc}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${KIND_COLOR[kc] || '#94a3b8'}"/></marker>`;
   svg.innerHTML = defs + '</defs>' + paths + labels;
 }
-function highlightNeighbors(id) {
+// 강조 기준 집합(anchorSet = 핀 ∪ hover)의 이웃을 살리고 나머지는 dim. (핀이 여럿이면 모든 핀의 이웃을 합집합으로 강조)
+function highlightActive() {
   if (!cardEls.size || !currentEdges.length) return;
-  const neighbors = new Set([id]);
-  (currentAdjOut.get(id) || []).forEach(t => neighbors.add(t));
-  (currentAdjIn.get(id) || []).forEach(s => neighbors.add(s));
+  const anchors = anchorSet();
+  if (!anchors.size) {   // 기준 없음 → 전부 복원
+    document.querySelectorAll('#columns .path-group.dim').forEach(b => b.classList.remove('dim'));
+    for (const [, el] of cardEls) el.classList.remove('dim');
+    return;
+  }
+  const live = new Set();
+  for (const a of anchors) {
+    live.add(a);
+    (currentAdjOut.get(a) || []).forEach(t => live.add(t));
+    (currentAdjIn.get(a) || []).forEach(s => live.add(s));
+  }
   // 박스 단위: 관련 노드가 든 박스는 살리고 나머지 박스는 투명
   const liveBoxes = new Set();
-  for (const nid of neighbors) { const el = cardEls.get(nid); const box = el && el.closest('.path-group'); if (box) liveBoxes.add(box); }
+  for (const nid of live) { const el = cardEls.get(nid); const box = el && el.closest('.path-group'); if (box) liveBoxes.add(box); }
   document.querySelectorAll('#columns .path-group').forEach(box => box.classList.toggle('dim', !liveBoxes.has(box)));
   // 박스에 안 든 카드(예: 호출관계분석 focus 뷰)는 카드 단위로 처리
   for (const [nid, el] of cardEls) {
     if (el.closest('.path-group')) el.classList.remove('dim');
-    else el.classList.toggle('dim', !neighbors.has(nid));
+    else el.classList.toggle('dim', !live.has(nid));
   }
-  // 엣지 강조는 drawConnectors(hoverId)에서 처리
+  // 엣지 강조는 drawConnectors 가 anchorSet 기준으로 처리
 }
 function applyHighlight() {
   for (const [nid, el] of cardEls) { el.classList.remove('dim'); el.classList.toggle('sel', nid === state.sel); }
   document.querySelectorAll('#columns .path-group.dim').forEach(b => b.classList.remove('dim'));
   document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('dim'); p.classList.remove('hot'); });
+  if (pinned.size) { highlightActive(); drawConnectors(); }   // 핀 강조는 sel 변경(상세 패널 클릭) 후에도 유지
 }
 
 // 호출/피호출 관계가 없는 고아노드 숨김 (currentEdges 기준)
@@ -1914,6 +2128,17 @@ function applyPickFilter() {
 // hover 시 연결된 노드를 hover 노드와 같은 행(Y)으로 부드럽게 이동
 let alignRAF = null, alignFrames = 0;
 let hoverId = null;            // 현재 hover한 노드 (커넥터 강조용)
+const pinned = new Set();      // 핀 고정된 노드 — hover 가 끝나도 강조 상태를 유지(누적 가능)
+// 현재 강조 기준 노드 집합 = 핀 ∪ (hover 중이면 그 노드). 박스·카드·엣지 강조가 모두 이 집합을 기준으로 한다.
+function anchorSet() { const s = new Set(pinned); if (hoverId) s.add(hoverId); return s; }
+// 핀 토글 — 강조 상태를 고정/해제한다 (structFlow 단계 카드의 📌 버튼)
+function togglePin(id) {
+  if (pinned.has(id)) pinned.delete(id); else pinned.add(id);
+  const el = cardEls.get(id);
+  if (el) el.classList.toggle('pinned', pinned.has(id));
+  if (hoverId || pinned.size) highlightActive(); else applyHighlight();
+  animateConnectors();
+}
 function animateConnectors() {
   alignFrames = 18;
   if (alignRAF) return;
@@ -1935,7 +2160,7 @@ function resetMovers() {
 //   박스 통째로 옮기면 위치가 붕괴한다. 그래서 박스가 아니라 카드 한 장만 떠올린다(card-lift).
 function alignNeighbors(id) {
   hoverId = id;
-  highlightNeighbors(id);
+  highlightActive();
   const hc = cardEls.get(id);
   if (!hc || !currentEdges.length) { animateConnectors(); return; }
   const z = state.zoom || 1;
@@ -1984,7 +2209,8 @@ function alignNeighbors(id) {
 function clearAlign() {
   hoverId = null;
   resetMovers();
-  applyHighlight();
+  if (pinned.size) highlightActive();   // 핀이 있으면 hover 해제 후에도 핀 강조 유지
+  else applyHighlight();
   animateConnectors();
 }
 
@@ -2246,6 +2472,7 @@ function onKeydown(e) {
     if (state.view) { const m = featureViews.get(state.view); (m && m.escape) ? m.escape() : setOverview(true); return; }
     if (state.overview) return;   // 전체보기는 홈 — Esc 로 빠져나가지 않음
     if (state.service && state.svcPick) { setServicePick(state.svcPick); return; }
+    if (state.structFile) { setStructPath(state.structSvc, state.structPath); return; }
     if (state.structPath) { setStructSvc(state.structSvc); return; }   // 흐름 → 경로 그룹
     if (state.structSvc) { setStructure(true); return; }               // 경로 그룹 → picker
     if (state.service || state.infraType) { setOverview(true); return; }
@@ -2259,6 +2486,7 @@ function onKeydown(e) {
     if (state.view) { e.preventDefault(); const m = featureViews.get(state.view); (m && m.escape) ? m.escape() : setOverview(true); return; }
     if (state.overview) return;   // 전체보기는 홈 — Backspace 로 빠져나가지 않음
     if (state.service && state.svcPick) { e.preventDefault(); setServicePick(state.svcPick); return; }
+    if (state.structFile) { e.preventDefault(); setStructPath(state.structSvc, state.structPath); return; }
     if (state.structPath) { e.preventDefault(); setStructSvc(state.structSvc); return; }
     if (state.structSvc) { e.preventDefault(); setStructure(true); return; }
     if (state.service || state.infraType) { e.preventDefault(); setOverview(true); return; }
@@ -2336,7 +2564,7 @@ function urlParamOf(name) {
 function openView(view, params) {
   if (!FEATURE_OF_VIEW[view]) return;
   state.view = view;
-  state.overview = false; state.structure = false; state.structSvc = null; state.structPath = null; state.service = null; state.infraType = null; state.svcPick = null;
+  state.overview = false; state.structure = false; state.structSvc = null; state.structPath = null; state.structFile = null; state.service = null; state.infraType = null; state.svcPick = null;
   state.focus = null; state.fromService = null; state.fromOverview = false; state.expanded = false;
   state.sel = null;
   pushViewUrl(view, params || {});
@@ -2393,7 +2621,7 @@ window.Flowmap = {
   setCanvasEdges(edges) { currentEdges = edges; buildCurrentAdj(); },
   drawConnectors, pruneOrphans, applyHighlight,
   // 네비게이션 / 상태
-  setFocus, setService, setOverview, setStructure, setStructSvc, setStructPath, setSel, setInfraType, clearFocus,
+  setFocus, setService, setOverview, setStructure, setStructSvc, setStructPath, setStructFile, setSel, setInfraType, clearFocus,
   // 하단 프로세스 독 — 기능 뷰에서 state.sel 기준으로 표시 (on=true 후 setSel 로 base 지정)
   setProcessDockEnabled(on) { dockFeature = !!on; renderProcessDock(); },
   openView, pushViewUrl, param: urlParamOf, renderDetail,

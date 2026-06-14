@@ -356,7 +356,7 @@
     const grid = el('div', 'doc-svc-grid');
     for (const [svc, count] of serviceCounts()) {
       const card = el('div', 'doc-svc-card',
-        `<div class="doc-svc-name">🧩 ${FM.esc(svc)}</div>` +
+        `<div class="doc-svc-name">${FM.esc(svc)}</div>` +
         `<div class="doc-svc-count">${count} endpoints</div>`);
       card.addEventListener('click', () => { pushApiUrl({ asvc: svc }); render(); });
       grid.appendChild(card);

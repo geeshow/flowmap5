@@ -324,9 +324,14 @@ body { display: flex; flex-direction: row; height: 100vh; overflow: hidden; }
 #columns.struct-paths { display: flex; flex-wrap: wrap; gap: 14px; align-content: flex-start; width: 100%; max-width: 980px; padding: 4px 2px; }
 .struct-path-card { width: 220px; padding: 12px 14px; border-left: 4px solid var(--c-controller); background: linear-gradient(180deg, #ffffff, #f3f6fa); }
 .struct-path-card .ov-svc-name { font-family: ui-monospace, monospace; }
-/* ③ 레이어별 프로세스 흐름 (Controller→…→Infra 컬럼) */
+/* ③④ 레이어별 흐름 (파일 단위 / 메서드 단위 공용 컬럼) */
 #columns.struct-flow { display: flex; gap: 56px; align-items: flex-start; padding: 4px 2px; }
 #columns.struct-flow .column { gap: 12px; min-width: 210px; }
+/* 파일 단위 노드 카드 */
+.struct-file-card { width: 210px; padding: 10px 12px; background: linear-gradient(180deg, #ffffff, #f3f6fa); }
+.struct-file-card .nc-method { font-size: 13px; word-break: break-all; }
+.struct-file-card .sf-count { margin-left: auto; font-size: 10px; font-weight: 700; color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: 9px; padding: 1px 7px; }
+.struct-file-card .nc-top { display: flex; align-items: center; gap: 6px; }
 /* 서비스 보기 노드 카드 — 전체보기 카드 외형으로 통일 (정보는 유지) */
 #columns.svc-view .node-card { background: linear-gradient(180deg, #ffffff, #f3f6fa); border-radius: 10px; padding: 11px 12px; }
 #columns.svc-view .node-card:hover { box-shadow: 0 6px 18px rgba(15, 23, 42, .16); }
@@ -504,11 +509,14 @@ body { display: flex; flex-direction: row; height: 100vh; overflow: hidden; }
   font-size: 9px; padding: 2px 7px; border-radius: 10px; font-weight: 700;
   border: 1px solid var(--border); background: var(--bg-input); color: var(--text-dim);
 }
-.nc-act.center { display: none; }
-.node-card:hover .nc-act.center { display: block; }
-.nc-act.center:hover { background: #fbbf24; color: #422006; border-color: #fbbf24; }
 .nc-act.expand { background: #fbbf24; color: #422006; border-color: #fbbf24; }
 .nc-act.expand:hover { filter: brightness(1.08); }
+/* 핀 버튼: 평소엔 카드 hover 시에만 보이고, 핀이 걸린 카드는 항상 강조 표시 */
+.nc-act.pin { display: none; padding: 1px 5px; font-size: 11px; line-height: 1.3; opacity: 0.6; }
+.node-card:hover .nc-act.pin { display: block; }
+.nc-act.pin:hover { opacity: 1; border-color: #fbbf24; }
+.node-card.pinned .nc-act.pin { display: block; opacity: 1; background: #fbbf24; border-color: #fbbf24; }
+.node-card.pinned { box-shadow: 0 0 0 2px #fbbf24, var(--card-shadow, 0 1px 2px rgba(0,0,0,.15)); }
 
 /* resource 카드는 아이콘 강조 */
 .nc-icon { font-size: 12px; }
@@ -542,13 +550,6 @@ body { display: flex; flex-direction: row; height: 100vh; overflow: hidden; }
 .flow-rel.k-join { background: var(--e-join); }
 .flow-async { font-size: 8px; color: #c4b5fd; font-weight: 700; flex-shrink: 0; }
 .flow-line { font-size: 9px; color: var(--text-dim); font-family: ui-monospace, monospace; flex-shrink: 0; }
-.flow-recenter {
-  margin-left: auto; flex-shrink: 0; display: none; cursor: pointer;
-  font-size: 8px; padding: 1px 6px; border-radius: 8px; font-weight: 700;
-  background: var(--bg-input); color: var(--text-dim); border: 1px solid var(--border);
-}
-.flow-row:hover .flow-recenter { display: block; }
-.flow-recenter:hover { background: #fbbf24; color: #422006; border-color: #fbbf24; }
 
 /* ---------- 커넥터 ---------- */
 .edge-path { fill: none; stroke-width: 1.6; transition: opacity .12s, stroke-width .12s; }
