@@ -131,6 +131,11 @@
   font-size: 10px;
   color: var(--text-dim);
 }
+.imp-cauthor {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
 .imp-time {
   margin-left: auto;
   flex-shrink: 0;

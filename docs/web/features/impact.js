@@ -347,6 +347,7 @@
         `<div class="imp-crow1">${projChip}<span class="imp-csha">${FM.esc(c._pull != null ? '#' + c._pull : c.shortSha)}</span>` +
           `<span class="imp-time">${FM.esc(fmtTime(c.date))}</span></div>` +
         `<div class="imp-csubj" title="${FM.escAttr(c.subject)}">${FM.esc(c.subject)}</div>` +
+        (c.author ? `<div class="imp-cauthor">👤 ${FM.esc(c.author)}</div>` : '') +
         `<div class="imp-cchips">` +
           (noCode
             ? `<span class="imp-cc none">코드 영향 없음</span><span class="imp-cc">파일 ${c.changedFiles.length}</span>`
