@@ -64,7 +64,7 @@ const state = {
   down: 2,
   hideOther: true,           // OTHER 레이어 노이즈는 항상 숨김
   hideOrphans: true,         // 호출/피호출 관계 없는 고아노드 숨김 (기본 켜짐)
-  zoom: 0.8,                 // 트랙패드 핀치 확대/축소 배율 (기본 살짝 축소)
+  zoom: 0.9,                 // 트랙패드 핀치 확대/축소 배율 (기본 살짝 축소)
 };
 const ZOOM_MIN = 0.3, ZOOM_MAX = 3;
 
@@ -2895,7 +2895,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '27';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '29';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }

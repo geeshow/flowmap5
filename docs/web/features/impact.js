@@ -88,89 +88,39 @@
     return n.layer === 'RESOURCE';   // db-table·redis·kafka-topic = 인프라 경계(유출측)
   }
 
-  // 프론트 측 노드(화면·프론트 외부호출·프론트 모노레포 API) — 엔드포인트 탐색이 여기로
-  // 넘어가면 화면/배선을 엔드포인트로 오인하므로 역방향 DFS의 경계로 삼아 막는다.
-  function isFrontNode(n) {
-    return !!n && (n.layer === 'SCREEN' || n.layer === 'API'
-      || (n.layer === 'EXTERNAL' && frontProjects().has(n.project)));
-  }
+  /* ───────── 영향 전파 ─────────
+   * 영향 엔드포인트(impactedEndpoints)는 백엔드가 PR별로 사전계산해 인덱스에 넣어준다 —
+   * 목록 "영향 N"·미선택 집계표는 샤드 없이 인덱스만으로 그린다. 변경 시드(changedApiMethods,
+   * 비-private)는 샤드에 있고 그래프 뷰(커밋 클릭)에서 "수정된 메서드" 강조에만 쓰인다. */
 
-  /* ───────── 영향 전파 (실시간 BFS) ─────────
-   * 백엔드 impact.json은 git 측 사실(변경 메서드 + 삭제)만 준다. "그 변경이 어떤
-   * 엔드포인트에 닿나"(impactedEndpoints / endpointImpact)는 여기서 메모리 콜그래프를
-   * 호출자 방향(FM.inEdges)으로 MAX_UP hop 역추적해 직접 만든다 — 그래프 그리기와
-   * 동일한 깊이 정책. 결과는 커밋/모듈에 캐시한다(세션 동안 그래프·데이터 불변). */
+  // 커밋이 영향 주는 엔드포인트(레퍼런스 배열) — 인덱스 사전계산값.
+  function commitImpactedEndpoints(c) { return (c && c.impactedEndpoints) || []; }
 
-  // 영향 "엔드포인트" = 백엔드 CONTROLLER(서비스의 API 표면)만. 프론트 SCREEN/외부호출 노드도
-  // endpoint·httpMethod 속성을 갖지만 엔드포인트가 아니라 유입(화면) 측 배선이므로 제외한다.
-  function isBackendEndpoint(n) { return !!n && n.layer === 'CONTROLLER'; }
-
-  function endpointRefFromId(id) {
-    const n = FM.nodeById.get(id);
-    if (!n) return null;
-    return { id, httpMethod: n.httpMethod, endpoint: n.endpoint,
-      service: n.project || n.externalService, description: n.description };
-  }
-
-  // DFS 시드 = 변경된 "공개 메서드". 새 impact 스키마(changedPublicMethods, 또는
-  // changedNodes[].public/visibility)가 있으면 공개 메서드만 시드로 쓰고, 없으면(구 스키마)
-  // inGraph 변경 노드 전체로 폴백한다 — 호출그래프 역추적의 출발점.
-  function changedSeedIds(c) {
-    if (Array.isArray(c.changedPublicMethods) && c.changedPublicMethods.length)
-      return c.changedPublicMethods.filter(id => FM.nodeById.has(id));
-    const cn = c.changedNodes || [];
-    const hasVis = cn.some(n => n.public != null || n.visibility != null);
-    const pick = hasVis
-      ? cn.filter(n => n.public === true || n.visibility === 'public')
-      : cn;
-    return pick.filter(n => n.inGraph).map(n => n.id).filter(id => FM.nodeById.has(id));
-  }
-
-  // 공개 메서드 시드 → 호출자 방향으로 콜그래프를 거슬러 올라가며(역방향 DFS, 깊이 무제한)
-  // 닿는 백엔드 CONTROLLER 엔드포인트를 모두 모은다(시드 자신이 컨트롤러면 포함).
-  // 프론트(SCREEN/프론트 외부호출/모노레포 API) 노드로는 넘어가지 않는다 — 화면은 엔드포인트가
-  // 아니라 유입측이며 renderGraph 의 경계 투영이 따로 잇는다. visited 집합으로만 경계를 둔다.
-  function impactedEndpointIds(seedIds) {
-    const found = new Set();
-    const seen = new Set();
-    const stack = [];
-    for (const id of seedIds) {
-      if (FM.nodeById.has(id) && !seen.has(id)) { seen.add(id); stack.push(id); }
-    }
-    while (stack.length) {
-      const cur = stack.pop();
-      if (isBackendEndpoint(FM.nodeById.get(cur))) found.add(cur);
-      for (const e of (FM.inEdges.get(cur) || [])) {
-        const s = e.source, sn = FM.nodeById.get(s);
-        if (!sn || seen.has(s) || isFrontNode(sn)) continue;
-        seen.add(s); stack.push(s);
-      }
-    }
-    return found;
-  }
-
-  // 커밋이 영향 주는 엔드포인트(레퍼런스 배열). c._impEps 에 캐시.
-  function commitImpactedEndpoints(c) {
-    if (c._impEps) return c._impEps;
-    c._impEps = [...impactedEndpointIds(changedSeedIds(c))].map(endpointRefFromId).filter(Boolean);
-    return c._impEps;
-  }
-
-  // 집계: 엔드포인트 → 영향 준 커밋 목록(역인덱스). data._endpointImpact 에 캐시.
+  // 집계: 엔드포인트 → 영향 준 커밋 목록(역인덱스). 인덱스의 PR별 impactedEndpoints 를 뒤집는다.
   function getEndpointImpact() {
     if (data._endpointImpact) return data._endpointImpact;
-    const byEp = new Map();   // epId -> Set(shortSha)
+    const byEp = new Map();   // epId -> { ref, shas:Set }
     (data.commits || []).forEach(c => {
       commitImpactedEndpoints(c).forEach(ep => {
-        if (!byEp.has(ep.id)) byEp.set(ep.id, new Set());
-        byEp.get(ep.id).add(c.shortSha);
+        if (!byEp.has(ep.id)) byEp.set(ep.id, { ref: ep, shas: new Set() });
+        byEp.get(ep.id).shas.add(c.shortSha);
       });
     });
-    data._endpointImpact = [...byEp.entries()].map(([id, shas]) => {
-      const ref = endpointRefFromId(id) || { id };
-      return Object.assign(ref, { commits: [...shas] });
-    }).sort((a, b) => b.commits.length - a.commits.length);
+    data._endpointImpact = [...byEp.values()]
+      .map(({ ref, shas }) => Object.assign({}, ref, { commits: [...shas] }))
+      .sort((a, b) => b.commits.length - a.commits.length);
     return data._endpointImpact;
+  }
+
+  // 그래프 뷰의 "수정된 public 메서드(비-private)" 강조 시드 — 샤드(상세)의 changedApiMethods.
+  function changedSeedIds(c) {
+    const seeds = commitDetail(c).changedApiMethods || c.changedApiMethods || c.changedPublicMethods;
+    if (Array.isArray(seeds) && seeds.length) return seeds.filter(id => FM.nodeById.has(id));
+    // 폴백(구 스키마): changedNodes 에서 비-private 추출.
+    const cn = commitDetail(c).changedNodes;
+    const hasVis = cn.some(n => n.visibility != null);
+    const pick = hasVis ? cn.filter(n => n.visibility !== 'private') : cn;
+    return pick.filter(n => n.inGraph).map(n => n.id).filter(id => FM.nodeById.has(id));
   }
 
   // 매니페스트가 있으면 프로젝트별 <project>.impact.json 들을 병합, 없으면 단일 impact.json 폴백
@@ -192,20 +142,36 @@
     const repo = part.repoUrl ? part.repoUrl.replace(/\/+$/, '') : '';
     part.branch = part.base;
     part.commitCount = part.pullCount != null ? part.pullCount : part.pulls.length;
-    part.commits = part.pulls.map(p => ({
-      sha: p.mergeCommit,
-      shortSha: 'PR' + p.number,
-      author: p.author,
-      date: p.mergedAt,
-      subject: p.title,
-      commitUrl: repo ? repo + '/pull/' + p.number : null,
-      changedFiles: p.changedFiles || [],
-      changedNodes: p.changedNodes || [],
-      changedPublicMethods: p.changedPublicMethods || [],
-      deletedNodes: p.deletedNodes || [],
-      deletedEndpoints: p.deletedEndpoints || [],
-      _pull: p.number,
-    }));
+    part.commits = part.pulls.map(p => {
+      // 인덱스(목록)에는 시드 id(changedApiMethods=비-private)와 카운트만 — 무거운 changedNodes는
+      // PR별 샤드(<base>.impact/<번호>.json)에 있고 커밋 클릭 시 lazy 로드한다.
+      const c = {
+        sha: p.mergeCommit,
+        shortSha: 'PR' + p.number,
+        author: p.author,
+        date: p.mergedAt,
+        subject: p.title,
+        commitUrl: repo ? repo + '/pull/' + p.number : null,
+        changedNodeCount: p.changedNodeCount != null ? p.changedNodeCount
+          : (Array.isArray(p.changedNodes) ? p.changedNodes.length : 0),
+        changedFileCount: p.changedFileCount != null ? p.changedFileCount
+          : (Array.isArray(p.changedFiles) ? p.changedFiles.length : 0),
+        impactedEndpoints: p.impactedEndpoints || [],   // 백엔드 사전계산 (목록/집계용)
+        _pull: p.number,
+      };
+      // 구(舊) 인라인 스키마(changedNodes/Files 포함)면 상세를 이미 가진 것으로 취급 — 샤드 페치 생략.
+      if (Array.isArray(p.changedNodes) || Array.isArray(p.changedFiles)) {
+        c._detail = {
+          changedNodes: p.changedNodes || [],
+          changedApiMethods: p.changedApiMethods || p.changedPublicMethods || [],
+          changedFiles: p.changedFiles || [],
+          deletedNodes: p.deletedNodes || [],
+          deletedEndpoints: p.deletedEndpoints || [],
+        };
+        c._detailLoaded = true;
+      }
+      return c;
+    });
     // impactedEndpoints / endpointImpact 는 백엔드가 더 이상 주지 않는다 — UI 가 live BFS 로 만든다.
     return part;
   }
@@ -234,9 +200,11 @@
           const proj = part.repoUrl
             ? part.repoUrl.replace(/\/+$/, '').split('/').pop()
             : f.replace(/\.impact\.json$/, '');
+          const shardBase = f.replace(/\.json$/, '');   // "<project>.impact" — 샤드 디렉터리 베이스
           part.commits.forEach(c => {
             if (part.repoUrl && !c._repoUrl) c._repoUrl = part.repoUrl;
             if (!c._project) c._project = proj;
+            if (!c._shardBase) c._shardBase = shardBase;
           });
         }
         return part;
@@ -249,6 +217,26 @@
       }
     }
     return data;
+  }
+
+  /* ───────── 커밋 상세 lazy 로딩 ─────────
+   * 인덱스에는 목록/시드만 있고 무거운 changedNodes 상세는 PR별 샤드에 있다.
+   * 커밋을 열 때만 data/<base>.impact/<번호>.json 을 가져와 c._detail 에 붙인다(1회 캐시). */
+  function commitDetail(c) {
+    return (c && c._detail) || { changedNodes: [], changedApiMethods: [], changedFiles: [], deletedNodes: [], deletedEndpoints: [] };
+  }
+  async function ensureShard(c) {
+    if (!c || c._detailLoaded) return;
+    c._detailLoaded = true;   // 동시/중복 페치 가드 (실패해도 빈 상세로 둔다)
+    if (!c._shardBase || c._pull == null) return;
+    const s = await FM.fetchData(`data/${c._shardBase}/${c._pull}.json`);   // 404면 null
+    if (s) c._detail = {
+      changedNodes: s.changedNodes || [], changedApiMethods: s.changedApiMethods || [],
+      changedFiles: s.changedFiles || [], deletedNodes: s.deletedNodes || [], deletedEndpoints: s.deletedEndpoints || [],
+    };
+  }
+  function ensureShards(shas) {
+    return Promise.all(shas.map(sha => ensureShard(commitBySha.get(sha))));
   }
 
   /* ───────── URL 상태 ───────── */
@@ -321,10 +309,24 @@
 
     const main = el('div', 'imp-main');
     cols.appendChild(main);
-    if (selected.length) renderGraph(main, selected, ep);
-    else renderAggregate(main, ep);
-
-    requestAnimationFrame(() => { FM.drawConnectors(); FM.applyHighlight(); });
+    if (selected.length) {
+      // 커밋 선택 시에만 그 PR들의 상세 샤드를 lazy 로드한 뒤 그래프를 그린다.
+      const seq = renderSeq;
+      const allLoaded = selected.every(s => (commitBySha.get(s) || {})._detailLoaded);
+      const draw = () => {
+        if (renderSeq !== seq) return;
+        renderGraph(main, selected, ep);
+        requestAnimationFrame(() => { FM.drawConnectors(); FM.applyHighlight(); });
+      };
+      if (allLoaded) { draw(); }
+      else {
+        main.innerHTML = '<div class="imp-loading">상세 불러오는 중…<div class="imp-skel"></div><div class="imp-skel"></div></div>';
+        ensureShards(selected).then(() => { if (renderSeq === seq) { main.innerHTML = ''; draw(); } });
+      }
+    } else {
+      renderAggregate(main, ep);
+      requestAnimationFrame(() => { FM.drawConnectors(); FM.applyHighlight(); });
+    }
   }
 
   function drawBreadcrumb(selected) {
@@ -411,10 +413,10 @@
     const on = selSet.has(c.shortSha);
     const card = el('div', 'imp-commit' + (on ? ' on' : ''));
     card.dataset.search =
-      (c.author + ' ' + c.subject + ' ' + c.shortSha + ' ' + (c.changedFiles || []).join(' ')).toLowerCase();
+      (c.author + ' ' + c.subject + ' ' + c.shortSha).toLowerCase();   // 파일명은 샤드라 필터 제외
     card.dataset.day = fmtDay(c.date);
 
-    const noCode = !(c.changedNodes && c.changedNodes.length);
+    const noCode = !c.changedNodeCount;
     const link = commitUrl(c);
     const proj = c._project || '';
     const h = projectHue(proj);
@@ -431,8 +433,9 @@
         (c.author ? `<div class="imp-cauthor">👤 ${FM.esc(c.author)}</div>` : '') +
         `<div class="imp-cchips">` +
           (noCode
-            ? `<span class="imp-cc none">코드 영향 없음</span><span class="imp-cc">파일 ${c.changedFiles.length}</span>`
-            : `<span class="imp-cc">변경 ${c.changedNodes.length}</span><span class="imp-cc">영향 ${commitImpactedEndpoints(c).length}</span>`) +
+            ? `<span class="imp-cc none">코드 영향 없음</span><span class="imp-cc">파일 ${c.changedFileCount}</span>`
+            : `<span class="imp-cc chg">◆ 변경 <b>${c.changedNodeCount}</b></span>` +
+              `<span class="imp-cc imp">◇ 영향 <b>${commitImpactedEndpoints(c).length}</b></span>`) +
         `</div>` +
       `</div>` +
       (link
@@ -531,13 +534,13 @@
     selected.forEach(sha => {
       const c = commitBySha.get(sha);
       if (!c) return;
-      (c.changedNodes || []).forEach(n => {
+      commitDetail(c).changedNodes.forEach(n => {   // 샤드(상세)에서 — paint()가 렌더 전 lazy 로드
         if (!n.inGraph) { outOfGraph.push({ id: n.id, sha }); return; }
         if (!changedSha.has(n.id)) changedSha.set(n.id, []);
         changedSha.get(n.id).push(sha);
       });
       commitImpactedEndpoints(c).forEach(e => epIds.add(e.id));
-      (c.changedFiles || []).forEach(f => allFiles.push({ sha, file: f }));
+      commitDetail(c).changedFiles.forEach(f => allFiles.push({ sha, file: f }));   // 샤드(상세)
     });
 
     const changedInGraph = [...changedSha.keys()].filter(id => FM.nodeById.has(id));
