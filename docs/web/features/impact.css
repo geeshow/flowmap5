@@ -306,6 +306,14 @@
   width: max-content;
 }
 .imp-graph .column.imp-base .column-head { color: var(--imp-changed); }
+/* 변경·영향 엔드포인트 = 영향의 핵심 영역. 주황 테두리 박스로 한눈에 띄게 묶는다. */
+.imp-graph .column.imp-base {
+  padding: 12px 14px 16px;
+  border: 2px solid var(--imp-changed);
+  border-radius: 16px;
+  background: var(--imp-tint);
+  box-shadow: 0 0 0 4px rgba(249,115,22,.07), 0 8px 26px rgba(249,115,22,.14);
+}
 
 /* 변경 노드 ◆ — 2px 주황 실선 링 */
 .node-card.imp-changed {
@@ -344,6 +352,27 @@
 .imp-flag.screen { background: transparent; color: var(--c-screen);   border: 1px solid var(--c-screen); }
 .imp-flag.ext    { background: transparent; color: var(--c-external); border: 1px solid var(--c-external); }
 .imp-flag.res    { background: transparent; color: var(--c-kafka);    border: 1px solid var(--c-kafka); }
+
+/* ───────── 프로세스 흐름 독: 실제 수정된 public 메서드 강조 ───────── */
+.dock-node.dock-changed {
+  border-color: var(--imp-changed);
+  background: var(--imp-tint);
+  box-shadow: 0 0 0 2px var(--imp-changed), 0 0 14px rgba(249,115,22,.45);
+}
+.dock-node.dock-changed::after {
+  content: '✎ 수정';
+  position: absolute;
+  top: -7px; right: -5px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: var(--imp-changed);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.4);
+  pointer-events: none;
+}
 
 /* ───────── 집계 테이블 (커밋 미선택) ───────── */
 .imp-epfilter {

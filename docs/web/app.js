@@ -719,7 +719,8 @@ const DOCK_CHIP_COLOR = { Kafka: '--c-kafka', Redis: '--c-redis', DB: '--c-db' }
 function dockCardEl(id, rootId) {
   const n = nodeById.get(id);
   const el = document.createElement('div');
-  el.className = 'dock-node' + (id === rootId ? ' root' : '');
+  const changed = dockFeature && dockChangedNodes.has(id);   // 이 커밋에서 실제 수정된 (public) 메서드
+  el.className = 'dock-node' + (id === rootId ? ' root' : '') + (changed ? ' dock-changed' : '');
   el.dataset.node = id;
   el.style.setProperty('--lc', (layerColor(n) || '#9ca3af').trim());
   let badge, ep = '', sub = n.fqcn && n.fqcn !== n.id ? shortClass(n.fqcn) : '';
@@ -811,6 +812,7 @@ function layerCallDepth(nids, edgeList) {
 
 let dockDraw = null;     // 창 크기 변경 시 재그리기용
 let dockFeature = false;  // 기능 뷰(커밋 영향도 등)가 state.sel 기준으로 프로세스 독을 요청
+let dockChangedNodes = new Set();  // 기능 뷰가 지정한 "실제 수정된 메서드" id — 독 카드에서 강조
 function renderProcessDock() {
   const dock = document.getElementById('process-dock');
   // 서비스 보기 = svcPick 기준(현재 컬럼 엣지), 기능 뷰 = 선택 노드(state.sel) 기준(실제 그래프 체인)
@@ -2893,7 +2895,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '25';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '27';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
@@ -2953,6 +2955,7 @@ function renderFeatureView() {
   document.getElementById('svc-filter-wrap')?.remove();
   document.getElementById('process-dock').classList.add('hidden');
   dockFeature = false;   // 기능 전환 시 독 요청 초기화 — 해당 모듈이 다시 켠다
+  dockChangedNodes = new Set();
   currentEdges = []; buildCurrentAdj();
   document.getElementById('connectors').innerHTML = '';
   const cols = document.getElementById('columns');
@@ -2991,7 +2994,9 @@ window.Flowmap = {
   // 네비게이션 / 상태
   setFocus, setService, setOverview, setStructure, setStructSvc, setStructPath, setStructFile, setSel, setInfraType, clearFocus,
   // 하단 프로세스 독 — 기능 뷰에서 state.sel 기준으로 표시 (on=true 후 setSel 로 base 지정)
-  setProcessDockEnabled(on) { dockFeature = !!on; renderProcessDock(); },
+  setProcessDockEnabled(on) { dockFeature = !!on; if (!on) dockChangedNodes = new Set(); renderProcessDock(); },
+  // 프로세스 독에서 강조할 "실제 수정된 메서드" id 집합 지정 (기능 뷰 전용)
+  setDockChangedNodes(ids) { dockChangedNodes = ids instanceof Set ? ids : new Set(ids || []); renderProcessDock(); },
   openView, pushViewUrl, param: urlParamOf, renderDetail,
   // 모듈 등록 / 데이터 로드
   registerView(view, mod) { featureViews.set(view, mod); },
