@@ -88,6 +88,67 @@
     return n.layer === 'RESOURCE' && n.resourceType === 'kafka-topic';
   }
 
+  /* ───────── 영향 전파 (실시간 BFS) ─────────
+   * 백엔드 impact.json은 git 측 사실(변경 메서드 + 삭제)만 준다. "그 변경이 어떤
+   * 엔드포인트에 닿나"(impactedEndpoints / endpointImpact)는 여기서 메모리 콜그래프를
+   * 호출자 방향(FM.inEdges)으로 MAX_UP hop 역추적해 직접 만든다 — 그래프 그리기와
+   * 동일한 깊이 정책. 결과는 커밋/모듈에 캐시한다(세션 동안 그래프·데이터 불변). */
+
+  function isImpactEndpoint(n) { return !!n && (n.endpoint != null || n.httpMethod != null); }
+
+  function endpointRefFromId(id) {
+    const n = FM.nodeById.get(id);
+    if (!n) return null;
+    return { id, httpMethod: n.httpMethod, endpoint: n.endpoint,
+      service: n.project || n.externalService, description: n.description };
+  }
+
+  // 변경 노드 집합 → 호출자 방향 MAX_UP hop 안에서 닿는 엔드포인트 노드 id 집합
+  // (변경 노드 자신이 엔드포인트면 포함 — 백엔드 reverse-BFS 의미와 일치).
+  function impactedEndpointIds(changedIds) {
+    const found = new Set();
+    const depthOf = new Map();
+    const queue = [];
+    for (const id of changedIds) {
+      if (FM.nodeById.has(id) && !depthOf.has(id)) { depthOf.set(id, 0); queue.push(id); }
+    }
+    for (let i = 0; i < queue.length; i++) {
+      const cur = queue[i];
+      const d = depthOf.get(cur);
+      if (isImpactEndpoint(FM.nodeById.get(cur))) found.add(cur);
+      if (d >= MAX_UP) continue;
+      for (const e of (FM.inEdges.get(cur) || [])) {
+        if (!depthOf.has(e.source)) { depthOf.set(e.source, d + 1); queue.push(e.source); }
+      }
+    }
+    return found;
+  }
+
+  // 커밋이 영향 주는 엔드포인트(레퍼런스 배열). c._impEps 에 캐시.
+  function commitImpactedEndpoints(c) {
+    if (c._impEps) return c._impEps;
+    const changed = (c.changedNodes || []).filter(n => n.inGraph).map(n => n.id);
+    c._impEps = [...impactedEndpointIds(changed)].map(endpointRefFromId).filter(Boolean);
+    return c._impEps;
+  }
+
+  // 집계: 엔드포인트 → 영향 준 커밋 목록(역인덱스). data._endpointImpact 에 캐시.
+  function getEndpointImpact() {
+    if (data._endpointImpact) return data._endpointImpact;
+    const byEp = new Map();   // epId -> Set(shortSha)
+    (data.commits || []).forEach(c => {
+      commitImpactedEndpoints(c).forEach(ep => {
+        if (!byEp.has(ep.id)) byEp.set(ep.id, new Set());
+        byEp.get(ep.id).add(c.shortSha);
+      });
+    });
+    data._endpointImpact = [...byEp.entries()].map(([id, shas]) => {
+      const ref = endpointRefFromId(id) || { id };
+      return Object.assign(ref, { commits: [...shas] });
+    }).sort((a, b) => b.commits.length - a.commits.length);
+    return data._endpointImpact;
+  }
+
   // 매니페스트가 있으면 프로젝트별 <project>.impact.json 들을 병합, 없으면 단일 impact.json 폴백
   function impactFiles() {
     const projs = FM.MANIFEST && FM.MANIFEST.projects;
@@ -118,21 +179,16 @@
       changedNodes: p.changedNodes || [],
       deletedNodes: p.deletedNodes || [],
       deletedEndpoints: p.deletedEndpoints || [],
-      impactedEndpoints: p.impactedEndpoints || [],
-      impactedServices: p.impactedServices || [],
       _pull: p.number,
     }));
-    (part.endpointImpact || []).forEach(e => {
-      if (!e.commits && Array.isArray(e.pulls)) e.commits = e.pulls.map(n => 'PR' + n);
-    });
+    // impactedEndpoints / endpointImpact 는 백엔드가 더 이상 주지 않는다 — UI 가 live BFS 로 만든다.
     return part;
   }
   function mergeImpact(parts) {
-    const out = { branch: parts[0].branch, depth: parts[0].depth, commits: [], endpointImpact: [],
+    const out = { branch: parts[0].branch, commits: [],
       commitCount: 0, changedNodeCount: 0, deletedEndpointCount: 0, breakingDeletionCount: 0 };
     for (const p of parts) {
       if (Array.isArray(p.commits)) out.commits.push(...p.commits);
-      if (Array.isArray(p.endpointImpact)) out.endpointImpact.push(...p.endpointImpact);
       out.commitCount += p.commitCount || (p.commits ? p.commits.length : 0);
       out.changedNodeCount += p.changedNodeCount || 0;
       out.deletedEndpointCount += p.deletedEndpointCount || 0;
@@ -351,7 +407,7 @@
         `<div class="imp-cchips">` +
           (noCode
             ? `<span class="imp-cc none">코드 영향 없음</span><span class="imp-cc">파일 ${c.changedFiles.length}</span>`
-            : `<span class="imp-cc">변경 ${c.changedNodes.length}</span><span class="imp-cc">영향 ${c.impactedEndpoints.length}</span>`) +
+            : `<span class="imp-cc">변경 ${c.changedNodes.length}</span><span class="imp-cc">영향 ${commitImpactedEndpoints(c).length}</span>`) +
         `</div>` +
       `</div>` +
       (link
@@ -375,9 +431,9 @@
     // 상단 타이틀 + 통계 숫자 카드 (FLOW MAP "Impact Flow" 헤더 스타일)
     main.appendChild(el('div', 'imp-flowhead',
       `<div class="imp-flowtitle">${FM.esc(data.branch)} — 변경 영향도</div>` +
-      `<div class="imp-flowsub">최근 ${FM.esc(String(data.commitCount))}건 변경이력 · 추적 깊이 ${FM.esc(String(data.depth))} | 변경된 코드와 영향받는 API 분석</div>`));
+      `<div class="imp-flowsub">최근 ${FM.esc(String(data.commitCount))}건 변경이력 · 추적 깊이 ${MAX_UP} | 변경된 코드와 영향받는 API 분석</div>`));
 
-    const epCount = (data.endpointImpact || []).length;
+    const epCount = getEndpointImpact().length;
     const statCards = [
       { n: data.commitCount, label: '변경이력', cls: 'a' },
       { n: data.changedNodeCount, label: '변경 노드', cls: 'b' },
@@ -391,8 +447,7 @@
         `<div class="imp-statlabel">${FM.esc(s.label)}</div></div>`).join('')));
     main.appendChild(el('div', 'hint imp-flowhint', '왼쪽 타임라인에서 변경이력을 선택하면 그 변경이 닿는 영향 그래프가 펼쳐집니다.'));
 
-    let rows = (data.endpointImpact || []).slice()
-      .sort((a, b) => b.commits.length - a.commits.length);
+    let rows = getEndpointImpact().slice();   // 이미 영향 커밋 수 내림차순 정렬됨
 
     if (ep) {
       const chip = el('div', 'imp-epfilter',
@@ -456,7 +511,7 @@
         if (!changedSha.has(n.id)) changedSha.set(n.id, []);
         changedSha.get(n.id).push(sha);
       });
-      (c.impactedEndpoints || []).forEach(e => epIds.add(e.id));
+      commitImpactedEndpoints(c).forEach(e => epIds.add(e.id));
       (c.changedFiles || []).forEach(f => allFiles.push({ sha, file: f }));
     });
 
@@ -695,7 +750,7 @@
 
     const append = d => {
       if (!d || !panelEl.isConnected) return;
-      const entry = (d.endpointImpact || []).find(e => e.id === node.id);
+      const entry = getEndpointImpact().find(e => e.id === node.id);
       if (!entry || !entry.commits.length) return;   // 해당 없으면 빈 섹션 금지
 
       const sec = el('div', 'imp-detail',
