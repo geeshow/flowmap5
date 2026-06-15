@@ -64,7 +64,7 @@ const state = {
   down: 2,
   hideOther: true,           // OTHER 레이어 노이즈는 항상 숨김
   hideOrphans: true,         // 호출/피호출 관계 없는 고아노드 숨김 (기본 켜짐)
-  zoom: 1,                   // 트랙패드 핀치 확대/축소 배율
+  zoom: 0.8,                 // 트랙패드 핀치 확대/축소 배율 (기본 살짝 축소)
 };
 const ZOOM_MIN = 0.3, ZOOM_MAX = 3;
 
@@ -81,6 +81,7 @@ async function boot() {
 
   parseUrl();
   attachHandlers();
+  applyZoom();                 // 기본 줌(축소) 반영 — render 전에 적용해 커넥터 좌표 정합
   render();
   renderDetail();
 
@@ -1519,7 +1520,14 @@ function setupServiceFilter(total) {
 // =========================================================================
 function superId(id) {
   const n = nodeById.get(id);
-  if (n && n.project && !isInfra(id, n)) return 'svc:' + n.project;
+  if (n) {
+    // 외부 API 는 project 태그(프론트 외부호출)와 무관하게 항상 공유 '외부 API' 로 묶는다.
+    //   (같은 외부 URL 을 여러 프론트가 호출하면 id 충돌로 한 프론트 소속이 되어 화면↔화면 가짜 연결이 생기던 문제 방지)
+    if (n.layer === 'EXTERNAL') return 'infra:external';
+    // 배치는 진입점 — 모듈(fqcn) 단위 노드로 묶어 진입/화면 컬럼에 배치한다.
+    if (n.layer === 'BATCH') return 'batch:' + (n.fqcn || n.project || id);
+    if (n.project && !isInfra(id, n)) return 'svc:' + n.project;
+  }
   return 'infra:' + infraGroup(id);   // 인프라/외부는 타입(kafka/redis/db/external) 단위로 합침
 }
 const INFRA_LABEL = { kafka: 'Kafka 토픽', redis: 'Redis', db: 'DB 테이블', external: '외부 API', other: '기타' };
@@ -1537,12 +1545,27 @@ function buildServiceGraph() {
     if (!a) { a = { source: ss, target: st, kc, count: 0, async: false }; agg.set(key, a); }
     a.count++; if (e.mode === 'async') a.async = true;
   }
+  // 배치 모듈 → 소속 서비스 진입 엣지. 배치는 자체(batch) 호출만 있어 서비스 그래프상 고립되므로,
+  //   진입점이 구동하는 서비스로 연결해 진입/화면/배치 컬럼에서 흐름이 보이게 한다.
+  for (const [fqcn, project] of batchModules()) {
+    if (!project) continue;
+    const source = 'batch:' + fqcn, target = 'svc:' + project;
+    if (source === target) continue;
+    const key = source + '|' + target + '|batch';
+    if (!agg.has(key)) agg.set(key, { source, target, kc: 'batch', count: 1, async: false });
+  }
   return [...agg.values()];
+}
+// 배치 모듈(fqcn) → 소속 project 매핑 (BATCH 레이어 노드 기준)
+function batchModules() {
+  const m = new Map();
+  for (const n of NODES) if (n.layer === 'BATCH' && (n.fqcn || n.project)) m.set(n.fqcn || n.project, n.project);
+  return m;
 }
 
 // 화면 기준 서비스 티어 분류 (전체보기·어플리케이션구조 picker 공용):
 //   0 진입(화면)  ·  1 1차(화면이 join 으로 직접 호출)  ·  2 2차(1차가 s2s 호출)  ·  3 제공 서비스(나머지)
-const TIER_HEAD = { 0: '진입 / 화면', 1: '1차 · 직접 호출', 2: '2차 · 서버 호출', 3: '제공 서비스' };
+const TIER_HEAD = { 0: '진입 / 화면 / 배치', 1: '1차 · 직접 호출', 2: '2차 · 서버 호출', 3: '제공 서비스' };
 function computeServiceTiers() {
   const svcs = META.projects.slice();
   const frontSet = new Set((MANIFEST?.projects || []).filter(p => p.type === 'frontend').map(p => p.name));
@@ -1609,13 +1632,30 @@ function renderOverview() {
   colsEl.className = 'overview';
   colsEl.innerHTML = '';
 
+  // 배치 모듈 — 진입점이므로 tier 0(진입/화면/배치)에 모듈명 카드로 배치
+  const batchTargets = new Set(EDGES.filter(e => e.kind === 'batch').map(e => e.target));
+  const batchAgg = new Map();   // fqcn → { project, count, ids }
+  for (const n of NODES) {
+    if (n.layer !== 'BATCH') continue;
+    const fqcn = n.fqcn || n.project || n.id;
+    const m = batchAgg.get(fqcn) || { project: n.project, count: 0, ids: [] };
+    m.count++; m.ids.push(n.id); batchAgg.set(fqcn, m);
+  }
+  const batchList = [...batchAgg].map(([fqcn, m]) => ({
+    fqcn, project: m.project, count: m.count,
+    label: fqcn.split('#')[0].split('.').pop(),   // 모듈(클래스)명만
+
+    jobId: m.ids.find(id => !batchTargets.has(id)) || m.ids[0],   // 진입 Job = 배치 엣지 타깃이 아닌 노드
+  }));
+
   // 외부 API 는 "제공 서비스"(레벨 3) 컬럼에 함께 배치 — 제공 서비스가 비어 있어도 컬럼 생성
   const externalCol = infraTypes.has('external') ? 3 : -1;
   const lastCol = Math.max(maxLevel, externalCol);
   for (let lv = 0; lv <= lastCol; lv++) {
     const inLevel = svcs.filter(s => level.get(s) === lv).sort((a, b) => stats[b].eps - stats[a].eps);
     const withExternal = lv === externalCol;
-    if (!inLevel.length && !withExternal) continue;
+    const withBatch = lv === 0 && batchList.length;
+    if (!inLevel.length && !withExternal && !withBatch) continue;
     const col = document.createElement('div');
     col.className = 'column';
     const head = document.createElement('div');
@@ -1623,6 +1663,7 @@ function renderOverview() {
     head.textContent = HEAD[lv] || `의존 ${lv}`;
     col.appendChild(head);
     for (const s of inLevel) col.appendChild(makeServiceCard(s, stats[s]));
+    if (withBatch) for (const b of batchList) col.appendChild(makeBatchCard(b));
     if (withExternal) col.appendChild(makeInfraTypeCard('external', (infraMembers['external'] || new Set()).size));
     colsEl.appendChild(col);
   }
@@ -1926,13 +1967,18 @@ function serviceHue(name) {
   return (h >>> 0) % 360;
 }
 
+// 전체보기/하위 카드 타입 뱃지 — 화면/서비스/배치/외부/인프라
+function ovTag(label, cls) { return `<span class="ov-tag t-${cls}">${label}</span>`; }
+function isFrontendProject(svc) { return (MANIFEST?.projects || []).some(p => p.type === 'frontend' && p.name === svc); }
+
 function makeServiceCard(svc, st, onClick) {
   const card = document.createElement('div');
   card.className = 'node-card ov-svc' + (('svc:' + svc) === state.sel ? ' sel' : '');
   card.dataset.node = 'svc:' + svc;
   const hue = serviceHue(svc);
   card.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
-  card.innerHTML = `<div class="ov-svc-name"><span class="ov-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${esc(svc)}</div>`
+  const tag = isFrontendProject(svc) ? ovTag('화면', 'scr') : ovTag('서비스', 'svc');
+  card.innerHTML = `<div class="ov-svc-name"><span class="ov-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${esc(svc)}${tag}</div>`
     + `<div class="ov-svc-sub">${st.eps} endpoints · ${st.nodes} nodes</div>`;
   card.addEventListener('click', onClick || (() => setService(svc)));
   card.addEventListener('mouseenter', () => alignNeighbors('svc:' + svc));
@@ -1949,7 +1995,8 @@ function makeStepBucketCard(bkt) {
   card.className = `node-card ov-infra ${clsMap[type] || 'nc-l-other'}` + (bkt.key === state.sel ? ' sel' : '');
   card.dataset.node = bkt.key;
   const n = bkt.members.size;
-  card.innerHTML = `<div class="ov-svc-name">${esc(bkt.label)}</div>`
+  const tag = type === 'external' ? ovTag('외부 API', 'ext') : ovTag('인프라', 'infra');
+  card.innerHTML = `<div class="ov-svc-name">${esc(bkt.label)}${tag}</div>`
     + `<div class="ov-svc-sub">${n} ${type === 'external' ? 'endpoints' : 'nodes'}</div>`;
   card.addEventListener('mouseenter', () => alignNeighbors(bkt.key));
   card.addEventListener('mouseleave', () => clearAlign());
@@ -1979,9 +2026,25 @@ function makeInfraTypeCard(type, count) {
   const card = document.createElement('div');
   card.className = `node-card ov-infra ${clsMap[type] || 'nc-l-other'}` + (sup === state.sel ? ' sel' : '');
   card.dataset.node = sup;
-  card.innerHTML = `<div class="ov-svc-name"><span class="nc-icon">${INFRA_ICON[type]}</span> ${esc(INFRA_LABEL[type])}</div>`
+  const tag = type === 'external' ? ovTag('외부 API', 'ext') : ovTag('인프라', 'infra');
+  card.innerHTML = `<div class="ov-svc-name"><span class="nc-icon">${INFRA_ICON[type]}</span> ${esc(INFRA_LABEL[type])}${tag}</div>`
     + `<div class="ov-svc-sub">${count} ${type === 'external' ? 'endpoints' : 'nodes'}</div>`;
   card.addEventListener('click', () => setInfraType(type));
+  card.addEventListener('mouseenter', () => alignNeighbors(sup));
+  card.addEventListener('mouseleave', () => clearAlign());
+  cardEls.set(sup, card);
+  return card;
+}
+
+// 전체보기: 배치 모듈을 진입 노드(tier 0)로 표현 — 클릭 시 진입 Job 기준 호출관계분석
+function makeBatchCard(b) {
+  const sup = 'batch:' + b.fqcn;
+  const card = document.createElement('div');
+  card.className = 'node-card ov-infra nc-l-batch' + (sup === state.sel ? ' sel' : '');
+  card.dataset.node = sup;
+  card.innerHTML = `<div class="ov-svc-name"><span class="nc-icon">⏱️</span> ${esc(b.label)}${ovTag('배치', 'bat')}</div>`
+    + `<div class="ov-svc-sub">${b.count} steps${b.project ? ' · ' + esc(b.project) : ''}</div>`;
+  card.addEventListener('click', () => { if (b.jobId) setFocusFromOverview(b.jobId); });
   card.addEventListener('mouseenter', () => alignNeighbors(sup));
   card.addEventListener('mouseleave', () => clearAlign());
   cardEls.set(sup, card);
