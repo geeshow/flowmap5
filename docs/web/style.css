@@ -166,11 +166,8 @@ body.sidebar-collapsed #sidebar, body.sidebar-collapsed #sidebar-resizer { displ
 .sb-sub { font-size: 10px; color: var(--text-dim); }
 
 /* 사이드바 통계 (하단 고정) */
-.sb-stats { margin-top: auto; padding: 12px 6px 4px; border-top: 1px solid var(--border); }
-.sb-stats-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim); margin-bottom: 8px; }
-.sb-stat { display: flex; align-items: baseline; justify-content: space-between; padding: 3px 0; }
-.sb-stat-k { font-size: 12px; color: var(--text-dim); }
-.sb-stat-v { font-size: 13px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+/* 사이드바 하단 범례 (선=호출 종류) */
+.sb-legend { margin-top: auto; padding: 12px 6px 4px; border-top: 1px solid var(--border); }
 
 /* ---------- 우측 메인 컬럼 ---------- */
 #main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
@@ -297,16 +294,25 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
   background: var(--bg-panel); border: 1px solid var(--border); border-radius: 9px;
   padding: 3px; box-shadow: 0 4px 14px rgba(0,0,0,.5);
 }
-/* 캔버스 빈 영역 드래그 → 패닝 (마우스로 슬라이드) */
-#flow-canvas.pannable { cursor: grab; }
-#flow-canvas.panning { cursor: grabbing; user-select: none; }
-.dock-body.panning { cursor: grabbing; user-select: none; }
 #zoom-ctl button {
   height: 28px; min-width: 28px; padding: 0 6px; cursor: pointer; font-size: 15px; line-height: 1;
   background: transparent; color: var(--text); border: none; border-radius: 6px; font-weight: 600;
 }
 #zoom-ctl button:hover { background: var(--bg-input); color: var(--c-controller); }
 #zoom-ctl #zoom-pct { font-size: 11px; font-weight: 700; color: var(--text-dim); min-width: 36px; display: inline-block; }
+
+/* 범례 행 — 선 샘플 + 라벨 */
+.lg-sec { margin-top: 10px; }
+.lg-sec:first-child { margin-top: 0; }
+.lg-h {
+  font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 5px;
+}
+.lg-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 11px; color: var(--text); }
+.lg-line { flex: none; width: 22px; border-top: 2px solid var(--lc, var(--text-dim)); }
+.lg-line.dash { border-top-style: dashed; }
+.lg-line.thick { border-top-width: 4px; }
+.lg-label { line-height: 1.3; }
 
 .column { display: flex; flex-direction: column; gap: 14px; min-width: 200px; }
 .column-head {
@@ -594,18 +600,19 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 .flow-line { font-size: 9px; color: var(--text-dim); font-family: ui-monospace, monospace; flex-shrink: 0; }
 
 /* ---------- 커넥터 ---------- */
-.edge-path { fill: none; stroke-width: 1.6; transition: opacity .12s, stroke-width .12s; }
+/* 평상시 연결선은 흐리게(focus+context) — 노드 hover/핀 시 관련 선만 hot 으로 선명해진다 */
+.edge-path { fill: none; stroke-width: 0.8; opacity: .32; transition: opacity .12s, stroke-width .12s; }
 .edge-path.async { stroke-dasharray: 5 4; }
 .edge-path.k-internal { stroke: var(--e-internal); }
-.edge-path.k-s2s      { stroke: var(--e-s2s); stroke-width: 2.6; }
+.edge-path.k-s2s      { stroke: var(--e-s2s); stroke-width: 1.3; }
 .edge-path.k-external { stroke: var(--e-external); }
 .edge-path.k-batch    { stroke: var(--e-batch); }
 .edge-path.k-kafka    { stroke: var(--e-kafka); }
 .edge-path.k-redis    { stroke: var(--e-redis); }
 .edge-path.k-db       { stroke: var(--e-db); }
-.edge-path.k-join     { stroke: var(--e-join); stroke-width: 2.6; }
+.edge-path.k-join     { stroke: var(--e-join); stroke-width: 1.3; }
 .edge-path.dim        { opacity: .06; }
-.edge-path.hot        { stroke-width: 3.4; opacity: 1; }
+.edge-path.hot        { stroke-width: 1.7; opacity: 1; }
 
 /* ---------- 하단 프로세스 독 (서비스 보기 3단계: 노드 선택 시) ---------- */
 #process-dock {

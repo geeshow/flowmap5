@@ -78,7 +78,6 @@ async function boot() {
   await loadAndApplyScreens(); // screens.json 정규 route/name → SCREEN 노드 보정 (sub-root 화면 식별)
   reclassifyUnjoinedExternals(); // join 으로 백엔드에 안 붙은 프론트 외부호출 → 외부 API 로 환원
   buildIndexes();              // nodeById/outEdges/inEdges 1회 빌드
-  renderSidebarStats();        // 좌측 사이드바 하단 통계
 
   parseUrl();
   attachHandlers();
@@ -310,22 +309,6 @@ function reclassifyUnjoinedExternals() {
 }
 
 // 좌측 사이드바 하단 통계 — 로드된 그래프에서 집계
-function renderSidebarStats() {
-  const box = document.getElementById('sidebar-stats');
-  if (!box) return;
-  const services  = (META.projects || []).length;
-  const endpoints = NODES.filter(n => n.layer === 'CONTROLLER' && n.endpoint).length;
-  const screens   = NODES.filter(n => n.layer === 'SCREEN').length;
-  const rows = [
-    ['API', endpoints], ['화면', screens], ['서비스', services],
-    ['노드', NODES.length], ['관계', EDGES.length],
-  ];
-  box.innerHTML = '<div class="sb-stats-title">통계</div>' +
-    rows.map(([k, v]) =>
-      `<div class="sb-stat"><span class="sb-stat-k">${k}</span><span class="sb-stat-v">${v.toLocaleString()}</span></div>`
-    ).join('');
-}
-
 function buildIndexes() {
   nodeById.clear(); outEdges.clear(); inEdges.clear();
   for (const n of NODES) nodeById.set(n.id, n);
@@ -926,8 +909,6 @@ function renderProcessDock() {
   }
   dockDraw = () => drawDockConnectors(dock, edges, elOf, hoverId || pinnedId);
   requestAnimationFrame(dockDraw);
-  const body = dock.querySelector('.dock-body');   // 빈 영역 드래그 → 프로세스 흐름 패닝(마우스로 슬라이드)
-  if (body) setupGrabPan(body, body, 'panning');
 }
 
 // ---- 패널 크기 조절 (하단 독 높이 / 상세 패널 너비) ----
@@ -1008,30 +989,6 @@ function setupDetailCollapse() {
   if (localStorage.getItem('fm.detailCollapsed') === '1') document.body.classList.add('detail-collapsed');
   document.getElementById('detail-collapse').addEventListener('click', () => setDetailCollapsed(true));
   document.getElementById('detail-reopen').addEventListener('click', () => setDetailCollapsed(false));
-}
-
-// ---- 빈 영역 드래그 → 패닝 (마우스로 슬라이드). scroller 를 grab 으로 스크롤 ----
-function setupGrabPan(scroller, surface, pannableClass) {
-  surface.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
-    // 카드·버튼·핸들 위에서 시작한 드래그는 패닝이 아니다 (선택/클릭 보존)
-    if (e.target.closest('.node-card, .dock-node, button, a, input, .path-group .pg-head, .dock-resizer, #detail-resizer, #sidebar-resizer')) return;
-    const startX = e.clientX, startY = e.clientY, sl = scroller.scrollLeft, st = scroller.scrollTop;
-    let moved = false;
-    const move = ev => {
-      const dx = ev.clientX - startX, dy = ev.clientY - startY;
-      if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
-      moved = true; surface.classList.add(pannableClass);
-      scroller.scrollLeft = sl - dx; scroller.scrollTop = st - dy;
-    };
-    const up = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-      surface.classList.remove(pannableClass);
-    };
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
-  });
 }
 
 // =========================================================================
@@ -2311,7 +2268,7 @@ function drawConnectors() {
     const kc = e.kc || kindClass(e); usedKinds.add(kc);
     const asyncCls = (e.async || e.mode === 'async') ? ' async' : '';
     const stateCls = anchors.size ? (anchors.has(e.source) || anchors.has(e.target) ? ' hot' : ' dim') : '';
-    const wStyle = e.count ? ` style="stroke-width:${Math.min(7, 1.8 + e.count * 0.7).toFixed(1)}"` : '';
+    const wStyle = e.count ? ` style="stroke-width:${Math.min(3.5, 0.9 + e.count * 0.35).toFixed(2)}"` : '';
     paths += `<path class="edge-path k-${kc}${asyncCls}${stateCls}" data-s="${escAttr(e.source)}" data-t="${escAttr(e.target)}"${wStyle} `
       + `d="M${x1.toFixed(1)},${y1.toFixed(1)} C${c1x.toFixed(1)},${y1.toFixed(1)} ${c2x.toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" `
       + `marker-end="url(#arr-${kc})"/>`;
@@ -2686,7 +2643,6 @@ function attachHandlers() {
   setupDetailResizer();
   setupSidebar();
   setupDetailCollapse();
-  setupGrabPan(document.getElementById('flow'), document.getElementById('flow-canvas'), 'panning');
   document.getElementById('share-btn').addEventListener('click', e => copyToClipboard(shareUrl(), e.target));
   window.addEventListener('resize', () => {
     if (currentEdges.length) requestAnimationFrame(drawConnectors);
@@ -2714,6 +2670,27 @@ function attachHandlers() {
     else if (k === 'out') zoomBy(1 / 1.2);
     else if (k === 'reset') resetZoom();
   });
+  renderLegend();
+}
+
+// ---- 범례 (선=호출 종류) — 색은 실제 CSS 변수(--e-*)에서 읽어 항상 일치. 사이드바 하단에 표시 ----
+const EDGE_LEGEND = [
+  ['s2s', '서비스 간 호출 (s2s)'], ['internal', '서비스 내부 호출'],
+  ['external', '외부 API 호출'], ['join', '화면 ↔ 백엔드 API'],
+  ['db', 'DB 액세스'], ['redis', 'Redis'], ['kafka', 'Kafka 이벤트'], ['batch', '배치'],
+];
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function renderLegend() {
+  const body = document.getElementById('sidebar-legend');
+  if (!body) return;
+  const lineRow = ([kc, label], dash) =>
+    `<div class="lg-row"><span class="lg-line${dash ? ' dash' : ''}" style="--lc:${cssVar('--e-' + kc) || '#94a3b8'}"></span><span class="lg-label">${label}</span></div>`;
+  body.innerHTML =
+    `<div class="lg-sec"><div class="lg-h">선 — 호출 종류</div>${EDGE_LEGEND.map(e => lineRow(e)).join('')}</div>`
+    + `<div class="lg-sec"><div class="lg-h">선 — 형태</div>`
+    + `<div class="lg-row"><span class="lg-line"></span><span class="lg-label">실선 = 동기(sync)</span></div>`
+    + `<div class="lg-row"><span class="lg-line dash"></span><span class="lg-label">점선 = 비동기(async)</span></div>`
+    + `<div class="lg-row"><span class="lg-line thick"></span><span class="lg-label">굵을수록 호출 수 많음</span></div></div>`;
 }
 
 function searchActiveIndex(items) { return items.findIndex(it => it.classList.contains('kb-active')); }
