@@ -305,7 +305,7 @@ function reclassifyUnjoinedExternals() {
   const joined = new Set();
   for (const e of EDGES) if (e.kind === 'join') joined.add(e.source);   // join 엣지 source = ext 노드 id
   for (const n of NODES) {
-    if (n.layer === 'EXTERNAL' && n.project && !joined.has(n.id)) n.project = null;
+    if (isExtCallNode(n.id, n) && n.project && !joined.has(n.id)) n.project = null;
   }
 }
 
@@ -533,12 +533,19 @@ function passFilter(id) {
   if (state.hideOther && n.layer === 'OTHER') return false;
   return true;
 }
+// 외부 API 호출 노드 판별 — 백엔드는 layer 'EXTERNAL', 프론트 모노레포는 layer 'API' + ext:/externalUrl.
+//   layer 만으로 구분하면 프론트(API 레이어) 외부호출을 놓쳐 화면↔화면 가짜 연결이 생긴다.
+function isExtCallNode(id, n) {
+  n = n || nodeById.get(id);
+  if (!n) return /^ext:/.test(String(id));
+  return n.layer === 'EXTERNAL' || /^ext:/.test(String(n.id || id)) || !!n.externalUrl;
+}
 function isInfra(id, n) {
   n = n || nodeById.get(id);
   if (!n) return /^(kafka:|db:|redis$|ext:)/.test(id);
-  // RESOURCE 는 공유 인프라. EXTERNAL 은 project 가 없을 때만 공유 인프라(백엔드 서드파티 호출);
-  // project 가 붙은 프론트 외부호출 노드는 그 프론트 서비스의 노드로 취급한다.
-  return n.layer === 'RESOURCE' || (n.layer === 'EXTERNAL' && !n.project);
+  // RESOURCE 는 공유 인프라. 외부호출은 project 가 없을 때(미연결)만 공유 인프라;
+  // project 가 붙은(백엔드 join 으로 흡수된) 프론트 외부호출 노드는 그 프론트 서비스의 노드로 취급한다.
+  return n.layer === 'RESOURCE' || (isExtCallNode(id, n) && !n.project);
 }
 function kindClass(e) {
   if (e.kind === 'resource') {
@@ -1521,11 +1528,12 @@ function setupServiceFilter(total) {
 function superId(id) {
   const n = nodeById.get(id);
   if (n) {
-    // 외부 API 는 project 태그(프론트 외부호출)와 무관하게 항상 공유 '외부 API' 로 묶는다.
-    //   (같은 외부 URL 을 여러 프론트가 호출하면 id 충돌로 한 프론트 소속이 되어 화면↔화면 가짜 연결이 생기던 문제 방지)
-    if (n.layer === 'EXTERNAL') return 'infra:external';
     // 배치는 진입점 — 모듈(fqcn) 단위 노드로 묶어 진입/화면 컬럼에 배치한다.
     if (n.layer === 'BATCH') return 'batch:' + (n.fqcn || n.project || id);
+    // 외부 API 호출 노드는 기본적으로 공유 '외부 API' 로 묶는다 (project 태그 무시).
+    //   같은 외부 URL 을 여러 프론트가 호출하면 id 충돌로 한 프론트 소속이 되어 화면↔화면 가짜 연결이 생기기 때문.
+    //   (단, buildServiceGraph 가 join 엣지의 ext source 만 예외로 그 프론트 svc 에 귀속시켜 front→backend 흐름은 유지)
+    if (isExtCallNode(id, n)) return 'infra:external';
     if (n.project && !isInfra(id, n)) return 'svc:' + n.project;
   }
   return 'infra:' + infraGroup(id);   // 인프라/외부는 타입(kafka/redis/db/external) 단위로 합침
@@ -1537,7 +1545,14 @@ function buildServiceGraph() {
   const agg = new Map();   // key → { source, target, kc, count, async }
   for (const e of EDGES) {
     if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external' && e.kind !== 'join') continue;
-    const ss = superId(e.source), st = superId(e.target);
+    let ss = superId(e.source);
+    const st = superId(e.target);
+    // join 엣지: 외부호출 source 를 그 프론트 서비스로 귀속 (superId 는 ext 를 infra:external 로 보내므로 여기서 보정)
+    //   → 화면→백엔드 엔드포인트 흐름은 유지하면서, 그 외 external 호출은 공유 '외부 API' 로 모아 가짜 연결을 막는다.
+    if (e.kind === 'join') {
+      const sn = nodeById.get(e.source);
+      if (sn && sn.project && isExtCallNode(e.source, sn)) ss = 'svc:' + sn.project;
+    }
     if (ss === st) continue;
     const kc = e.kind === 's2s' ? 's2s' : e.kind === 'join' ? 'join' : kindClass(e);
     const key = ss + '|' + st + '|' + kc;
@@ -2007,7 +2022,7 @@ function makeStepBucketCard(bkt) {
 function infraGroup(id) {
   const n = nodeById.get(id);
   if (n) {
-    if (n.layer === 'EXTERNAL') return 'external';
+    if (isExtCallNode(id, n)) return 'external';   // 프론트(API 레이어) 외부호출 포함
     if (n.resourceType === 'kafka-topic') return 'kafka';
     if (n.resourceType === 'db-table') return 'db';
     if (n.resourceType === 'redis') return 'redis';
