@@ -85,7 +85,92 @@
     if (!n) return false;
     if (n.layer === 'SCREEN' || n.layer === 'CONTROLLER') return true;
     if (n.layer === 'EXTERNAL') return !frontProjects().has(n.project);
-    return n.layer === 'RESOURCE' && n.resourceType === 'kafka-topic';
+    return n.layer === 'RESOURCE';   // db-table·redis·kafka-topic = 인프라 경계(유출측)
+  }
+
+  // 프론트 측 노드(화면·프론트 외부호출·프론트 모노레포 API) — 엔드포인트 탐색이 여기로
+  // 넘어가면 화면/배선을 엔드포인트로 오인하므로 역방향 DFS의 경계로 삼아 막는다.
+  function isFrontNode(n) {
+    return !!n && (n.layer === 'SCREEN' || n.layer === 'API'
+      || (n.layer === 'EXTERNAL' && frontProjects().has(n.project)));
+  }
+
+  /* ───────── 영향 전파 (실시간 BFS) ─────────
+   * 백엔드 impact.json은 git 측 사실(변경 메서드 + 삭제)만 준다. "그 변경이 어떤
+   * 엔드포인트에 닿나"(impactedEndpoints / endpointImpact)는 여기서 메모리 콜그래프를
+   * 호출자 방향(FM.inEdges)으로 MAX_UP hop 역추적해 직접 만든다 — 그래프 그리기와
+   * 동일한 깊이 정책. 결과는 커밋/모듈에 캐시한다(세션 동안 그래프·데이터 불변). */
+
+  // 영향 "엔드포인트" = 백엔드 CONTROLLER(서비스의 API 표면)만. 프론트 SCREEN/외부호출 노드도
+  // endpoint·httpMethod 속성을 갖지만 엔드포인트가 아니라 유입(화면) 측 배선이므로 제외한다.
+  function isBackendEndpoint(n) { return !!n && n.layer === 'CONTROLLER'; }
+
+  function endpointRefFromId(id) {
+    const n = FM.nodeById.get(id);
+    if (!n) return null;
+    return { id, httpMethod: n.httpMethod, endpoint: n.endpoint,
+      service: n.project || n.externalService, description: n.description };
+  }
+
+  // DFS 시드 = 변경된 "공개 메서드". 새 impact 스키마(changedPublicMethods, 또는
+  // changedNodes[].public/visibility)가 있으면 공개 메서드만 시드로 쓰고, 없으면(구 스키마)
+  // inGraph 변경 노드 전체로 폴백한다 — 호출그래프 역추적의 출발점.
+  function changedSeedIds(c) {
+    if (Array.isArray(c.changedPublicMethods) && c.changedPublicMethods.length)
+      return c.changedPublicMethods.filter(id => FM.nodeById.has(id));
+    const cn = c.changedNodes || [];
+    const hasVis = cn.some(n => n.public != null || n.visibility != null);
+    const pick = hasVis
+      ? cn.filter(n => n.public === true || n.visibility === 'public')
+      : cn;
+    return pick.filter(n => n.inGraph).map(n => n.id).filter(id => FM.nodeById.has(id));
+  }
+
+  // 공개 메서드 시드 → 호출자 방향으로 콜그래프를 거슬러 올라가며(역방향 DFS, 깊이 무제한)
+  // 닿는 백엔드 CONTROLLER 엔드포인트를 모두 모은다(시드 자신이 컨트롤러면 포함).
+  // 프론트(SCREEN/프론트 외부호출/모노레포 API) 노드로는 넘어가지 않는다 — 화면은 엔드포인트가
+  // 아니라 유입측이며 renderGraph 의 경계 투영이 따로 잇는다. visited 집합으로만 경계를 둔다.
+  function impactedEndpointIds(seedIds) {
+    const found = new Set();
+    const seen = new Set();
+    const stack = [];
+    for (const id of seedIds) {
+      if (FM.nodeById.has(id) && !seen.has(id)) { seen.add(id); stack.push(id); }
+    }
+    while (stack.length) {
+      const cur = stack.pop();
+      if (isBackendEndpoint(FM.nodeById.get(cur))) found.add(cur);
+      for (const e of (FM.inEdges.get(cur) || [])) {
+        const s = e.source, sn = FM.nodeById.get(s);
+        if (!sn || seen.has(s) || isFrontNode(sn)) continue;
+        seen.add(s); stack.push(s);
+      }
+    }
+    return found;
+  }
+
+  // 커밋이 영향 주는 엔드포인트(레퍼런스 배열). c._impEps 에 캐시.
+  function commitImpactedEndpoints(c) {
+    if (c._impEps) return c._impEps;
+    c._impEps = [...impactedEndpointIds(changedSeedIds(c))].map(endpointRefFromId).filter(Boolean);
+    return c._impEps;
+  }
+
+  // 집계: 엔드포인트 → 영향 준 커밋 목록(역인덱스). data._endpointImpact 에 캐시.
+  function getEndpointImpact() {
+    if (data._endpointImpact) return data._endpointImpact;
+    const byEp = new Map();   // epId -> Set(shortSha)
+    (data.commits || []).forEach(c => {
+      commitImpactedEndpoints(c).forEach(ep => {
+        if (!byEp.has(ep.id)) byEp.set(ep.id, new Set());
+        byEp.get(ep.id).add(c.shortSha);
+      });
+    });
+    data._endpointImpact = [...byEp.entries()].map(([id, shas]) => {
+      const ref = endpointRefFromId(id) || { id };
+      return Object.assign(ref, { commits: [...shas] });
+    }).sort((a, b) => b.commits.length - a.commits.length);
+    return data._endpointImpact;
   }
 
   // 매니페스트가 있으면 프로젝트별 <project>.impact.json 들을 병합, 없으면 단일 impact.json 폴백
@@ -116,23 +201,19 @@
       commitUrl: repo ? repo + '/pull/' + p.number : null,
       changedFiles: p.changedFiles || [],
       changedNodes: p.changedNodes || [],
+      changedPublicMethods: p.changedPublicMethods || [],
       deletedNodes: p.deletedNodes || [],
       deletedEndpoints: p.deletedEndpoints || [],
-      impactedEndpoints: p.impactedEndpoints || [],
-      impactedServices: p.impactedServices || [],
       _pull: p.number,
     }));
-    (part.endpointImpact || []).forEach(e => {
-      if (!e.commits && Array.isArray(e.pulls)) e.commits = e.pulls.map(n => 'PR' + n);
-    });
+    // impactedEndpoints / endpointImpact 는 백엔드가 더 이상 주지 않는다 — UI 가 live BFS 로 만든다.
     return part;
   }
   function mergeImpact(parts) {
-    const out = { branch: parts[0].branch, depth: parts[0].depth, commits: [], endpointImpact: [],
+    const out = { branch: parts[0].branch, commits: [],
       commitCount: 0, changedNodeCount: 0, deletedEndpointCount: 0, breakingDeletionCount: 0 };
     for (const p of parts) {
       if (Array.isArray(p.commits)) out.commits.push(...p.commits);
-      if (Array.isArray(p.endpointImpact)) out.endpointImpact.push(...p.endpointImpact);
       out.commitCount += p.commitCount || (p.commits ? p.commits.length : 0);
       out.changedNodeCount += p.changedNodeCount || 0;
       out.deletedEndpointCount += p.deletedEndpointCount || 0;
@@ -351,7 +432,7 @@
         `<div class="imp-cchips">` +
           (noCode
             ? `<span class="imp-cc none">코드 영향 없음</span><span class="imp-cc">파일 ${c.changedFiles.length}</span>`
-            : `<span class="imp-cc">변경 ${c.changedNodes.length}</span><span class="imp-cc">영향 ${c.impactedEndpoints.length}</span>`) +
+            : `<span class="imp-cc">변경 ${c.changedNodes.length}</span><span class="imp-cc">영향 ${commitImpactedEndpoints(c).length}</span>`) +
         `</div>` +
       `</div>` +
       (link
@@ -375,9 +456,9 @@
     // 상단 타이틀 + 통계 숫자 카드 (FLOW MAP "Impact Flow" 헤더 스타일)
     main.appendChild(el('div', 'imp-flowhead',
       `<div class="imp-flowtitle">${FM.esc(data.branch)} — 변경 영향도</div>` +
-      `<div class="imp-flowsub">최근 ${FM.esc(String(data.commitCount))}건 변경이력 · 추적 깊이 ${FM.esc(String(data.depth))} | 변경된 코드와 영향받는 API 분석</div>`));
+      `<div class="imp-flowsub">최근 ${FM.esc(String(data.commitCount))}건 변경이력 · 공개 메서드 기준 호출그래프 역추적 | 화면→서비스→인프라 영향 분석</div>`));
 
-    const epCount = (data.endpointImpact || []).length;
+    const epCount = getEndpointImpact().length;
     const statCards = [
       { n: data.commitCount, label: '변경이력', cls: 'a' },
       { n: data.changedNodeCount, label: '변경 노드', cls: 'b' },
@@ -391,8 +472,7 @@
         `<div class="imp-statlabel">${FM.esc(s.label)}</div></div>`).join('')));
     main.appendChild(el('div', 'hint imp-flowhint', '왼쪽 타임라인에서 변경이력을 선택하면 그 변경이 닿는 영향 그래프가 펼쳐집니다.'));
 
-    let rows = (data.endpointImpact || []).slice()
-      .sort((a, b) => b.commits.length - a.commits.length);
+    let rows = getEndpointImpact().slice();   // 이미 영향 커밋 수 내림차순 정렬됨
 
     if (ep) {
       const chip = el('div', 'imp-epfilter',
@@ -456,11 +536,20 @@
         if (!changedSha.has(n.id)) changedSha.set(n.id, []);
         changedSha.get(n.id).push(sha);
       });
-      (c.impactedEndpoints || []).forEach(e => epIds.add(e.id));
+      commitImpactedEndpoints(c).forEach(e => epIds.add(e.id));
       (c.changedFiles || []).forEach(f => allFiles.push({ sha, file: f }));
     });
 
     const changedInGraph = [...changedSha.keys()].filter(id => FM.nodeById.has(id));
+
+    // 노드를 눌러 프로세스 흐름(독)을 열면, 그 호출 체인 안에서 "실제 수정된 public 메서드"를
+    // 강조하도록 변경 시드(공개 메서드) 합집합을 코어에 넘긴다.
+    const changedMethods = new Set();
+    selected.forEach(sha => {
+      const c = commitBySha.get(sha);
+      if (c) changedSeedIds(c).forEach(id => changedMethods.add(id));
+    });
+    FM.setDockChangedNodes(changedMethods);
 
     // 경계 투영(boundary projection) — 어플리케이션 내부 호출/변경 메서드는 접어 숨기고,
     // 변경이 영향을 준 endpoint(CONTROLLER)를 중심에 둔 채 s2s·화면(SCREEN)·외부/kafka 경계만 보여준다.
@@ -494,10 +583,10 @@
       return found;
     };
 
-    // 중심(level 0) = 변경이 직접 닿은 경계 노드 + 변경이 영향 준 endpoint(롤업).
-    // 내부 변경 메서드는 카드로 그리지 않고 그 영향 endpoint 로 대표시킨다.
+    // 중심(level 0) = 변경(공개 메서드)이 영향 준 백엔드 엔드포인트(CONTROLLER)만.
+    // 내부 변경 메서드는 카드로 그리지 않고 그 영향 endpoint 로 대표시킨다. 프론트 화면·외부호출은
+    // 엔드포인트가 아니므로 중심에 두지 않고, 아래 경계 투영에서 유입(화면)/유출(infra)으로 배치한다.
     const centerSet = new Set();
-    changedInGraph.forEach(id => { if (isBoundary(id)) centerSet.add(id); });
     epIds.forEach(id => { if (FM.nodeById.has(id)) centerSet.add(id); });
     let bases = [...centerSet];
     // 폴백: endpoint 로 롤업되지 않는 변경(엔드포인트 없는 내부 코드 등) → 변경 노드의 인접 경계를 중심으로
@@ -614,9 +703,19 @@
           card.prepend(el('div', 'imp-flag ext', '🌐 외부 API'));
         } else if (layer === 'RESOURCE') {
           card.classList.add('imp-path');
-          card.prepend(el('div', 'imp-flag res', '📨 Kafka'));
+          const rt = node && node.resourceType;
+          const resFlag = rt === 'kafka-topic' ? '📨 Kafka'
+            : rt === 'redis' ? '🧱 Redis'
+            : rt === 'db-table' ? '🗄️ DB' : '🗄️ 인프라';
+          card.prepend(el('div', 'imp-flag res', resFlag));
         } else {
           card.classList.add('imp-path');
+        }
+        // 유출 단계에 떠오른 노드가 실제로 변경된 노드면(수정된 외부 클라이언트 등) ◆ 로 표시
+        if (lv !== 0 && shas) {
+          card.classList.add('imp-changed');
+          card.prepend(el('div', 'imp-flag',
+            `◆ ${FM.esc(shas[0])}${shas.length > 1 ? ` +${shas.length - 1}` : ''}`));
         }
         if (id === ep) card.classList.add('imp-ep-target');
         col.appendChild(card);
@@ -695,7 +794,7 @@
 
     const append = d => {
       if (!d || !panelEl.isConnected) return;
-      const entry = (d.endpointImpact || []).find(e => e.id === node.id);
+      const entry = getEndpointImpact().find(e => e.id === node.id);
       if (!entry || !entry.commits.length) return;   // 해당 없으면 빈 섹션 금지
 
       const sec = el('div', 'imp-detail',

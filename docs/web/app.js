@@ -333,6 +333,7 @@ function parseUrl() {
   const viewRaw = rawParam('view');
   state.view = viewRaw && FEATURE_OF_VIEW[viewRaw] ? viewRaw : null;
   state.overview = viewRaw === 'overview';
+  state.overviewKind = rawParam('ov') === 'batch' ? 'batch' : 'screen';   // 전체보기 화면/배치 진입 분리
   const svcView = rawParam('service');
   state.service = svcView && (META.projects || []).includes(decodeURIComponent(svcView)) ? decodeURIComponent(svcView) : null;
   // 어플리케이션구조 3단계: view=structure (picker) → app=<svc> (경로 그룹) → p=<path> (프로세스 흐름)
@@ -364,6 +365,7 @@ function pushUrl() {
   const parts = [];
   if (state.overview) {
     parts.push('view=overview');
+    if (state.overviewKind === 'batch') parts.push('ov=batch');
     history.pushState({}, '', location.pathname + '?' + parts.join('&'));
     return;
   }
@@ -400,9 +402,10 @@ function shareUrl() { return location.origin + location.pathname + location.sear
 // =========================================================================
 // 액션
 // =========================================================================
-function setOverview(on) {
+function setOverview(on, kind) {
   state.view = null;
   state.overview = !!on;
+  state.overviewKind = kind || 'screen';
   if (on) { state.structure = false; state.structSvc = null; state.structPath = null; state.structFile = null; state.focus = null; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null; }
   pushUrl(); render(); renderDetail();
 }
@@ -582,7 +585,8 @@ function render() {
     document.getElementById('analysis-bar').classList.remove('svc-mode');
   }
   document.getElementById('analysis-bar').classList.remove('no-depth');
-  document.getElementById('overview-btn').classList.toggle('active', state.overview);
+  document.getElementById('overview-btn').classList.toggle('active', state.overview && state.overviewKind !== 'batch');
+  document.getElementById('overview-batch-btn').classList.toggle('active', state.overview && state.overviewKind === 'batch');
   document.getElementById('structure-btn').classList.toggle('active', state.structure);
   document.querySelectorAll('#nav .nav-btn[data-view]').forEach(b => b.classList.toggle('active', state.view === b.dataset.view));
   if (state.view) { renderFeatureView(); return; }
@@ -715,7 +719,8 @@ const DOCK_CHIP_COLOR = { Kafka: '--c-kafka', Redis: '--c-redis', DB: '--c-db' }
 function dockCardEl(id, rootId) {
   const n = nodeById.get(id);
   const el = document.createElement('div');
-  el.className = 'dock-node' + (id === rootId ? ' root' : '');
+  const changed = dockFeature && dockChangedNodes.has(id);   // 이 커밋에서 실제 수정된 (public) 메서드
+  el.className = 'dock-node' + (id === rootId ? ' root' : '') + (changed ? ' dock-changed' : '');
   el.dataset.node = id;
   el.style.setProperty('--lc', (layerColor(n) || '#9ca3af').trim());
   let badge, ep = '', sub = n.fqcn && n.fqcn !== n.id ? shortClass(n.fqcn) : '';
@@ -807,6 +812,7 @@ function layerCallDepth(nids, edgeList) {
 
 let dockDraw = null;     // 창 크기 변경 시 재그리기용
 let dockFeature = false;  // 기능 뷰(커밋 영향도 등)가 state.sel 기준으로 프로세스 독을 요청
+let dockChangedNodes = new Set();  // 기능 뷰가 지정한 "실제 수정된 메서드" id — 독 카드에서 강조
 function renderProcessDock() {
   const dock = document.getElementById('process-dock');
   // 서비스 보기 = svcPick 기준(현재 컬럼 엣지), 기능 뷰 = 선택 노드(state.sel) 기준(실제 그래프 체인)
@@ -1604,12 +1610,13 @@ function renderOverview() {
   document.getElementById('analysis-bar').classList.add('hidden');
   document.getElementById('flow-canvas').querySelector('#grid-toolbar')?.remove();
 
+  const kind = state.overviewKind === 'batch' ? 'batch' : 'screen';
   const bc = document.getElementById('breadcrumb');
   bc.style.display = 'flex';
   bc.innerHTML = `<span class="bc-focus">🗺️ 전체 서비스 지도</span>`
     + `<span class="bc-sep">·</span>`
-    + `<span class="ov-hint">서비스 간 <b style="color:var(--e-s2s)">s2s 호출</b> · `
-    + `<b style="color:var(--e-kafka)">이벤트/인프라</b> 의존 — 카드 클릭 시 해당 서비스로 이동</span>`;
+    + `<span class="ov-hint">${kind === 'batch' ? '<b>배치</b> 진입' : '<b>화면</b> 진입'} 기준 — `
+    + `<b style="color:var(--e-s2s)">s2s 호출</b> · <b style="color:var(--e-kafka)">이벤트/인프라</b> 의존, 카드 클릭 시 이동</span>`;
 
   const edges = buildServiceGraph();
 
@@ -1661,19 +1668,36 @@ function renderOverview() {
     jobId: m.ids.find(id => !batchTargets.has(id)) || m.ids[0],   // 진입 Job = 배치 엣지 타깃이 아닌 노드
   }));
 
+  // 진입 유형별 도달 가능 서브그래프. 화면: 프론트 svc 진입(전체 맵, 배치 카드만 제외).
+  //   배치: batch 진입점에서 forward 로 닿는 서비스/인프라만 표시(배치 서브그래프).
+  const useReach = kind === 'batch';
+  const entries = kind === 'batch'
+    ? batchList.map(b => 'batch:' + b.key)
+    : svcs.filter(isFrontendProject).map(s => 'svc:' + s);
+  const adj = new Map();
+  for (const e of edges) { (adj.get(e.source) || adj.set(e.source, []).get(e.source)).push(e.target); }
+  const reach = new Set(entries);
+  for (let frontier = [...entries]; frontier.length; ) {
+    const nx = [];
+    for (const id of frontier) for (const t of adj.get(id) || []) if (!reach.has(t)) { reach.add(t); nx.push(t); }
+    frontier = nx;
+  }
+  const shown = sup => !useReach || reach.has(sup);
+  const head0 = kind === 'batch' ? '진입 / 배치' : '진입 / 화면';
+
   // 외부 API 는 "제공 서비스"(레벨 3) 컬럼에 함께 배치 — 제공 서비스가 비어 있어도 컬럼 생성
   const externalCol = infraTypes.has('external') ? 3 : -1;
   const lastCol = Math.max(maxLevel, externalCol);
   for (let lv = 0; lv <= lastCol; lv++) {
-    const inLevel = svcs.filter(s => level.get(s) === lv).sort((a, b) => stats[b].eps - stats[a].eps);
-    const withExternal = lv === externalCol;
-    const withBatch = lv === 0 && batchList.length;
+    const inLevel = svcs.filter(s => level.get(s) === lv && shown('svc:' + s)).sort((a, b) => stats[b].eps - stats[a].eps);
+    const withExternal = lv === externalCol && shown('infra:external');
+    const withBatch = lv === 0 && kind === 'batch' && batchList.length;
     if (!inLevel.length && !withExternal && !withBatch) continue;
     const col = document.createElement('div');
     col.className = 'column';
     const head = document.createElement('div');
     head.className = 'column-head';
-    head.textContent = HEAD[lv] || `의존 ${lv}`;
+    head.textContent = lv === 0 ? head0 : (HEAD[lv] || `의존 ${lv}`);
     col.appendChild(head);
     for (const s of inLevel) col.appendChild(makeServiceCard(s, stats[s]));
     if (withBatch) for (const b of batchList) col.appendChild(makeBatchCard(b));
@@ -1681,7 +1705,7 @@ function renderOverview() {
     colsEl.appendChild(col);
   }
   // 공유 인프라 (kafka/redis/db/기타) — 외부는 제공 서비스 단계로 분리됨
-  const sharedTypes = ['kafka', 'redis', 'db', 'other'].filter(t => infraTypes.has(t));
+  const sharedTypes = ['kafka', 'redis', 'db', 'other'].filter(t => infraTypes.has(t) && shown('infra:' + t));
   if (sharedTypes.length) {
     const col = document.createElement('div');
     col.className = 'column infra-col';
@@ -1692,8 +1716,14 @@ function renderOverview() {
     for (const t of sharedTypes) col.appendChild(makeInfraTypeCard(t, (infraMembers[t] || new Set()).size));
     colsEl.appendChild(col);
   }
+  if (!colsEl.children.length) {
+    colsEl.innerHTML = `<div class="browse-empty">${kind === 'batch' ? '배치 진입점이' : '화면 진입점이'} 없습니다.</div>`;
+  }
 
-  currentEdges = edges;
+  // 화면 보기는 배치 진입 엣지를 숨기고, 배치 보기는 도달 가능한 엣지만 그린다.
+  currentEdges = edges.filter(e => useReach
+    ? (reach.has(e.source) && reach.has(e.target))
+    : !e.source.startsWith('batch:'));
   buildCurrentAdj();
   requestAnimationFrame(() => { pruneOrphans(); drawConnectors(); applyHighlight(); });
 }
@@ -2713,7 +2743,8 @@ function attachHandlers() {
     else clearFocus();
   });
   // 좌측 메뉴 = 해당 페이지로 이동 (토글 OFF 없음 — 다시 눌러도 그 페이지 유지)
-  document.getElementById('overview-btn').addEventListener('click', () => setOverview(true));
+  document.getElementById('overview-btn').addEventListener('click', () => setOverview(true, 'screen'));
+  document.getElementById('overview-batch-btn').addEventListener('click', () => setOverview(true, 'batch'));
   document.getElementById('structure-btn').addEventListener('click', () => setStructure(true));
   document.querySelectorAll('#nav .nav-btn[data-view]').forEach(b =>
     b.addEventListener('click', () => openView(b.dataset.view)));
@@ -2864,7 +2895,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '24';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '27';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
@@ -2924,6 +2955,7 @@ function renderFeatureView() {
   document.getElementById('svc-filter-wrap')?.remove();
   document.getElementById('process-dock').classList.add('hidden');
   dockFeature = false;   // 기능 전환 시 독 요청 초기화 — 해당 모듈이 다시 켠다
+  dockChangedNodes = new Set();
   currentEdges = []; buildCurrentAdj();
   document.getElementById('connectors').innerHTML = '';
   const cols = document.getElementById('columns');
@@ -2962,7 +2994,9 @@ window.Flowmap = {
   // 네비게이션 / 상태
   setFocus, setService, setOverview, setStructure, setStructSvc, setStructPath, setStructFile, setSel, setInfraType, clearFocus,
   // 하단 프로세스 독 — 기능 뷰에서 state.sel 기준으로 표시 (on=true 후 setSel 로 base 지정)
-  setProcessDockEnabled(on) { dockFeature = !!on; renderProcessDock(); },
+  setProcessDockEnabled(on) { dockFeature = !!on; if (!on) dockChangedNodes = new Set(); renderProcessDock(); },
+  // 프로세스 독에서 강조할 "실제 수정된 메서드" id 집합 지정 (기능 뷰 전용)
+  setDockChangedNodes(ids) { dockChangedNodes = ids instanceof Set ? ids : new Set(ids || []); renderProcessDock(); },
   openView, pushViewUrl, param: urlParamOf, renderDetail,
   // 모듈 등록 / 데이터 로드
   registerView(view, mod) { featureViews.set(view, mod); },
