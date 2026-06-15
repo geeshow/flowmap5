@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>flowmap — 호출관계분석</title>
-  <link rel="stylesheet" href="style.css?v=57">
+  <link rel="stylesheet" href="style.css?v=63">
 </head>
 <body>
   <!-- 좌측 사이드바: 브랜드 + 네비 + 통계 -->
@@ -23,7 +23,7 @@
       <button class="nav-btn" data-view="api" title="OpenAPI 기반 API 카탈로그 — 파라미터·요청/응답 스키마 문서"><span class="nb-ico">📖</span><span class="nb-label">API 문서</span></button>
       <button id="structure-btn" class="nav-btn" title="서비스별 어플리케이션 구조 — API + 호출/피호출 관계"><span class="nb-ico">🏗️</span><span class="nb-label">어플리케이션구조</span></button>
     </nav>
-    <div id="sidebar-stats" class="sb-stats"></div>
+    <div id="sidebar-legend" class="sb-legend"></div>
   </aside>
   <!-- 사이드바 우측 가장자리 드래그 → 너비 조절 -->
   <div id="sidebar-resizer"></div>
@@ -46,8 +46,7 @@
     <div id="layout">
       <!-- 메인: 호출관계분석 -->
       <main id="flow">
-        <!-- 빈 영역 드래그 → 캔버스 패닝(마우스로 슬라이드) -->
-        <div id="flow-canvas" class="pannable">
+        <div id="flow-canvas">
           <!-- 분석 모드 툴바 (focus 노드가 있을 때만) -->
           <div id="analysis-bar" class="hidden">
             <button id="back-to-browse" class="btn" title="서비스 목록으로">⟵ 목록</button>
@@ -94,6 +93,6 @@
     <div id="process-dock" class="hidden"></div>
   </div>
 
-  <script src="app.js?v=101"></script>
+  <script src="app.js?v=109"></script>
 </body>
 </html>
