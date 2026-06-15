@@ -1528,8 +1528,8 @@ function setupServiceFilter(total) {
 function superId(id) {
   const n = nodeById.get(id);
   if (n) {
-    // 배치는 진입점 — 모듈(fqcn) 단위 노드로 묶어 진입/화면 컬럼에 배치한다.
-    if (n.layer === 'BATCH') return 'batch:' + (n.fqcn || n.project || id);
+    // 배치는 진입점 — 서비스(project) 단위로 묶어 진입/화면 컬럼에 '{service}-batch' 카드로 배치한다.
+    if (n.layer === 'BATCH') return 'batch:' + (n.project || n.fqcn || id);
     // 외부 API 호출 노드는 기본적으로 공유 '외부 API' 로 묶는다 (project 태그 무시).
     //   같은 외부 URL 을 여러 프론트가 호출하면 id 충돌로 한 프론트 소속이 되어 화면↔화면 가짜 연결이 생기기 때문.
     //   (단, buildServiceGraph 가 join 엣지의 ext source 만 예외로 그 프론트 svc 에 귀속시켜 front→backend 흐름은 유지)
@@ -1560,22 +1560,21 @@ function buildServiceGraph() {
     if (!a) { a = { source: ss, target: st, kc, count: 0, async: false }; agg.set(key, a); }
     a.count++; if (e.mode === 'async') a.async = true;
   }
-  // 배치 모듈 → 소속 서비스 진입 엣지. 배치는 자체(batch) 호출만 있어 서비스 그래프상 고립되므로,
+  // 배치 → 소속 서비스 진입 엣지. 배치는 자체(batch) 호출만 있어 서비스 그래프상 고립되므로,
   //   진입점이 구동하는 서비스로 연결해 진입/화면/배치 컬럼에서 흐름이 보이게 한다.
-  for (const [fqcn, project] of batchModules()) {
-    if (!project) continue;
-    const source = 'batch:' + fqcn, target = 'svc:' + project;
+  for (const project of batchProjects()) {
+    const source = 'batch:' + project, target = 'svc:' + project;
     if (source === target) continue;
     const key = source + '|' + target + '|batch';
     if (!agg.has(key)) agg.set(key, { source, target, kc: 'batch', count: 1, async: false });
   }
   return [...agg.values()];
 }
-// 배치 모듈(fqcn) → 소속 project 매핑 (BATCH 레이어 노드 기준)
-function batchModules() {
-  const m = new Map();
-  for (const n of NODES) if (n.layer === 'BATCH' && (n.fqcn || n.project)) m.set(n.fqcn || n.project, n.project);
-  return m;
+// 배치(BATCH 레이어) 노드를 가진 서비스(project) 집합 — 서비스 단위 배치 진입 노드의 기준
+function batchProjects() {
+  const s = new Set();
+  for (const n of NODES) if (n.layer === 'BATCH' && n.project) s.add(n.project);
+  return s;
 }
 
 // 화면 기준 서비스 티어 분류 (전체보기·어플리케이션구조 picker 공용):
@@ -1647,19 +1646,18 @@ function renderOverview() {
   colsEl.className = 'overview';
   colsEl.innerHTML = '';
 
-  // 배치 모듈 — 진입점이므로 tier 0(진입/화면/배치)에 모듈명 카드로 배치
+  // 배치 — 진입점이므로 tier 0(진입/화면/배치)에 서비스 단위 '{service}-batch' 카드로 묶어 배치
   const batchTargets = new Set(EDGES.filter(e => e.kind === 'batch').map(e => e.target));
-  const batchAgg = new Map();   // fqcn → { project, count, ids }
+  const batchAgg = new Map();   // project → { count, modules, ids }
   for (const n of NODES) {
     if (n.layer !== 'BATCH') continue;
-    const fqcn = n.fqcn || n.project || n.id;
-    const m = batchAgg.get(fqcn) || { project: n.project, count: 0, ids: [] };
-    m.count++; m.ids.push(n.id); batchAgg.set(fqcn, m);
+    const key = n.project || n.fqcn || n.id;
+    const m = batchAgg.get(key) || { project: n.project, count: 0, modules: new Set(), ids: [] };
+    m.count++; m.ids.push(n.id); if (n.fqcn) m.modules.add(n.fqcn); batchAgg.set(key, m);
   }
-  const batchList = [...batchAgg].map(([fqcn, m]) => ({
-    fqcn, project: m.project, count: m.count,
-    label: fqcn.split('#')[0].split('.').pop(),   // 모듈(클래스)명만
-
+  const batchList = [...batchAgg].map(([key, m]) => ({
+    key, project: m.project, count: m.count, modules: m.modules.size,
+    label: (m.project || key) + '-batch',
     jobId: m.ids.find(id => !batchTargets.has(id)) || m.ids[0],   // 진입 Job = 배치 엣지 타깃이 아닌 노드
   }));
 
@@ -2053,12 +2051,13 @@ function makeInfraTypeCard(type, count) {
 
 // 전체보기: 배치 모듈을 진입 노드(tier 0)로 표현 — 클릭 시 진입 Job 기준 호출관계분석
 function makeBatchCard(b) {
-  const sup = 'batch:' + b.fqcn;
+  const sup = 'batch:' + b.key;
   const card = document.createElement('div');
   card.className = 'node-card ov-infra nc-l-batch' + (sup === state.sel ? ' sel' : '');
   card.dataset.node = sup;
+  const sub = b.modules > 1 ? `${b.modules} jobs · ${b.count} steps` : `${b.count} steps`;
   card.innerHTML = `<div class="ov-svc-name"><span class="nc-icon">⏱️</span> ${esc(b.label)}${ovTag('배치', 'bat')}</div>`
-    + `<div class="ov-svc-sub">${b.count} steps${b.project ? ' · ' + esc(b.project) : ''}</div>`;
+    + `<div class="ov-svc-sub">${sub}</div>`;
   card.addEventListener('click', () => { if (b.jobId) setFocusFromOverview(b.jobId); });
   card.addEventListener('mouseenter', () => alignNeighbors(sup));
   card.addEventListener('mouseleave', () => clearAlign());
