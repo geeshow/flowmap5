@@ -219,16 +219,39 @@ function reconcileS2S() {
   }
 }
 
-// 게이트웨이 프리픽스(첫 경로 세그먼트) 제거 후 백엔드 CONTROLLER 와 매칭.
-//   프론트는 게이트웨이 경로(/user/v3/rsa)로 호출하지만 백엔드는 프리픽스가 벗겨진 실제 경로(/v3/rsa)를
-//   기록하므로, join 의 정확매칭이 실패한다. 첫 세그먼트를 떼고 단일 후보일 때만 연결한다.
-function gatewayMatch(path, method, ctrlByPath) {
+// 게이트웨이를 경유한 프론트→백엔드 매칭.
+//   프론트는 게이트웨이 public 경로(/user/v3/rsa)로 호출하지만 백엔드는 프리픽스가 (라우트 필터로)
+//   벗겨진 실제 경로(/v3/rsa)를 기록하므로 직접매칭이 실패한다.
+//   ① 발견된 라우트 테이블(<gw>.gateway.json)이 있으면: publicPrefix 가 맞는 라우트를 찾아 그 라우트의
+//      backendPrefix 로 치환(StripPrefix/RewritePath/PrefixPath 결과)해 백엔드 경로를 만들고 매칭 →
+//      "/oauth"(미변환)와 "/user"(프리픽스 제거)처럼 라우트마다 다른 변환을 정확히 반영한다.
+//   ② 라우트 테이블이 없거나 맞는 라우트가 없으면: 첫 세그먼트만 떼는 휴리스틱으로 폴백.
+//   두 경우 모두 후보가 유일할 때만 연결한다.
+function gatewayMatch(path, method, ctrlByPath, routes) {
   if (!path) return null;
-  const segs = normPath(path).split('/').filter(Boolean);
-  if (segs.length < 2) return null;                       // 프리픽스 + 최소 1세그먼트
-  const stripped = normPath('/' + segs.slice(1).join('/'));
-  const cands = (ctrlByPath.get(stripped) || []).filter(c => verbCompatible(method, c.httpMethod));
-  return cands.length === 1 ? cands[0].id : null;
+  const np = normPath(path);
+  const tryPath = (p) => {
+    const cands = (ctrlByPath.get(normPath(p || '/')) || []).filter(c => verbCompatible(method, c.httpMethod));
+    return cands.length === 1 ? cands[0].id : null;
+  };
+  if (routes && routes.length) {                          // ① 라우트 테이블 기반 (publicPrefix 긴 것부터)
+    let prefixOwned = false;
+    for (const r of routes) {
+      const pp = normPath(r.publicPrefix || '');
+      if (!pp || pp === '/') continue;
+      if (np === pp || np.startsWith(pp + '/')) {
+        prefixOwned = true;                               // 이 경로는 게이트웨이 라우트가 소유
+        const rest = np.slice(pp.length);                 // '' 또는 '/...'
+        const bp = (r.backendPrefix || '').replace(/\/+$/, '');
+        const hit = tryPath(bp + rest);
+        if (hit) return hit;
+      }
+    }
+    if (prefixOwned) return null;                         // 라우트가 소유한 경로는 그 변환을 신뢰 → 휴리스틱 폴백 금지
+  }
+  const segs = np.split('/').filter(Boolean);             // ② 폴백: 라우트 테이블이 없거나 소유 라우트가 없을 때만 첫 세그먼트 제거
+  if (segs.length < 2) return null;
+  return tryPath('/' + segs.slice(1).join('/'));
 }
 
 // 별칭(alias) 매칭: 백엔드가 선언한 대체 키(예: nexcore .jmd 트랜잭션 Tid)를 경로 세그먼트로 조회.
@@ -269,6 +292,14 @@ async function loadAndApplyJoins() {
       }
     }
   }
+  // 게이트웨이 라우트 테이블(<gw>.gateway.json) 로드 → publicPrefix 긴(구체적인) 순으로 정렬해
+  //   gatewayMatch 가 가장 구체적인 라우트부터 시도하게 한다(예: /open-api/v1/users 가 /open-api 보다 먼저).
+  const gatewayFiles = MANIFEST.projects.filter(p => p.gateway).map(p => p.gateway);
+  const gwDocs = await Promise.all(gatewayFiles.map(f => jsonFetch('data/' + f)));
+  const gwRoutes = gwDocs.flatMap(d => (d && Array.isArray(d.routes)) ? d.routes : [])
+    .filter(r => r && r.publicPrefix)
+    .sort((a, b) => (b.publicPrefix || '').length - (a.publicPrefix || '').length);
+
   const joins = await Promise.all(joinFiles.map(f => jsonFetch('data/' + f)));
   const added = [];
   for (const j of joins) {
@@ -288,8 +319,8 @@ async function loadAndApplyJoins() {
           const a = aliasMatch(link.normalizedPath, link.httpMethod, ctrlByAlias);
           if (a) { target = a; conf = conf || 'alias'; }
           else {
-            const t = gatewayMatch(link.normalizedPath, link.httpMethod, ctrlByPath);
-            if (t) { target = t; conf = conf || 'gateway'; } // 게이트웨이 프리픽스 매칭
+            const t = gatewayMatch(link.normalizedPath, link.httpMethod, ctrlByPath, gwRoutes);
+            if (t) { target = t; conf = conf || 'gateway'; } // 게이트웨이 라우트 테이블/프리픽스 매칭
           }
         }
       }
