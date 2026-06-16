@@ -1,0 +1,370 @@
+// features/deploy.js — 배포 영향도: 좌측 레일(일자 그룹 → 배포목록) + 우측 풀폭 영향도.
+//   커밋 영향도(impact.js) 구성과 유사: 레일에서 배포를 고르면 오른쪽에 PR 목록 + 서비스 영향도를 넓게.
+//   진입 시 첫 배포·첫 PR 이 기본 선택된다. PR 클릭 → 커밋 영향도 뷰로 이동하지 않고,
+//   impact.js 의 공개 컴포넌트(FM.impact.renderInto)로 동일한 영향도 콘텐츠를 하단에 임베드.
+// URL: view=deploy, y=<년도>, d=<날짜>, t=<티켓id>, pr=<PR번호>
+(function () {
+  const FM = window.Flowmap;
+  const BASE = 'data/deploy/';
+  const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+
+  let indexData;                 // undefined=미로드, null=데이터없음, {byDate,years,year}
+  const dayCache = new Map();    // date → Promise<{deploy, pr}>
+  const yearCache = new Map();   // year → Promise<Map<date,{date,rec,tickets}>>
+  let renderSeq = 0;
+
+  function el(tag, cls, html) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html !== undefined) e.innerHTML = html;
+    return e;
+  }
+  function serviceHue(name) {
+    let h = 2166136261;
+    for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0) % 360;
+  }
+  function dow(date) { const d = new Date(date + 'T00:00:00'); return isNaN(d) ? '' : DOW[d.getDay()]; }
+  function fmtTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso); if (isNaN(d)) return '';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  /* ───────── 데이터 로드 ───────── */
+  async function ensureIndex() {
+    if (indexData !== undefined) return indexData;
+    const [idx, pidx] = await Promise.all([FM.fetchData(BASE + 'index.json'), FM.fetchData(BASE + 'pr_index.json')]);
+    if (!idx && !pidx) { indexData = null; return null; }
+    const byDate = new Map();
+    for (const q of (idx && idx.queries) || []) byDate.set(q.date, { date: q.date, deployCount: q.deployCount || 0, deployStatus: q.status, deployFile: q.file, prCount: 0, ticketCount: 0 });
+    for (const e of (pidx && pidx.entries) || []) {
+      const r = byDate.get(e.date) || { date: e.date, deployCount: 0 };
+      r.prCount = e.prCount || 0; r.ticketCount = e.ticketCount || 0; r.prStatus = e.status; r.prFile = e.file;
+      byDate.set(e.date, r);
+    }
+    const years = [...new Set([...byDate.keys()].map((d) => d.slice(0, 4)))].sort().reverse();
+    indexData = { byDate, years, year: (idx && idx.year) || (pidx && pidx.year) || (years[0] ? +years[0] : null) };
+    return indexData;
+  }
+  function loadDay(rec) {
+    if (dayCache.has(rec.date)) return dayCache.get(rec.date);
+    const p = Promise.all([
+      rec.deployFile ? FM.fetchData(BASE + rec.deployFile) : Promise.resolve(null),
+      rec.prFile ? FM.fetchData(BASE + rec.prFile) : Promise.resolve(null),
+    ]).then(([deploy, pr]) => ({ deploy, pr }));
+    dayCache.set(rec.date, p);
+    return p;
+  }
+  // 선택 년도의 모든(배포 있는) 날짜를 로드해 일자별 티켓 목록 구성 (레일 그룹용)
+  function loadYear(year) {
+    if (yearCache.has(year)) return yearCache.get(year);
+    const recs = [...indexData.byDate.values()].filter((r) => r.date.slice(0, 4) === year && ((r.deployCount || 0) > 0 || (r.prCount || 0) > 0));
+    const projs = projectSet();
+    const p = Promise.all(recs.map((r) => loadDay(r).then(({ deploy, pr }) => ({ date: r.date, rec: r, tickets: buildTickets(deploy, pr, projs) }))))
+      .then((arr) => { arr.sort((a, b) => b.date.localeCompare(a.date)); const m = new Map(); for (const x of arr) if (x.tickets.length) m.set(x.date, x); return m; });
+    yearCache.set(year, p);
+    return p;
+  }
+
+  /* ───────── 서비스 매핑 ───────── */
+  function projectSet() {
+    const s = new Set((FM.META && FM.META.projects) || []);
+    for (const p of (FM.MANIFEST && FM.MANIFEST.projects) || []) if (p && p.name) s.add(p.name);
+    return s;
+  }
+  function mapRepoToService(repo, projectName, projs) {
+    if (repo && projs.has(repo)) return repo;
+    if (projectName && projs.has(projectName)) return projectName;
+    return null;
+  }
+  function buildTickets(deploy, pr, projs) {
+    const deployList = (deploy && deploy.deploy_list) || [];
+    const depByTicket = new Map(deployList.map((d) => [d.release_ticket_id, d]));
+    const tickets = []; const seen = new Set();
+    const model = (t, dep) => {
+      const cat = (dep && dep.catalog_project) || {};
+      const org = (t && t.git_organization) || cat.git_organization || '';
+      const repo = (t && t.git_repository) || cat.git_repository || '';
+      const projectName = cat.project_name || '';
+      return {
+        id: (t && t.release_ticket_id) || (dep && dep.release_ticket_id),
+        summary: (t && t.summary) || (dep && dep.summary) || '(제목 없음)',
+        phase: (t && t.phase) || (dep && dep.phase) || '',
+        platform: (t && t.platform) || (dep && dep.platform) || '',
+        releaseAt: (t && t.release_at) || (dep && dep.release_at) || '',
+        org, repo, projectName,
+        prs: (t && t.prs) || [],
+        service: mapRepoToService(repo, projectName, projs),
+      };
+    };
+    for (const t of (pr && pr.by_ticket) || []) { seen.add(t.release_ticket_id); tickets.push(model(t, depByTicket.get(t.release_ticket_id))); }
+    for (const d of deployList) { if (!seen.has(d.release_ticket_id)) tickets.push(model(null, d)); }
+    return tickets;
+  }
+  function serviceEdges() {
+    const agg = new Map();
+    for (const e of FM.EDGES) {
+      if (e.kind !== 's2s' && e.kind !== 'join') continue;
+      const sn = FM.nodeById.get(e.source), tn = FM.nodeById.get(e.target);
+      if (!sn || !tn) continue;
+      const sp = sn.project, tp = tn.project;
+      if (!sp || !tp || sp === tp) continue;
+      const kc = e.kind === 's2s' ? 's2s' : 'join';
+      const key = sp + '|' + tp + '|' + kc;
+      let a = agg.get(key);
+      if (!a) { a = { source: 'svc:' + sp, target: 'svc:' + tp, sp, tp, kc, count: 0, async: false }; agg.set(key, a); }
+      a.count++; if (e.mode === 'async') a.async = true;
+    }
+    return [...agg.values()];
+  }
+
+  /* ───────── 뷰 ───────── */
+  function curYear() {
+    const y = FM.param('y');
+    if (y) return y;
+    if (indexData && indexData.year != null) return String(indexData.year);
+    return (indexData && indexData.years[0]) || '';
+  }
+  function nav(params) { FM.pushViewUrl('deploy', params); render(); }
+
+  // URL 파라미터(d/t/pr)가 있으면 그대로, 없으면 기본값(첫 배포일·첫 배포·첫 PR)을 채운 "유효 선택".
+  // 배포 영향도 진입 시 URL 을 더럽히지 않고도 첫 배포·첫 PR 이 선택된 상태로 보이게 한다.
+  function computeEffective(byDate) {
+    let date = FM.param('d'), ticketId = FM.param('t'), prNumber = FM.param('pr');
+    if (!date || !byDate.has(date)) date = byDate.size ? byDate.keys().next().value : null;
+    const grp = date && byDate.get(date);
+    const tickets = (grp && grp.tickets) || [];
+    let ticket = ticketId && tickets.find((x) => String(x.id) === ticketId);
+    if (!ticket && tickets.length) ticket = tickets[0];
+    ticketId = ticket ? String(ticket.id) : null;
+    if (ticket) {
+      const prs = ticket.prs || [];
+      let pr = (prNumber != null) && prs.find((p) => String(p.number) === String(prNumber));
+      if (!pr && prs.length) pr = prs[0];
+      prNumber = pr ? String(pr.number) : null;
+    } else prNumber = null;
+    return { date, ticketId, prNumber, ticket };
+  }
+
+  FM.registerView('deploy', {
+    render,
+    escape() { if (FM.param('t')) nav({ y: curYear() }); else FM.setOverview(true); },
+  });
+
+  function render() {
+    const seq = ++renderSeq;
+    const cols = document.getElementById('columns');
+    if (indexData === undefined) {
+      cols.className = 'dep-view'; cols.innerHTML = '<div class="dep-loading">불러오는 중…</div>';
+      ensureIndex().then(() => { if (renderSeq === seq) afterIndex(seq); });
+      return;
+    }
+    afterIndex(seq);
+  }
+
+  function drawBreadcrumb(eff) {
+    const bc = document.getElementById('breadcrumb');
+    if (!bc) return;
+    bc.style.display = 'flex';
+    const y = curYear();
+    const d = eff ? eff.date : FM.param('d'), t = eff ? eff.ticketId : FM.param('t');
+    const pr = eff ? eff.prNumber : FM.param('pr');
+    const seg = [`<span class="bc-link" data-dep="root">🚀 배포 영향도</span>`];
+    if (indexData && indexData.years.length) seg.push(`<span class="bc-sep">›</span><span class="bc-link" data-dep="year">${FM.esc(y)}</span>`);
+    if (d && t) seg.push(`<span class="bc-sep">›</span><span class="bc-focus">${FM.esc(d)} #${FM.esc(t)}${pr != null && pr !== '' ? ` · PR #${FM.esc(String(pr))}` : ''}</span>`);
+    bc.innerHTML = seg.join('');
+    bc.querySelector('[data-dep="root"]').onclick = () => nav({ y });
+    bc.querySelector('[data-dep="year"]') && (bc.querySelector('[data-dep="year"]').onclick = () => nav({ y }));
+  }
+
+  function afterIndex(seq) {
+    const cols = document.getElementById('columns');
+    cols.className = 'dep-view'; cols.innerHTML = '';
+    FM.setCanvasEdges([]); FM.cardEls.clear();
+    document.getElementById('connectors').innerHTML = '';
+    drawBreadcrumb();
+    if (indexData === null) { renderMissing(cols); return; }
+
+    const rail = el('div', 'dep-rail');
+    const main = el('div', 'dep-main');
+    cols.append(rail, main);
+    // dep-main 세로 스크롤 시 커넥터(서비스/임베드 임팩트 그래프) 위치 재계산.
+    let scrollRaf = 0;
+    main.addEventListener('scroll', () => {
+      if (scrollRaf) return;
+      scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; FM.drawConnectors(); });
+    });
+    rail.innerHTML = '<div class="dep-loading">불러오는 중…</div>';
+    main.innerHTML = '';
+    loadYear(curYear()).then((byDate) => {
+      if (renderSeq !== seq) return;
+      const eff = computeEffective(byDate);
+      drawBreadcrumb(eff);
+      renderRail(rail, byDate, eff);
+      renderMain(main, byDate, eff, seq);
+    });
+  }
+
+  function renderMissing(cols) {
+    const box = el('div', 'browse-empty dep-empty',
+      '<div class="be-ico">🚀</div>' +
+      '<div class="be-msg">배포 영향도 데이터가 없습니다<br>' +
+      '<span class="hint"><code>docs/web/data/deploy/</code> 에 <code>index.json</code> · <code>pr_index.json</code> ·' +
+      ' <code>&lt;년도&gt;/&lt;날짜&gt;/deploy_list.json</code> · <code>pr_list.json</code> 을 넣은 뒤 새로고침하세요.</span></div>' +
+      '<div class="be-actions"><button class="btn" data-dep-home>🗺️ 전체보기로</button></div>');
+    box.querySelector('[data-dep-home]').onclick = () => FM.setOverview(true);
+    cols.appendChild(box);
+  }
+
+  /* ───────── 좌측 레일: 일자 그룹 → 배포목록 ───────── */
+  function renderRail(rail, byDate, eff) {
+    const y = curYear(), curD = eff ? eff.date : FM.param('d'), curT = eff ? eff.ticketId : FM.param('t');
+    rail.innerHTML = '';
+    const head = el('div', 'dep-rail-head');
+    head.appendChild(el('span', 'dep-rail-title', '🚀 배포'));
+    const sel = el('select', 'dep-year');
+    for (const yr of indexData.years) { const o = el('option'); o.value = yr; o.textContent = yr + '년'; if (yr === y) o.selected = true; sel.appendChild(o); }
+    sel.onchange = () => nav({ y: sel.value });
+    head.appendChild(sel);
+    rail.appendChild(head);
+
+    if (!byDate.size) { rail.appendChild(el('div', 'dep-hint', '이 년도 배포 데이터가 없습니다.')); return; }
+    for (const [date, grp] of byDate) {
+      const g = el('div', 'dep-dgroup');
+      const prc = grp.tickets.reduce((n, t) => n + t.prs.length, 0);
+      g.appendChild(el('div', 'dep-dg-head',
+        `<span class="dep-dg-date">${FM.esc(date)}</span><span class="dep-dg-dow">${dow(date)}</span>` +
+        `<span class="dep-dg-cnt">🚀${grp.tickets.length} · 🔀${prc}</span>`));
+      for (const t of grp.tickets) {
+        const on = date === curD && String(t.id) === curT;
+        const row = el('div', 'dep-ditem' + (on ? ' sel' : ''));
+        const svc = t.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(t.service)}</span>` : (t.repo ? `<span class="dep-svc-tag no">미매핑</span>` : '');
+        row.innerHTML =
+          `<div class="dep-di-top"><span class="dep-di-id">#${FM.esc(String(t.id || ''))}</span><span class="dep-di-pr">🔀${t.prs.length}</span></div>` +
+          `<div class="dep-di-summary">${FM.esc(t.summary)}</div>` +
+          `<div class="dep-di-meta">${t.platform ? `<span class="dep-chip">${FM.esc(t.platform)}</span>` : ''}${svc}</div>`;
+        row.onclick = () => nav({ y, d: date, t: String(t.id) });
+        g.appendChild(row);
+      }
+      rail.appendChild(g);
+    }
+  }
+
+  /* ───────── 우측 메인: 선택 배포의 PR 목록 + 서비스 영향도 (풀폭) ───────── */
+  function renderMain(main, byDate, eff, seq) {
+    main.innerHTML = '';
+    const y = curYear();
+    const d = eff && eff.date, tk = eff && eff.ticket;
+    if (!tk) {
+      main.appendChild(el('div', 'dep-main-empty',
+        '<div class="dme-ico">🚀</div><div class="dme-msg">왼쪽에서 배포를 선택하세요</div>'));
+      return;
+    }
+
+    const head = el('div', 'dep-main-head');
+    const repo = (tk.org ? tk.org + '/' : '') + (tk.repo || '');
+    head.innerHTML =
+      `<div class="dep-mh-top"><span class="dep-mh-id">#${FM.esc(String(tk.id))}</span>` +
+      `<span class="dep-mh-time">${FM.esc(d)} · ${FM.esc(fmtTime(tk.releaseAt))}</span></div>` +
+      `<div class="dep-mh-summary">${FM.esc(tk.summary)}</div>` +
+      `<div class="dep-mh-meta">${tk.platform ? `<span class="dep-chip">${FM.esc(tk.platform)}</span>` : ''}` +
+      `${tk.phase ? `<span class="dep-chip">${FM.esc(tk.phase)}</span>` : ''}` +
+      `${repo ? `<span class="dep-repo">${FM.esc(repo)}</span>` : ''}` +
+      `${tk.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(tk.service)}</span>` : (tk.repo ? `<span class="dep-svc-tag no">그래프 미매핑</span>` : '')}</div>`;
+    main.appendChild(head);
+
+    // PR 목록
+    const prSec = el('div', 'dep-section');
+    prSec.appendChild(el('div', 'dep-sec-head', `PR 목록 (${tk.prs.length})`));
+    if (!tk.prs.length) prSec.appendChild(el('div', 'dep-hint', '연결된 PR이 없습니다.'));
+    else {
+      const list = el('div', 'dep-pr-grid');
+      const ctx = { y, d, t: eff.ticketId, sel: eff.prNumber };
+      for (const p of tk.prs) list.appendChild(prCard(p, ctx));
+      prSec.appendChild(list);
+    }
+    main.appendChild(prSec);
+
+    // 서비스 영향도 (풀폭) — 서비스 단위 연관관계
+    const impSec = el('div', 'dep-section');
+    impSec.appendChild(el('div', 'dep-sec-head', '서비스 영향도 · 연관관계'));
+    if (!tk.service) {
+      impSec.appendChild(el('div', 'dep-imp-note',
+        `이 배포(<code>${FM.esc(repo)}</code>)는 분석 그래프에 매칭되는 서비스가 없습니다. 메서드 단위 영향은 아래 “PR 커밋 영향도”에서 확인하세요.`));
+    } else {
+      const wrap = el('div', 'dep-svc-graph');
+      impSec.appendChild(wrap);
+      renderServiceGraph(wrap, new Set([tk.service]));
+    }
+    main.appendChild(impSec);
+
+    // PR 커밋 영향도 (하단 임베드) — 커밋 영향도 뷰로 이동하지 않고 같은 콘텐츠를 여기서 렌더.
+    renderPrImpact(main, eff, seq);
+  }
+
+  // 선택된 PR 의 커밋 영향도(분석 바 + 경계 투영 그래프)를 하단에 임베드한다.
+  // impact.js 의 공개 API(FM.impact.renderInto)를 재사용 — 커밋 영향도 뷰와 동일한 컴포넌트.
+  function renderPrImpact(main, eff, seq) {
+    if (!eff || eff.prNumber == null) return;
+    const sec = el('div', 'dep-section dep-impact');
+    sec.appendChild(el('div', 'dep-sec-head', `PR #${FM.esc(String(eff.prNumber))} 커밋 영향도`));
+    const host = el('div', 'dep-impact-host');
+    host.innerHTML = '<div class="dep-loading">커밋 영향도 불러오는 중…</div>';
+    sec.appendChild(host);
+    main.appendChild(sec);
+    FM.loadFeature('impact').then(() => {
+      if (renderSeq !== seq) return;                    // 그 사이 다른 배포/PR로 재렌더됨
+      const key = FM.impact && FM.impact.prKey(eff.prNumber);
+      if (!key) { host.innerHTML = '<div class="dep-hint">이 PR의 커밋 영향도 데이터가 없습니다 (impact 미수집).</div>'; return; }
+      FM.impact.renderInto(host, [key]);
+    }).catch(() => { host.innerHTML = '<div class="dep-hint">커밋 영향도 모듈 로드 실패.</div>'; });
+  }
+
+  function prCard(p, ctx) {
+    const on = ctx && String(p.number) === String(ctx.sel);
+    const card = el('div', 'dep-prc' + (on ? ' sel' : ''));
+    const num = p.number != null ? '#' + p.number : '';
+    card.innerHTML =
+      `<div class="dep-prc-top"><span class="dep-prc-num">PR ${FM.esc(num)}</span>` +
+      `<span class="dep-prc-detail" data-act="detail">${on ? '▾ 영향도' : '영향도 보기 ↓'}</span></div>` +
+      `<div class="dep-prc-title">${FM.esc(p.title || '')}</div>` +
+      `<div class="dep-prc-by">${FM.esc(p.user || '')} · ${FM.esc(fmtTime(p.merged_at))}` +
+      (p.html_url ? ` · <a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener">GitHub ↗</a>` : '') + `</div>`;
+    // PR 클릭 → 배포 영향도 안에서 pr= 선택 (커밋 영향도 뷰로 이동하지 않음). GitHub 링크는 통과.
+    const go = (ev) => { if (ev.target.closest('.dep-prc-gh')) return; if (p.number != null) nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) }); };
+    card.onclick = go;
+    return card;
+  }
+
+  function renderServiceGraph(wrap, touched) {
+    const allEdges = serviceEdges();
+    const display = new Set(touched);
+    for (const e of allEdges) { if (touched.has(e.sp)) display.add(e.tp); if (touched.has(e.tp)) display.add(e.sp); }
+    const nodeCount = new Map();
+    for (const n of FM.NODES) if (n.project) nodeCount.set(n.project, (nodeCount.get(n.project) || 0) + 1);
+
+    const grid = el('div', 'dep-svc-nodes');
+    for (const svc of [...display].sort((a, b) => (touched.has(b) - touched.has(a)) || a.localeCompare(b))) grid.appendChild(serviceCard(svc, touched.has(svc), nodeCount.get(svc) || 0));
+    wrap.appendChild(grid);
+    if (display.size <= 1) wrap.appendChild(el('div', 'dep-svc-note', '직접 연결된(s2s/join) 서비스가 없습니다.'));
+    const edges = allEdges.filter((e) => display.has(e.sp) && display.has(e.tp));
+    FM.setCanvasEdges(edges);
+    requestAnimationFrame(() => { FM.drawConnectors(); });
+  }
+
+  function serviceCard(svc, isTouched, nodes) {
+    const hue = serviceHue(svc);
+    const card = el('div', 'node-card dep-svc' + (isTouched ? ' touched' : ''));
+    card.dataset.node = 'svc:' + svc;
+    card.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
+    card.innerHTML =
+      `<div class="dep-svc-name"><span class="dep-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${FM.esc(svc)}` +
+      (isTouched ? '<span class="dep-svc-badge">배포</span>' : '') + '</div>' +
+      `<div class="dep-svc-sub">${nodes} nodes</div>`;
+    card.addEventListener('click', () => FM.setService(svc));
+    FM.cardEls.set('svc:' + svc, card);
+    return card;
+  }
+})();

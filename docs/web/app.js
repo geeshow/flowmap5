@@ -231,6 +231,20 @@ function gatewayMatch(path, method, ctrlByPath) {
   return cands.length === 1 ? cands[0].id : null;
 }
 
+// 별칭(alias) 매칭: 백엔드가 선언한 대체 키(예: nexcore .jmd 트랜잭션 Tid)를 경로 세그먼트로 조회.
+//   프론트가 /std/TACU0001 · /lng/TACU0001 · /TACU0001 (±.jmd) 처럼 컨텍스트 프리픽스를 붙여 호출해도
+//   토큰 세그먼트만 alias 인덱스에 맞으면 연결한다(프리픽스 열거 불필요). join.ts matchAlias 의 화면측 미러.
+function aliasMatch(path, method, ctrlByAlias) {
+  if (!path || !ctrlByAlias.size) return null;
+  const segs = normPath(path).split('/').filter(Boolean);
+  for (const s of segs) {
+    const key = s.replace(/\.jmd$/i, '');
+    const cands = (ctrlByAlias.get(key) || []).filter(c => verbCompatible(method, c.httpMethod));
+    if (cands.length === 1) return cands[0].id;           // Tid 는 전역 유일 → 항상 단일 후보
+  }
+  return null;
+}
+
 // 프론트→백엔드 연결: <project>.join.json 의 matched 링크 + 게이트웨이 프리픽스 매칭을 kind:'join' 엣지로 추가
 async function loadAndApplyJoins() {
   if (!MANIFEST) return;
@@ -239,11 +253,20 @@ async function loadAndApplyJoins() {
   const idSet = new Set(NODES.map(n => n.id));
   // 백엔드 CONTROLLER 인덱스 (게이트웨이 프리픽스 제거 매칭용)
   const ctrlByPath = new Map();
+  // 백엔드 alias 인덱스 (alias 선언 노드만; 예 nexcore .jmd 트랜잭션 Tid). alias 없는 백엔드는 비어 무영향.
+  const ctrlByAlias = new Map();
   for (const n of NODES) {
     if (n.layer === 'CONTROLLER' && n.endpoint) {
       const k = normPath(n.endpoint);
       if (!ctrlByPath.has(k)) ctrlByPath.set(k, []);
       ctrlByPath.get(k).push(n);
+    }
+    if (Array.isArray(n.aliases)) {
+      for (const a of n.aliases) {
+        if (!a) continue;
+        if (!ctrlByAlias.has(a)) ctrlByAlias.set(a, []);
+        ctrlByAlias.get(a).push(n);
+      }
     }
   }
   const joins = await Promise.all(joinFiles.map(f => jsonFetch('data/' + f)));
@@ -261,8 +284,13 @@ async function loadAndApplyJoins() {
           .filter(c => verbCompatible(link.httpMethod, c.httpMethod));
         if (direct.length === 1) { target = direct[0].id; conf = conf || 'direct'; }
         else {
-          const t = gatewayMatch(link.normalizedPath, link.httpMethod, ctrlByPath);
-          if (t) { target = t; conf = conf || 'gateway'; } // 게이트웨이 프리픽스 매칭
+          // alias(.jmd 트랜잭션 등) → 게이트웨이 프리픽스 순으로 폴백 (join.ts tier 순서와 동일)
+          const a = aliasMatch(link.normalizedPath, link.httpMethod, ctrlByAlias);
+          if (a) { target = a; conf = conf || 'alias'; }
+          else {
+            const t = gatewayMatch(link.normalizedPath, link.httpMethod, ctrlByPath);
+            if (t) { target = t; conf = conf || 'gateway'; } // 게이트웨이 프리픽스 매칭
+          }
         }
       }
       if (target) added.push({ source: link.frontendNodeId, target,
@@ -1753,7 +1781,17 @@ function structStats() {
 }
 
 // endpoint path → {path1}/{path2} 키 (세그먼트 부족 시 가능한 만큼)
+// kakaopay 비즈 컴포넌트 키 — FQCN 의 `.biz.` 직전 패키지 세그먼트.
+//   com.kakaopay.moneyball.ac.acgo0001.biz.PACU0001 → "acgo0001"
+//   com.kakaopay.moneyball.bc.bcgo3000.biz.PBCU3000 → "bcgo3000"
+// 이 패턴(<영문>+<숫자>.biz)이 없는 서비스(terafunding·프론트 등)는 null → 경로 그룹으로 폴백.
+function componentKeyOf(node) {
+  const m = node && node.fqcn && node.fqcn.match(/\.([a-z]+\d+)\.biz\./i);
+  return m ? m[1] : null;
+}
 function pathKeyOf(node) {
+  const comp = componentKeyOf(node);   // 컴포넌트(acgoXXXX) 단위 그룹 우선
+  if (comp) return comp;
   const segs = segsOf(node);
   if (segs.length >= 2) return '/' + segs[0] + '/' + segs[1];
   if (segs.length === 1) return '/' + segs[0];
@@ -2895,8 +2933,8 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '29';                      // 기능 모듈 캐시 버스팅
-const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc' };
+const FEATURE_VER = '34';                      // 기능 모듈 캐시 버스팅
+const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
 const detailExtensions = [];                   // fn(node, panelEl)

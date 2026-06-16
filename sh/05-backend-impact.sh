@@ -3,4 +3,4 @@
 # Extra flags pass through, e.g. ./05-backend-impact.sh --max 2  (fewer PRs, faster).
 . "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 echo "──────── [05] backend impact ────────" >&2
-bash "$SK/scripts/5-impact.sh" "$@"
+bash "$SK/scripts/05-impact.sh" "$@"

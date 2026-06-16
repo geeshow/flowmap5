@@ -4,14 +4,14 @@
 # (예: graph-<oldroot>.json)을 제거해, 다음 iterate.sh 실행이 유령 없이 시작되도록 한다.
 #
 # 대상 (모두 gitignore 된 생성물):
-#   1) flowmap-spring-kotlin/json   — 백엔드 그래프/_combined/openapi/impact/pulls/manifest
+#   1) flowmap-spring/json   — 백엔드 그래프/_combined/openapi/impact/pulls/manifest
 #   2) flowmap-react/json           — graph-<root>.json / .screens.json / .join.json / _manifest
 #   3) flowmap/docs/web/data        — 위 산출물이 조립된 웹 데이터 + manifest.json (+ *.json.gz)
 #
 # 사용: scripts/clean.sh            # 바로 삭제
 #       scripts/clean.sh --dry-run  # 지울 대상만 출력
 set -uo pipefail
-SK=/Users/kyutaepark/study/flowmap-spring-kotlin
+SK=/Users/kyutaepark/study/flowmap-spring
 RA=/Users/kyutaepark/study/flowmap-react
 FM=/Users/kyutaepark/study/flowmap
 

@@ -9,15 +9,16 @@
   = `python3 -m http.server 8770 --directory docs/web` → http://localhost:8770
   (preview 도구 사용 시 `preview_start` name=`flowmap`. Bash 로 서버 띄우지 말 것.)
 - **주요 화면(URL 파라미터)**: `?view=overview`(전체보기·기본 홈), `?view=commits`(커밋/PR 영향도),
-  `?view=api`(API 문서), `?view=structure`(어플리케이션구조).
-  드릴 파라미터: `service=<svc>`, `infra=<type>`, `focus=<nodeId>`, `pp=<path>`(경로 드릴), `pick=`.
+  `?view=deploy`(배포 영향도 — 년도→일별 배포→PR+서비스 영향), `?view=api`(API 문서), `?view=structure`(어플리케이션구조).
+  드릴 파라미터: `service=<svc>`, `infra=<type>`, `focus=<nodeId>`, `pp=<path>`(경로 드릴), `pick=`,
+  `y=<년도>`·`d=<날짜>`(배포 영향도).
 
 ## ⚠️ 캐시 버스팅 (코드 고치면 반드시 버전 올릴 것)
 
 정적 자산은 버전 쿼리로 캐시 관리. 안 올리면 브라우저가 옛 파일을 씀.
 - `docs/web/index.html`: `style.css?v=NN`, `app.js?v=NN`
 - `docs/web/app.js`: `const FEATURE_VER = 'NN'` — `features/*.js`·`features/*.css` 모듈 캐시키
-- **현재 값**: style.css `v=63`, app.js `v=115`, FEATURE_VER `27`
+- **현재 값**: style.css `v=63`, app.js `v=125`, FEATURE_VER `34`
 
 ## 핵심 파일
 
@@ -31,8 +32,13 @@
 - **위치**: `docs/web/data/` (git 추적됨). `data/manifest.json` 을 로드(프로젝트별 독립 그래프 병합),
   없으면 `data/graph.json` 폴백(현재 없음). `.gz` 있으면 우선 사용(DecompressionStream).
 - 프로젝트별: `<svc>.json`(그래프), `<svc>.openapi.json`(API 문서), 각 `.gz`.
-- **생성 파이프라인**: `sh/` 스크립트 — `sh/run-all.sh` 가 단계 01~11 오케스트레이션
-  (backend pull→analyze→merge→openapi→impact → frontend refresh→analyze→screens→join → backend-sync → verify).
+- **배포 영향도 데이터**: `data/deploy/` — `index.json`·`pr_index.json`(년/일 인덱스) +
+  `<년도>/<날짜>/deploy_list.json`·`pr_list.json`. `features/deploy.js` 가 로드(지연). PR→`view=commits` 딥링크.
+- **생성 파이프라인**: `sh/` 스크립트 — `sh/run-all.sh` 가 단계 01~13 오케스트레이션
+  (backend pull→analyze→merge→openapi→impact → **nexcore refresh** → frontend refresh→analyze→screens→join→**impact** → sync → verify).
+  세 분석기(spring-kotlin·nexcore·react)가 각자 `json/` 에 산출물을 만들고, **sync(12)** 가 그
+  세 디렉터리를 한 번에 `docs/web/data` 로 취합 + `manifest.json` 재생성(spring-kotlin `sync` 의
+  `--frontend-dir` CSV 로 nexcore·react json 을 동시 투입).
 - 레거시 `graphs/*.json` + `scripts/build.py` 경로는 제거됨(사용 안 함).
 
 ## 색/선 규칙 (통일 규칙)
