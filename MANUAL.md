@@ -228,7 +228,7 @@ BATCH/EXTERNAL/RESOURCE/OTHER), `method`, `fqcn`, `httpMethod`+`endpoint`(컨트
 여러 프로젝트(백엔드 다수 + 프론트엔드)를 **각각 따로 분석**해 둔 산출물을 모아 한 화면에 통합한다. 앱은 통합 그래프 하나가 아니라 **프로젝트별 파일 + 매니페스트**를 읽고 브라우저에서 병합한다(서비스 간 s2s 호출과 프론트→백엔드 join 연결도 브라우저가 계산).
 
 - 두 분석기는 각자 `json/`에 per-project 파일과 `_manifest.json`(프로젝트 메타데이터)을 자동 생성한다.
-  - 백엔드(`../flowmap-spring-kotlin`): `<project>.json`, `<project>.openapi.json`, `_combined.json`, `_manifest.json`
+  - 백엔드(`../flowmap-spring`): `<project>.json`, `<project>.openapi.json`, `_combined.json`, `_manifest.json`
   - 프론트(`../flowmap-react`): `<project>.json`, `<project>.join.json`, `_manifest.json`
 - 동기화:
 ```bash

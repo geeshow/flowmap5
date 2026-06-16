@@ -1,6 +1,6 @@
 # flowmap v2 기능 기획안
 
-**작성일**: 2026-06-13 · **데이터 소스**: `flowmap-spring-kotlin/kotlin-analyzer/json/`
+**작성일**: 2026-06-13 · **데이터 소스**: `flowmap-spring/kotlin-analyzer/json/`
 
 ## 0. 요약
 

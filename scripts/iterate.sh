@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 한 번의 반복(iteration): 실제 파이프라인 명령으로 산출물을 만들고 연결성을 검증한다.
-#   1) flowmap-spring-kotlin: ./gradlew run (refresh, NO sync) — analyze + combine(_combined.json) + impact + manifest
+#   1) flowmap-spring: ./gradlew run (refresh, NO sync) — analyze + combine(_combined.json) + impact + manifest
 #   2) flowmap-react:         ./flowmap pipeline                — analyze + screens + join (FRESH _combined 로 직접매칭)
-#   3) flowmap-spring-kotlin: ./gradlew run (sync)             — web data 조립(+떠난/stale prune +manifest)
+#   3) flowmap-spring: ./gradlew run (sync)             — web data 조립(+떠난/stale prune +manifest)
 #   4) flowmap:               node tests/check-connectivity.mjs
 #
 # 순서가 핵심이다 (양방향 의존):
@@ -14,7 +14,7 @@
 # refresh 는 반복 속도/오프라인 결정성을 위해 git pull 은 건너뛰고(--no-pull), PR 은 최근 2건만 본다(--impact-max 2).
 set -uo pipefail
 RA=/Users/kyutaepark/study/flowmap-react
-SK=/Users/kyutaepark/study/flowmap-spring-kotlin
+SK=/Users/kyutaepark/study/flowmap-spring
 FM=/Users/kyutaepark/study/flowmap
 
 echo "================ [1/4] spring: refresh (NO sync) — _combined.json + impact(2 PRs) ================"

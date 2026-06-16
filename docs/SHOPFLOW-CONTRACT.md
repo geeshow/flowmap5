@@ -6,7 +6,7 @@ server-to-server (S2S) calls, and gateway-prefix routing. Every screen and every
 endpoint must connect (directly or via gateway) — **zero orphans**.
 
 This is the join contract shared by three repos:
-- `flowmap-spring-kotlin/.repo/shopflow/**`  (backend, multi-module)
+- `flowmap-spring/.repo/shopflow/**`  (backend, multi-module)
 - `flowmap-react/.repo/shopflow-web/**`       (frontend)
 - `flowmap` (gateway/aggregation + verifier)
 

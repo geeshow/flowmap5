@@ -2,7 +2,7 @@
 
 Loop: each iteration adds deeper / trickier samples (deep call depth, API URLs in
 variables/constants/substituted, S2S chains, gateway prefixes), runs the REAL pipeline
-(`flowmap-react: ./flowmap pipeline` → `flowmap-spring-kotlin: ./gradlew run` refresh →
+(`flowmap-react: ./flowmap pipeline` → `flowmap-spring: ./gradlew run` refresh →
 `flowmap: node tests/check-connectivity.mjs`), and must pass the demo gate with **zero
 orphans**. Stop after **5 consecutive clean passes**.
 

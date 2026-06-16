@@ -1,0 +1,22 @@
+# flowmap.config — flowmap 통합 파이프라인(sh/run-all.sh) 오케스트레이션 설정.
+#   sh/_common.sh 가 (있으면) 이 파일을 읽어 자동 도출 경로를 override 한다.
+# 사용법: 이 파일을 `flowmap.config` 로 복사한 뒤 필요할 때만 값을 채운다.
+#   real(flowmap.config) 은 머신별 설정이라 .gitignore 대상이고, 템플릿(flowmap.config.example)만 추적된다.
+# 형식: KEY=VALUE, '#' 주석, ${VAR}/$VAR 치환(앞 키 → 환경변수 순).
+
+# ───────────── 필수 (required) ─────────────
+# 분석 대상(REPO)·백엔드 결합(BACKEND)은 이 루트가 아니라 각 분석기의 flowmap.config 에서 설정한다.
+# (각 분석기 디렉터리에서 flowmap.config.example → flowmap.config 복사 후 값 작성)
+#   flowmap-spring/flowmap.config     REPO=<백엔드 소스 루트>
+#   flowmap-nexcore/flowmap.config    REPO=<NEXCORE 소스 루트>
+#   flowmap-react/flowmap.config      REPO=<프론트 소스 루트>  BACKEND=<_combined.json CSV>
+# 루트 config 자체는 보통 비워둬도 동작한다(분석기 3곳이 이 저장소의 형제 디렉터리에 있다고 가정).
+
+# ───────────── 선택 (optional) ─────────────
+# 분석기 위치 override (기본: 이 저장소의 형제 디렉터리). 절대경로 권장.
+# SK=/abs/path/flowmap-spring        # 백엔드(Kotlin) 분석기
+# NX=/abs/path/flowmap-nexcore       # nexcore(Java) 분석기
+# RA=/abs/path/flowmap-react         # 프론트(ts) 분석기
+
+# sync 단계가 취합할 프론트(+nexcore) json 소스 (CSV). 미설정 시 sh/12 가 자동 구성.
+# FRONTEND_DIR=../flowmap-react/json

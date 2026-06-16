@@ -88,6 +88,21 @@
     return n.layer === 'RESOURCE';   // db-table·redis·kafka-topic = 인프라 경계(유출측)
   }
 
+  // 영향 대상의 종류 — 프론트 그래프의 진입점은 화면(SCREEN), 백엔드는 엔드포인트(CONTROLLER).
+  // impactedEndpoints 슬롯을 프론트는 SCREEN 으로 채우므로, 백엔드/프론트가 한 타임라인에
+  // 병합돼도 노드 레이어로 라벨을 구분한다(데이터 구조는 동일, 표시 명사만 다름).
+  function isScreenId(id) {
+    const n = FM.nodeById.get(id);
+    return !!(n && n.layer === 'SCREEN');
+  }
+  function targetNoun(id) { return isScreenId(id) ? '화면' : '엔드포인트'; }
+  // 한 집합(행 목록/레벨)의 대표 명사 — 모두 화면이면 '화면', 모두 엔드포인트면 '엔드포인트', 섞이면 '대상'.
+  function nounOf(ids) {
+    let s = false, e = false;
+    for (const id of ids) { if (isScreenId(id)) s = true; else e = true; if (s && e) break; }
+    return s && !e ? '화면' : e && !s ? '엔드포인트' : '대상';
+  }
+
   /* ───────── 영향 전파 ─────────
    * 영향 엔드포인트(impactedEndpoints)는 백엔드가 PR별로 사전계산해 인덱스에 넣어준다 —
    * 목록 "영향 N"·미선택 집계표는 샤드 없이 인덱스만으로 그린다. 변경 시드(changedApiMethods,
@@ -199,8 +214,8 @@
         if (part && Array.isArray(part.commits)) {
           const proj = part.repoUrl
             ? part.repoUrl.replace(/\/+$/, '').split('/').pop()
-            : f.replace(/\.impact\.json$/, '');
-          const shardBase = f.replace(/\.json$/, '');   // "<project>.impact" — 샤드 디렉터리 베이스
+            : f.split('/').pop().replace(/\.impact\.json$/, '');   // 폴더 레이아웃(projects/<svc>/<svc>.impact.json) → 베이스명만
+          const shardBase = f.replace(/\.json$/, '');   // "<...>/<project>.impact" — 샤드 디렉터리 베이스(상대경로 유지)
           part.commits.forEach(c => {
             if (part.repoUrl && !c._repoUrl) c._repoUrl = part.repoUrl;
             if (!c._project) c._project = proj;
@@ -461,11 +476,14 @@
       `<div class="imp-flowtitle">${FM.esc(data.branch)} — 변경 영향도</div>` +
       `<div class="imp-flowsub">최근 ${FM.esc(String(data.commitCount))}건 변경이력 · 공개 메서드 기준 호출그래프 역추적 | 화면→서비스→인프라 영향 분석</div>`));
 
-    const epCount = getEndpointImpact().length;
+    const epRows = getEndpointImpact();
+    const epCount = epRows.length;
+    // 데이터 구성에 따라 명사 적응 — 프론트만 병합됐으면 "영향 화면", 백엔드면 "영향 엔드포인트".
+    const allNoun = nounOf(epRows.map(r => r.id));
     const statCards = [
       { n: data.commitCount, label: '변경이력', cls: 'a' },
       { n: data.changedNodeCount, label: '변경 노드', cls: 'b' },
-      { n: epCount, label: '영향 엔드포인트', cls: 'c' },
+      { n: epCount, label: '영향 ' + allNoun, cls: 'c' },
       { n: data.deletedEndpointCount || 0, label: '삭제 API', cls: 'd' },
       { n: data.breakingDeletionCount || 0, label: 'Breaking', cls: 'e' },
     ];
@@ -479,7 +497,7 @@
 
     if (ep) {
       const chip = el('div', 'imp-epfilter',
-        `엔드포인트 필터: <code>${FM.esc(ep)}</code> <button class="btn imp-x" title="필터 해제">✕</button>`);
+        `${FM.esc(targetNoun(ep))} 필터: <code>${FM.esc(ep)}</code> <button class="btn imp-x" title="필터 해제">✕</button>`);
       chip.querySelector('button').onclick = () => pushSel([], '');
       main.appendChild(chip);
       rows = rows.filter(r => r.id === ep);
@@ -487,19 +505,22 @@
 
     if (!rows.length) {
       main.appendChild(el('div', 'browse-empty imp-empty',
-        '<div class="be-ico">◇</div><div class="be-msg">영향받는 엔드포인트가 없습니다</div>'));
+        `<div class="be-ico">◇</div><div class="be-msg">영향받는 ${FM.esc(allNoun)}이 없습니다</div>`));
       return;
     }
 
     const table = el('div', 'imp-table');
     table.appendChild(el('div', 'imp-trow imp-thead',
-      '<span class="imp-tep">영향 엔드포인트</span><span class="imp-tsvc">서비스</span><span class="imp-tcommits">영향 변경이력</span>'));
+      `<span class="imp-tep">영향 ${FM.esc(nounOf(rows.map(r => r.id)))}</span><span class="imp-tsvc">서비스</span><span class="imp-tcommits">영향 변경이력</span>`));
 
     rows.forEach(r => {
       const row = el('div', 'imp-trow');
-      const m = (r.httpMethod || 'ANY').toUpperCase();
+      // 프론트 화면은 HTTP 동사가 없으므로 메서드 배지 대신 화면 배지를 단다.
+      const badge = isScreenId(r.id)
+        ? '<span class="nc-badge screen">화면</span>'
+        : (() => { const m = (r.httpMethod || 'ANY').toUpperCase(); return `<span class="nc-badge http ${FM.methodClass(m)}">${FM.esc(m)}</span>`; })();
       row.innerHTML =
-        `<span class="imp-tep"><span class="nc-badge http ${FM.methodClass(m)}">${FM.esc(m)}</span>` +
+        `<span class="imp-tep">${badge}` +
         `<code class="imp-path-code" title="${FM.escAttr(r.id)}">${FM.esc(r.endpoint || r.id)}</code>` +
         (r.description ? `<span class="imp-tdesc">${FM.esc(r.description)}</span>` : '') + `</span>` +
         `<span class="imp-tsvc">${FM.esc(r.service || '')}</span>` +
@@ -525,7 +546,8 @@
 
   /* ───────── 커밋 선택: 영향 그래프 ───────── */
 
-  function renderGraph(main, selected, ep) {
+  function renderGraph(main, selected, ep, opts) {
+    opts = opts || {};
     // 선택 커밋 합집합 수집
     const changedSha = new Map();   // nodeId -> [shortSha…]  (inGraph만)
     const outOfGraph = [];          // {id, sha}
@@ -625,7 +647,7 @@
     expand(FM.inEdges, -1, MAX_UP);     // 유입: 엔드포인트에 닿는 화면/s2s 호출원
 
     // 상단 분석 바
-    main.appendChild(buildBar(selected, changedSha, epIds, truncated, outOfGraph));
+    main.appendChild(buildBar(selected, changedSha, epIds, truncated, outOfGraph, opts.embedded));
 
     if (!bases.length) {
       // 코드 영향 없음(예: nginx.conf 변경) — 상세 패널·프로세스 독을 닫고 changedFiles만 보여줌
@@ -679,7 +701,7 @@
     for (let lv = minLv; lv <= maxLv; lv++) {
       const ids = byLevel.get(lv);
       if (!ids || !ids.length) continue;
-      const headLabel = lv === 0 ? `◆ 변경·영향 엔드포인트 (${ids.length})`
+      const headLabel = lv === 0 ? `◆ 변경·영향 ${nounOf(ids)} (${ids.length})`
         : lv < 0 ? `유입 ${-lv}단계`
         : `유출 ${lv}단계`;
       const col = el('div', 'column' + (lv === 0 ? ' imp-base' : ''));
@@ -693,9 +715,9 @@
           card.classList.add('imp-changed');
           card.prepend(el('div', 'imp-flag',
             `◆ ${FM.esc(shas[0])}${shas.length > 1 ? ` +${shas.length - 1}` : ''}`));
-        } else if (lv === 0) {             // 변경이 롤업된 영향 엔드포인트
+        } else if (lv === 0) {             // 변경이 롤업된 영향 대상(화면/엔드포인트)
           card.classList.add('imp-endpoint');
-          card.prepend(el('div', 'imp-flag ep', '◇ 영향 엔드포인트'));
+          card.prepend(el('div', 'imp-flag ' + (isScreenId(id) ? 'screen' : 'ep'), '◇ 영향 ' + targetNoun(id)));
         } else if (layer === 'SCREEN') {
           card.classList.add('imp-endpoint');   // 화면 뱃지는 makeCard 가 표시 (전체보기와 동일)
         } else if (layer === 'CONTROLLER') {
@@ -740,7 +762,8 @@
     }
   }
 
-  function buildBar(selected, changedSha, epIds, truncated, outOfGraph) {
+  // embedded=true 면 배포 영향도 하단 임베드용 — 커밋 영향도 URL 을 바꾸는 컨트롤(칩 ✕ · 전체 해제)을 숨긴다.
+  function buildBar(selected, changedSha, epIds, truncated, outOfGraph, embedded) {
     const bar = el('div', 'imp-bar');
 
     selected.forEach(sha => {
@@ -748,13 +771,13 @@
       const chip = el('span', 'imp-barchip',
         `<span class="imp-sha">◆ ${FM.esc(sha)}</span>` +
         `<span class="imp-barsubj" title="${FM.escAttr(c ? c.subject : '')}">${FM.esc(c ? c.subject : '')}</span>` +
-        `<button class="imp-x" title="이 커밋 제거">✕</button>`);
-      chip.querySelector('.imp-x').onclick = () => pushSel(selected.filter(s => s !== sha), '');
+        (embedded ? '' : `<button class="imp-x" title="이 커밋 제거">✕</button>`));
+      if (!embedded) chip.querySelector('.imp-x').onclick = () => pushSel(selected.filter(s => s !== sha), '');
       bar.appendChild(chip);
     });
 
     bar.appendChild(el('span', 'imp-cc', `변경 ${changedSha.size}`));
-    bar.appendChild(el('span', 'imp-cc', `영향 엔드포인트 ${epIds.size}`));
+    bar.appendChild(el('span', 'imp-cc', `영향 ${nounOf(epIds)} ${epIds.size}`));
     if (truncated) bar.appendChild(el('span', 'imp-cc warn', `(일부만 표시 — ${MAX_NODES}노드 상한)`));
 
     // 변경 노드는 endpoint 로 롤업해 그래프에서 카드로 그리지 않으므로, 무엇이 바뀌었는지는 접이식 목록으로 유지
@@ -784,16 +807,19 @@
       bar.appendChild(det);
     }
 
-    const clear = el('button', 'btn', '전체 해제');
-    clear.onclick = () => pushSel([], '');
-    bar.appendChild(clear);
+    if (!embedded) {
+      const clear = el('button', 'btn', '전체 해제');
+      clear.onclick = () => pushSel([], '');
+      bar.appendChild(clear);
+    }
     return bar;
   }
 
   /* ───────── 상세 패널 확장: CONTROLLER → 영향 커밋 ───────── */
 
   FM.registerDetailExtension((node, panelEl) => {
-    if (!node || node.layer !== 'CONTROLLER') return;
+    // 백엔드 엔드포인트(CONTROLLER) + 프론트 화면(SCREEN) 둘 다 "영향 커밋" 섹션을 단다.
+    if (!node || (node.layer !== 'CONTROLLER' && node.layer !== 'SCREEN')) return;
 
     const append = d => {
       if (!d || !panelEl.isConnected) return;
@@ -818,4 +844,28 @@
     if (data !== undefined) append(data);
     else ensureData().then(append);   // 캐시 로드 후 비동기 append
   });
+
+  /* ───────── 공개 API: 다른 기능 뷰(배포 영향도)에서 커밋 영향도 콘텐츠 재사용 ─────────
+   * 배포 영향도(deploy.js)가 PR 을 선택하면 커밋 영향도로 이동하지 않고, 이 API 로
+   * 동일한 "분석 바 + 경계 투영 그래프"를 자기 하단 컨테이너에 임베드한다. */
+  FM.impact = {
+    // impact 데이터 로드(+commitBySha 채움). null=데이터 없음.
+    ensure: ensureData,
+    // PR 번호 → 로드된 데이터에 존재하면 커밋 키('PR<번호>'), 없으면 null.
+    prKey(number) { const k = 'PR' + number; return commitBySha.has(k) ? k : null; },
+    // [container] 에 주어진 커밋/PR(shas)의 영향도 콘텐츠를 임베드 렌더. 커밋 영향도 URL 은 건드리지 않는다.
+    async renderInto(container, shas, options) {
+      options = options || {};
+      await ensureData();
+      if (!data || !Array.isArray(data.commits)) { container.innerHTML = ''; return false; }
+      const valid = (shas || []).filter(s => commitBySha.has(s));
+      if (!valid.length) { container.innerHTML = ''; return false; }
+      container.innerHTML = '<div class="imp-loading">상세 불러오는 중…<div class="imp-skel"></div><div class="imp-skel"></div></div>';
+      await ensureShards(valid);
+      container.innerHTML = '';
+      renderGraph(container, valid, options.ep || '', { embedded: true });
+      requestAnimationFrame(() => { FM.drawConnectors(); FM.applyHighlight(); });
+      return true;
+    },
+  };
 })();
