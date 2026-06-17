@@ -2761,34 +2761,153 @@ function renderDetail() {
 // =========================================================================
 // 검색
 // =========================================================================
+// ── 통합 검색: 카테고리 메타 ───────────────────────────────────────
+const CAT_ORDER = ['menu', 'node', 'service', 'screen', 'pr'];
+const CAT_LABEL = { menu: '메뉴', node: 'API/노드', service: '서비스·인프라', screen: '화면', pr: 'PR·배포' };
+const CAT_LIMIT = 12;            // 카테고리당 상한 (menu 제외)
+
+// 메뉴(뷰 바로가기) — 정적. kw: 매칭 키워드(별칭 포함). act: navigateSearchItem 액션
+const SEARCH_MENUS = [
+  { ico: '🗺️', label: '전체보기(화면)', kw: '전체보기 화면 overview screen 지도 map 홈 home', act: { t: 'overview', kind: 'screen' } },
+  { ico: '⏱️', label: '전체보기(배치)', kw: '전체보기 배치 batch overview 스케줄 schedule', act: { t: 'overview', kind: 'batch' } },
+  { ico: '🧾', label: '커밋 영향도', kw: '커밋 영향도 commit impact pr git', act: { t: 'view', view: 'commits' } },
+  { ico: '🚀', label: '배포 영향도', kw: '배포 영향도 deploy release 릴리즈', act: { t: 'view', view: 'deploy' } },
+  { ico: '📖', label: 'API 문서', kw: 'api 문서 openapi swagger docs', act: { t: 'view', view: 'api' } },
+  { ico: '🏗️', label: '어플리케이션구조', kw: '어플리케이션 구조 structure application app', act: { t: 'structure' } },
+];
+
+// PR/배포 검색 인덱스 — data/deploy/* 는 지연 로드라 첫 검색 시 1회 채움
+let PR_SEARCH = null;            // null=미로드, []=로드완료(빈 결과 포함)
+let prSearchLoading = null;
+function ensurePrSearchIndex() {
+  if (PR_SEARCH) return Promise.resolve(PR_SEARCH);
+  if (prSearchLoading) return prSearchLoading;
+  const BASE = 'data/deploy/';
+  prSearchLoading = fetchData(BASE + 'pr_index.json').then(async pidx => {
+    const out = [];
+    for (const e of (pidx && pidx.entries) || []) {
+      if (!e.file) continue;
+      let day; try { day = await fetchData(BASE + e.file); } catch { continue; }
+      for (const tk of (day && day.by_ticket) || []) {
+        const tkId = String(tk.release_ticket_id);
+        const summary = tk.summary || '';
+        for (const p of tk.prs || []) {
+          out.push({
+            date: e.date, ticketId: tkId, summary,
+            number: p.number, title: p.title || '',
+            user: typeof p.user === 'string' ? p.user : (p.user && p.user.login) || '',
+            html_url: p.html_url || '',
+          });
+        }
+      }
+    }
+    PR_SEARCH = out; return out;
+  }).catch(() => (PR_SEARCH = []));
+  return prSearchLoading;
+}
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+// 5개 카테고리(메뉴/노드/서비스·인프라/화면/PR)를 한 번에 수집
+function collectSearchHits(q) {
+  const g = { menu: [], node: [], service: [], screen: [], pr: [] };
+  // (E) 메뉴
+  for (const m of SEARCH_MENUS)
+    if (m.label.toLowerCase().includes(q) || m.kw.toLowerCase().includes(q))
+      g.menu.push({ cat: 'menu', title: m.label, sub: '바로가기', proj: null, badge: { kind: 'icon', ico: m.ico }, act: m.act });
+  // (A) API/노드  +  (C) 화면(SCREEN 분리)
+  for (const n of NODES) {
+    if (!matches(q, n.method, n.fqcn, n.id, n.endpoint, n.description)) continue;
+    if (n.layer === 'SCREEN') {
+      if (g.screen.length < CAT_LIMIT)
+        g.screen.push({ cat: 'screen', title: n.method || n.id, sub: n.endpoint || shortClass(n.fqcn || n.id), proj: n.project || null,
+          badge: { kind: 'layer', color: layerColor(n) }, act: { t: 'focus', id: n.id } });
+    } else if (g.node.length < CAT_LIMIT) {
+      const sub = (n.layer === 'CONTROLLER' && n.endpoint) ? n.endpoint : shortClass(n.fqcn || n.id);
+      const badge = (n.layer === 'CONTROLLER' && n.httpMethod)
+        ? { kind: 'http', method: n.httpMethod } : { kind: 'layer', color: layerColor(n) };
+      g.node.push({ cat: 'node', title: n.method || n.id, sub, proj: n.project || null, badge, act: { t: 'focus', id: n.id } });
+    }
+  }
+  // (B) 서비스 (META.projects = 문자열 배열) + 인프라 타입 5종
+  for (const svc of (META.projects || []))
+    if (svc.toLowerCase().includes(q) && g.service.length < CAT_LIMIT)
+      g.service.push({ cat: 'service', title: svc, sub: '서비스 보기', proj: null, badge: { kind: 'icon', ico: '🧩' }, act: { t: 'service', svc } });
+  for (const [type, label] of Object.entries(INFRA_LABEL))
+    if ((label.toLowerCase().includes(q) || type.includes(q)) && g.service.length < CAT_LIMIT)
+      g.service.push({ cat: 'service', title: label, sub: '인프라 보기', proj: null, badge: { kind: 'icon', ico: INFRA_ICON[type] || '📦' }, act: { t: 'infra', type } });
+  // (D) PR/배포 (PR_SEARCH 가 채워졌을 때만)
+  for (const p of (PR_SEARCH || [])) {
+    if (g.pr.length >= CAT_LIMIT) break;
+    if (!matches(q, p.title, '#' + p.number, String(p.number), p.user, p.summary, p.ticketId)) continue;
+    g.pr.push({ cat: 'pr', title: '#' + p.number + ' ' + p.title, sub: p.date + ' · ' + p.summary,
+      proj: p.user || null, badge: { kind: 'icon', ico: '🔀' },
+      act: { t: 'pr', d: p.date, tk: p.ticketId, pr: String(p.number), url: p.html_url } });
+  }
+  return g;
+}
+
+function searchBadgeHtml(b) {
+  if (b.kind === 'http')  return `<span class="nc-badge http ${methodClass(b.method)} si-mb">${esc(b.method)}</span>`;
+  if (b.kind === 'layer') return `<span class="legend-swatch si-mb" style="background:${b.color}"></span>`;
+  return `<span class="si-ico si-mb">${esc(b.ico)}</span>`;
+}
+
+function renderSearchResults(grouped, q) {
+  const box = document.getElementById('search-results');
+  let html = '';
+  for (const cat of CAT_ORDER) {
+    const hits = grouped[cat];
+    if (!hits.length) continue;
+    html += `<div class="search-group"><div class="search-group-head">${esc(CAT_LABEL[cat])}</div>`;
+    for (const h of hits) {
+      html += `<div class="search-item" tabindex="-1" data-act='${escAttr(JSON.stringify(h.act))}'>`
+        + searchBadgeHtml(h.badge)
+        + `<span class="si-text"><span class="si-title">${markHit(h.title, q)}</span>`
+        + (h.sub ? `<span class="si-sub">${markHit(h.sub, q)}</span>` : '')
+        + `</span>`
+        + (h.proj ? `<span class="si-proj">${esc(h.proj)}</span>` : '')
+        + `</div>`;
+    }
+    html += `</div>`;
+  }
+  // PR 인덱스가 아직 로딩 중이면 안내 행
+  if (PR_SEARCH == null) html += '<div class="search-empty search-loading">PR·배포 불러오는 중…</div>';
+  box.innerHTML = html || '<div class="search-empty">일치하는 결과 없음</div>';
+  box.classList.remove('hidden');
+}
+
 function runSearch(q) {
   const box = document.getElementById('search-results');
-  q = q.trim().toLowerCase();
+  q = (q || '').trim().toLowerCase();
   if (!q) { box.classList.add('hidden'); return; }
-  const hits = [];
-  for (const n of NODES) {
-    if (matches(q, n.method, n.fqcn, n.id, n.endpoint, n.description)) { hits.push(n); if (hits.length >= 40) break; }
-  }
-  if (!hits.length) { box.innerHTML = '<div class="search-empty">결과 없음</div>'; box.classList.remove('hidden'); return; }
-  box.innerHTML = hits.map(n => {
-    const sub = n.layer === 'CONTROLLER' && n.endpoint ? esc(n.endpoint) : esc(shortClass(n.fqcn || n.id));
-    const mb = (n.layer === 'CONTROLLER' && n.httpMethod)
-      ? `<span class="nc-badge http ${methodClass(n.httpMethod)} si-mb">${esc(n.httpMethod)}</span>`
-      : `<span class="legend-swatch" style="background:${layerColor(n)}"></span>`;
-    return `<div class="search-item" data-id="${escAttr(n.id)}" tabindex="-1">
-      ${mb}
-      <span class="si-text"><span class="si-method">${markHit(n.method || n.id, q)}</span>
-      <span class="si-sub">  ${markHit(sub, q)}${n.project ? ' · ' + esc(n.project) : ''}</span></span>
-      <button class="si-go" title="이 노드 기준 호출관계분석">↗</button></div>`;
-  }).join('');
-  box.classList.remove('hidden');
-  box.querySelectorAll('.search-item').forEach(it => {
-    it.addEventListener('click', () => {
-      setFocus(it.dataset.id, null);
-      document.getElementById('search').value = '';
-      box.classList.add('hidden');
-    });
+  // PR 인덱스 비동기 1회 로드 → 도착 시 (입력이 그대로면) 재렌더 (seq 가드)
+  if (PR_SEARCH == null) ensurePrSearchIndex().then(() => {
+    const cur = document.getElementById('search').value.trim().toLowerCase();
+    if (cur === q && !box.classList.contains('hidden')) renderSearchResults(collectSearchHits(q), q);
   });
+  renderSearchResults(collectSearchHits(q), q);
+}
+
+function closeSearch() {
+  const box = document.getElementById('search-results');
+  document.getElementById('search').value = '';
+  box.classList.add('hidden');
+}
+
+function navigateSearchItem(el) {
+  let a; try { a = JSON.parse(el.dataset.act); } catch { return; }
+  switch (a.t) {
+    case 'focus':     if (!nodeById.has(a.id)) return; setFocus(a.id, null); break;
+    case 'service':   setService(a.svc); break;
+    case 'infra':     setInfraType(a.type); break;
+    case 'overview':  setOverview(true, a.kind === 'batch' ? 'batch' : 'screen'); break;
+    case 'structure': setStructure(true); break;
+    case 'view':      openView(a.view); break;
+    case 'pr':        openView('deploy', { y: (a.d || '').slice(0, 4), m: (a.d || '').slice(5, 7), d: a.d, t: a.tk, pr: a.pr }); break;
+    default:          return;
+  }
+  closeSearch();
 }
 function markHit(text, q) {
   const s = String(text == null ? '' : text);
@@ -2804,8 +2923,13 @@ function matches(q, ...vals) { return vals.some(v => v && String(v).toLowerCase(
 // =========================================================================
 function attachHandlers() {
   const search = document.getElementById('search');
-  search.addEventListener('input', e => runSearch(e.target.value));
+  const _runSearch = debounce(runSearch, 120);
+  search.addEventListener('input', e => _runSearch(e.target.value));
   search.addEventListener('focus', e => { if (e.target.value) runSearch(e.target.value); });
+  document.getElementById('search-results').addEventListener('click', e => {
+    const it = e.target.closest('.search-item');
+    if (it) navigateSearchItem(it);
+  });
   document.addEventListener('click', e => { if (!e.target.closest('.search-wrap')) document.getElementById('search-results').classList.add('hidden'); });
   document.querySelectorAll('.stepper button').forEach(b => b.addEventListener('click', () => setDepth(b.dataset.depth, parseInt(b.dataset.dir, 10))));
   document.getElementById('back-to-browse').addEventListener('click', () => {
@@ -2897,7 +3021,7 @@ function onKeydown(e) {
         e.preventDefault();
         const i = searchActiveIndex(items);
         const it = items[i >= 0 ? i : 0];
-        if (it) { setFocus(it.dataset.id, null); search.value = ''; box.classList.add('hidden'); }
+        if (it) navigateSearchItem(it);
         return;
       }
     }
