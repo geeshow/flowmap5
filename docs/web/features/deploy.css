@@ -45,14 +45,23 @@
 }
 .dep-dg-date { font-size: 12.5px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .dep-dg-dow { font-size: 11px; color: var(--text-dim); }
-.dep-dg-cnt { margin-left: auto; font-size: 10.5px; color: var(--text-dim); white-space: nowrap; }
 
-.dep-ditem {
-  border: 1px solid var(--border); border-left-width: 3px; border-radius: 8px; background: var(--bg-card);
-  padding: 7px 9px; margin-bottom: 5px; cursor: pointer;
+/* 레일 필터 + 빈 상태 (커밋 영향도와 동일 톤) */
+.dep-filter {
+  width: 100%; box-sizing: border-box; padding: 6px 9px; margin-bottom: 10px;
+  background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font-size: 12px;
 }
-.dep-ditem:hover { border-color: var(--c-service); }
-.dep-ditem.sel { border-color: var(--c-controller); box-shadow: 0 0 0 1px var(--c-controller) inset; background: var(--bg-input); }
+.dep-filter:focus { outline: none; border-color: var(--imp-changed); }
+.dep-rail-empty { padding: 14px 4px; color: var(--text-dim); font-size: 12px; }
+
+/* 배포 목록 항목 — 커밋 영향도(.imp-commit)와 동일한 테두리: 카드 대신 하단 구분선, 선택 시 좌측 인셋 바 + 틴트 */
+.dep-ditem {
+  border: none; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent;
+  padding: 9px 6px; margin-bottom: 0; cursor: pointer;
+}
+.dep-dgroup .dep-ditem:last-child { border-bottom: none; }
+.dep-ditem:hover { background: var(--bg-input); }
+.dep-ditem.sel { background: var(--imp-tint); box-shadow: inset 2px 0 0 var(--imp-changed); }
 .dep-di-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .dep-di-id { font-weight: 700; font-size: 11.5px; color: var(--c-controller); font-variant-numeric: tabular-nums; }
 .dep-di-pr { font-size: 10px; color: #4f46e5; white-space: nowrap; }
@@ -61,6 +70,12 @@
 .dep-di-meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 
 .dep-chip { font-size: 10px; color: var(--text-dim); background: var(--bg-input); border-radius: 5px; padding: 1px 6px; }
+.dep-by { font-size: 10px; color: var(--text-dim); white-space: nowrap; }   /* 배포 담당자(created_by) */
+
+/* 상세 담당자 전체(요청/승인/검증/모니터링 …) */
+.dep-mh-people { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 9px; }
+.dep-person { font-size: 12px; color: var(--text); white-space: nowrap; }
+.dep-person-role { font-size: 10px; color: var(--text-dim); margin-right: 5px; padding: 1px 5px; background: var(--bg-input); border-radius: 5px; }
 .dep-svc-tag { font-size: 10px; border-radius: 5px; padding: 1px 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dep-svc-tag.ok { color: var(--c-service); background: rgba(22,163,74,.10); }
 .dep-svc-tag.no { color: var(--text-dim); background: var(--bg-input); }
@@ -84,18 +99,24 @@
 
 /* PR 목록 — 넓은 그리드 카드 */
 .dep-pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
-.dep-prc { border: 1px solid var(--border); border-radius: 9px; background: var(--bg-panel); padding: 9px 11px; cursor: pointer; transition: border-color .12s; }
+.dep-prc { position: relative; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-panel); padding: 9px 11px; cursor: pointer; transition: border-color .12s; }
 .dep-prc:hover { border-color: #4f46e5; box-shadow: 0 1px 6px rgba(79,70,229,.10); }
 .dep-prc.sel { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5 inset; background: var(--bg-input); }
-.dep-prc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.dep-prc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-right: 28px; }
 .dep-prc-num { font-size: 12px; font-weight: 700; color: #4f46e5; font-variant-numeric: tabular-nums; }
 .dep-prc-detail { font-size: 11px; color: var(--c-controller); white-space: nowrap; }
 .dep-prc:hover .dep-prc-detail { text-decoration: underline; }
 .dep-prc-title { font-size: 12.5px; color: var(--text); margin: 4px 0; line-height: 1.4;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .dep-prc-by { font-size: 10.5px; color: var(--text-dim); }
-.dep-prc-gh { color: var(--text-dim); text-decoration: none; }
-.dep-prc-gh:hover { color: var(--c-controller); text-decoration: underline; }
+/* GitHub 링크 — 카드 우상단 코너 버튼(커밋 영향도 .imp-clink 와 동일 형식) */
+.dep-prc-gh {
+  position: absolute; top: 8px; right: 9px; z-index: 1;
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+  color: var(--text-dim); text-decoration: none; font-size: 13px; line-height: 1;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card);
+}
+.dep-prc-gh:hover { color: #fff; background: #4f46e5; border-color: #4f46e5; }
 
 /* 영향도 그래프 (풀폭) */
 .dep-imp-note { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; background: var(--bg-input); border-radius: 8px; padding: 11px 13px; }
@@ -113,3 +134,30 @@
 /* PR 커밋 영향도 (하단 임베드) — impact.js 의 콘텐츠(.imp-bar/.imp-gwrap/.imp-graph)를 그대로 품는다 */
 .dep-impact { border-top: 1px solid var(--border); padding-top: 16px; }
 .dep-impact-host { position: relative; min-height: 60px; }
+
+/* 변경 파일 + 변경 전후 코드(diff) */
+.dep-files { border-top: 1px solid var(--border); padding-top: 16px; }
+.dep-files-host { display: flex; flex-direction: column; gap: 6px; }
+.dep-files-sub { font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
+.dep-file { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg-panel); }
+.dep-file-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; }
+.dep-file-head:hover { background: var(--bg-input); }
+.dep-file-st { font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 5px; flex: none; }
+.dep-file-st.modified { color: #b45309; background: rgba(245,158,11,.14); }
+.dep-file-st.added { color: #15803d; background: rgba(22,163,74,.14); }
+.dep-file-st.removed { color: #b91c1c; background: rgba(220,38,38,.14); }
+.dep-file-st.renamed { color: #6d28d9; background: rgba(124,58,237,.14); }
+.dep-file-path { flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dep-file-stat { font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+.dep-file-stat .add { color: #15803d; } .dep-file-stat .del { color: #b91c1c; }
+.dep-file-tog { color: var(--text-dim); transition: transform .15s; flex: none; }
+.dep-file.open .dep-file-tog { transform: rotate(180deg); }
+.dep-diff { display: none; border-top: 1px solid var(--border); overflow-x: auto;
+  font-family: ui-monospace, monospace; font-size: 11.5px; line-height: 1.5; }
+.dep-file.open .dep-diff { display: block; }
+.dep-dl { white-space: pre; padding: 0 10px; }
+.dep-dl.add { background: rgba(22,163,74,.12); color: #166534; }
+.dep-dl.del { background: rgba(220,38,38,.12); color: #991b1b; }
+.dep-dl.hunk { background: var(--bg-input); color: var(--text-dim); }
+.dep-dl.ctx { color: var(--text); }

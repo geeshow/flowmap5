@@ -12,6 +12,7 @@
   const dayCache = new Map();    // date → Promise<{deploy, pr}>
   const yearCache = new Map();   // year → Promise<Map<date,{date,rec,tickets}>>
   let renderSeq = 0;
+  let railFilter = '';           // 레일 텍스트 필터(담당자/요약/서비스/#ID) — 재렌더 간 유지
 
   function el(tag, cls, html) {
     const e = document.createElement(tag);
@@ -94,6 +95,11 @@
         phase: (t && t.phase) || (dep && dep.phase) || '',
         platform: (t && t.platform) || (dep && dep.platform) || '',
         releaseAt: (t && t.release_at) || (dep && dep.release_at) || '',
+        createdBy: (dep && dep.created_by) || (t && t.created_by) || '',   // 배포 담당자(요청/생성자)
+        approvedBy: (dep && dep.approved_by) || '',
+        verifier: (dep && dep.verifier) || '',
+        monitorBy: (dep && dep.monitor_by) || '',
+        businessMonitorBy: (dep && dep.business_monitor_by) || '',
         org, repo, projectName,
         prs: (t && t.prs) || [],
         service: mapRepoToService(repo, projectName, projs),
@@ -264,27 +270,56 @@
     head.appendChild(picks);
     rail.appendChild(head);
 
+    // 텍스트 필터(담당자/요약/서비스/#ID/PR제목)
+    const filter = el('input', 'dep-filter');
+    filter.type = 'text';
+    filter.placeholder = '담당자 / 요약 / 서비스 / #ID 필터…';
+    filter.value = railFilter;
+    rail.appendChild(filter);
+    const empty = el('div', 'dep-rail-empty', '일치하는 배포가 없습니다');
+    empty.style.display = 'none';
+    rail.appendChild(empty);
+
     if (!byDate.size) { rail.appendChild(el('div', 'dep-hint', '이 달 배포 데이터가 없습니다.')); return; }
     for (const [date, grp] of byDate) {
       const g = el('div', 'dep-dgroup');
       g.dataset.date = date;                       // 스크롤 힌트가 현재 영역 날짜 식별용
-      const prc = grp.tickets.reduce((n, t) => n + t.prs.length, 0);
       g.appendChild(el('div', 'dep-dg-head',
-        `<span class="dep-dg-date">${FM.esc(date)}</span><span class="dep-dg-dow">${dow(date)}</span>` +
-        `<span class="dep-dg-cnt">🚀${grp.tickets.length} · 🔀${prc}</span>`));
+        `<span class="dep-dg-date">${FM.esc(date)}</span><span class="dep-dg-dow">${dow(date)}</span>`));
       for (const t of grp.tickets) {
         const on = date === curD && String(t.id) === curT;
         const row = el('div', 'dep-ditem' + (on ? ' sel' : ''));
+        row.dataset.search = [t.id, t.summary, t.service, t.platform, t.createdBy, ...(t.prs || []).map((p) => p.title)]
+          .filter(Boolean).join(' ').toLowerCase();
         const svc = t.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(t.service)}</span>` : (t.repo ? `<span class="dep-svc-tag no">미매핑</span>` : '');
         row.innerHTML =
           `<div class="dep-di-top"><span class="dep-di-id">#${FM.esc(String(t.id || ''))}</span><span class="dep-di-pr">🔀${t.prs.length}</span></div>` +
           `<div class="dep-di-summary">${FM.esc(t.summary)}</div>` +
-          `<div class="dep-di-meta">${t.platform ? `<span class="dep-chip">${FM.esc(t.platform)}</span>` : ''}${svc}</div>`;
+          `<div class="dep-di-meta">${t.platform ? `<span class="dep-chip">${FM.esc(t.platform)}</span>` : ''}${svc}` +
+          `${t.createdBy ? `<span class="dep-by">👤 ${FM.esc(t.createdBy)}</span>` : ''}</div>`;
         row.onclick = () => nav({ y, d: date, t: String(t.id) });
         g.appendChild(row);
       }
       rail.appendChild(g);
     }
+
+    // 필터 적용 — 일치하는 항목만 표시하고, 보이는 항목이 없는 날짜 그룹은 숨긴다.
+    const applyFilter = () => {
+      const q = railFilter.trim().toLowerCase();
+      let shown = 0;
+      rail.querySelectorAll('.dep-dgroup').forEach((g) => {
+        let groupShown = 0;
+        g.querySelectorAll('.dep-ditem').forEach((row) => {
+          const hit = !q || (row.dataset.search || '').includes(q);
+          row.style.display = hit ? '' : 'none';
+          if (hit) { groupShown++; shown++; }
+        });
+        g.style.display = groupShown ? '' : 'none';
+      });
+      empty.style.display = shown ? 'none' : '';
+    };
+    filter.oninput = () => { railFilter = filter.value; applyFilter(); };
+    applyFilter();
 
     // 스크롤 위치 날짜 힌트: 빠르게 스크롤할 때 현재 영역의 날짜를 잠깐 띄웠다가 사라지게 한다.
     const groups = [...rail.querySelectorAll('.dep-dgroup')];
@@ -321,6 +356,14 @@
 
     const head = el('div', 'dep-main-head');
     const repo = (tk.org ? tk.org + '/' : '') + (tk.repo || '');
+    // 상세 담당자 전체 노출(요청/승인/검증/모니터링/비즈니스 모니터링) — 값 있는 역할만.
+    const roles = [
+      ['요청', tk.createdBy], ['승인', tk.approvedBy], ['검증', tk.verifier],
+      ['모니터링', tk.monitorBy], ['비즈니스 모니터링', tk.businessMonitorBy],
+    ];
+    const peopleHtml = roles.filter(([, v]) => v)
+      .map(([role, v]) => `<span class="dep-person"><span class="dep-person-role">${role}</span>${FM.esc(String(v).replace(/,/g, ', '))}</span>`)
+      .join('');
     head.innerHTML =
       `<div class="dep-mh-top"><span class="dep-mh-id">#${FM.esc(String(tk.id))}</span>` +
       `<span class="dep-mh-time">${FM.esc(d)} · ${FM.esc(fmtTime(tk.releaseAt))}</span></div>` +
@@ -328,7 +371,8 @@
       `<div class="dep-mh-meta">${tk.platform ? `<span class="dep-chip">${FM.esc(tk.platform)}</span>` : ''}` +
       `${tk.phase ? `<span class="dep-chip">${FM.esc(tk.phase)}</span>` : ''}` +
       `${repo ? `<span class="dep-repo">${FM.esc(repo)}</span>` : ''}` +
-      `${tk.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(tk.service)}</span>` : (tk.repo ? `<span class="dep-svc-tag no">그래프 미매핑</span>` : '')}</div>`;
+      `${tk.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(tk.service)}</span>` : (tk.repo ? `<span class="dep-svc-tag no">그래프 미매핑</span>` : '')}</div>` +
+      (peopleHtml ? `<div class="dep-mh-people">${peopleHtml}</div>` : '');
     main.appendChild(head);
 
     // PR 목록
@@ -358,6 +402,70 @@
 
     // PR 커밋 영향도 (하단 임베드) — 커밋 영향도 뷰로 이동하지 않고 같은 콘텐츠를 여기서 렌더.
     renderPrImpact(main, eff, seq);
+    // 변경 파일 + 변경 전후 코드(diff) — 배포 영향도가 있어도 항상 하단에 노출.
+    renderPrFiles(main, eff, seq);
+  }
+
+  // 선택 PR 의 변경 파일 목록 + 변경 전/후 코드(unified diff)를 하단에 노출.
+  //   데이터: <project>.pulls 인덱스 → <project>.pulls/<번호>.json 샤드(files[].patch).
+  function pullsRelFor(tk) {
+    const cands = [tk && tk.service, tk && tk.repo, tk && tk.projectName].filter(Boolean);
+    for (const p of (FM.MANIFEST && FM.MANIFEST.projects) || [])
+      if (p && p.pulls && cands.includes(p.name)) return p.pulls;
+    return null;
+  }
+  function renderPatch(patch) {
+    if (!patch) return '<div class="dep-dl ctx">(diff 없음 — 바이너리이거나 너무 큰 파일)</div>';
+    return patch.split('\n').map((l) => {
+      const c = l.charAt(0);
+      const cls = c === '+' ? 'add' : c === '-' ? 'del' : c === '@' ? 'hunk' : 'ctx';
+      return `<div class="dep-dl ${cls}">${FM.esc(l) || '&nbsp;'}</div>`;
+    }).join('');
+  }
+  function fileRow(f, openByDefault) {
+    const row = el('div', 'dep-file' + (openByDefault ? ' open' : ''));
+    const st = f.status || 'modified';
+    const path = f.path || f.previousPath || '';
+    const renamed = f.previousPath && f.previousPath !== f.path ? `${FM.esc(f.previousPath)} → ` : '';
+    const head = el('div', 'dep-file-head',
+      `<span class="dep-file-st ${FM.esc(st)}">${FM.esc(st)}</span>` +
+      `<code class="dep-file-path">${renamed}${FM.esc(path)}</code>` +
+      `<span class="dep-file-stat"><span class="add">+${f.additions || 0}</span> <span class="del">−${f.deletions || 0}</span></span>` +
+      `<span class="dep-file-tog">▾</span>`);
+    const body = el('div', 'dep-diff');
+    let built = false;
+    const build = () => { if (!built) { body.innerHTML = renderPatch(f.patch); built = true; } };
+    if (openByDefault) build();
+    head.onclick = () => { if (row.classList.toggle('open')) build(); };
+    row.append(head, body);
+    return row;
+  }
+  function renderPrFiles(main, eff, seq) {
+    if (!eff || eff.prNumber == null) return;
+    const pullsRel = pullsRelFor(eff.ticket);
+    const sec = el('div', 'dep-section dep-files');
+    sec.appendChild(el('div', 'dep-sec-head', `PR #${FM.esc(String(eff.prNumber))} 변경 파일`));
+    const host = el('div', 'dep-files-host');
+    host.innerHTML = '<div class="dep-loading">변경 파일 불러오는 중…</div>';
+    sec.appendChild(host);
+    main.appendChild(sec);
+    if (!pullsRel) { host.innerHTML = '<div class="dep-hint">이 PR의 변경 파일 데이터(pulls)가 없습니다.</div>'; return; }
+    const baseDir = 'data/' + pullsRel.replace(/[^/]*$/, '');   // 'data/projects/<proj>/'
+    FM.fetchData('data/' + pullsRel)
+      .then((idx) => {
+        if (renderSeq !== seq) return;
+        const entry = idx && (idx.pulls || []).find((p) => String(p.number) === String(eff.prNumber));
+        if (!entry) { host.innerHTML = '<div class="dep-hint">이 PR이 변경 파일 인덱스에 없습니다.</div>'; return; }
+        return FM.fetchData(baseDir + entry.file).then((shard) => {
+          if (renderSeq !== seq) return;
+          const files = (shard && shard.files) || [];
+          if (!files.length) { host.innerHTML = '<div class="dep-hint">변경 파일이 없습니다.</div>'; return; }
+          host.innerHTML = '';
+          host.appendChild(el('div', 'dep-files-sub', `${files.length}개 파일 · 클릭하면 변경 전/후 코드(diff)`));
+          files.forEach((f, i) => host.appendChild(fileRow(f, i < 3)));   // 앞 3개는 기본 펼침
+        });
+      })
+      .catch(() => { host.innerHTML = '<div class="dep-hint">변경 파일 로드 실패.</div>'; });
   }
 
   // 선택된 PR 의 커밋 영향도(분석 바 + 경계 투영 그래프)를 하단에 임베드한다.
@@ -385,11 +493,11 @@
     const card = el('div', 'dep-prc' + (on ? ' sel' : ''));
     const num = p.number != null ? '#' + p.number : '';
     card.innerHTML =
+      (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '') +
       `<div class="dep-prc-top"><span class="dep-prc-num">PR ${FM.esc(num)}</span>` +
       `<span class="dep-prc-detail" data-act="detail">${on ? '▾ 영향도' : '영향도 보기 ↓'}</span></div>` +
       `<div class="dep-prc-title">${FM.esc(p.title || '')}</div>` +
-      `<div class="dep-prc-by">${FM.esc(p.user || '')} · ${FM.esc(fmtTime(p.merged_at))}` +
-      (p.html_url ? ` · <a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener">GitHub ↗</a>` : '') + `</div>`;
+      `<div class="dep-prc-by">${FM.esc(p.user || '')} · ${FM.esc(fmtTime(p.merged_at))}</div>`;
     // PR 클릭 → 배포 영향도 안에서 pr= 선택 (커밋 영향도 뷰로 이동하지 않음). GitHub 링크는 통과.
     const go = (ev) => { if (ev.target.closest('.dep-prc-gh')) return; if (p.number != null) nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) }); };
     card.onclick = go;
