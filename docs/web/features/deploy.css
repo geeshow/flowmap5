@@ -12,7 +12,8 @@
 }
 .dep-rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .dep-rail-title { font-size: 14px; font-weight: 700; color: var(--text); }
-.dep-year {
+.dep-picks { display: flex; align-items: center; gap: 6px; }
+.dep-year, .dep-month {
   font-size: 12px; padding: 4px 7px; border-radius: 6px; font-weight: 600;
   border: 1px solid var(--border); background: var(--bg-input); color: var(--text); cursor: pointer;
 }
