@@ -267,6 +267,7 @@
     if (!byDate.size) { rail.appendChild(el('div', 'dep-hint', '이 달 배포 데이터가 없습니다.')); return; }
     for (const [date, grp] of byDate) {
       const g = el('div', 'dep-dgroup');
+      g.dataset.date = date;                       // 스크롤 힌트가 현재 영역 날짜 식별용
       const prc = grp.tickets.reduce((n, t) => n + t.prs.length, 0);
       g.appendChild(el('div', 'dep-dg-head',
         `<span class="dep-dg-date">${FM.esc(date)}</span><span class="dep-dg-dow">${dow(date)}</span>` +
@@ -283,6 +284,27 @@
         g.appendChild(row);
       }
       rail.appendChild(g);
+    }
+
+    // 스크롤 위치 날짜 힌트: 빠르게 스크롤할 때 현재 영역의 날짜를 잠깐 띄웠다가 사라지게 한다.
+    const groups = [...rail.querySelectorAll('.dep-dgroup')];
+    if (groups.length) {
+      const hint = el('div', 'dep-scroll-hint');
+      const pill = el('span', 'dep-sh-pill');
+      hint.appendChild(pill);
+      rail.parentNode.appendChild(hint);           // 레일이 아닌 패널(.dep-view)에 얹어 스크롤과 무관하게 고정
+      let hideT = 0;
+      rail.addEventListener('scroll', () => {
+        const railTop = rail.getBoundingClientRect().top;
+        let cur = groups[0];                         // 헤더가 레일 상단(≈14px)에 닿은 마지막 그룹 = 현재 영역
+        for (const g of groups) { if (g.getBoundingClientRect().top - railTop <= 14) cur = g; else break; }
+        const dt = cur && cur.dataset.date;
+        if (!dt) return;
+        pill.textContent = `${dt} (${dow(dt)})`;
+        hint.classList.add('show');
+        clearTimeout(hideT);
+        hideT = setTimeout(() => hint.classList.remove('show'), 700);
+      });
     }
   }
 

@@ -1,6 +1,14 @@
 /* features/deploy.css — 배포 영향도: 좌측 레일(일자 그룹→배포) + 우측 풀폭 영향도 */
 
-.dep-view { display: flex; height: 100%; box-sizing: border-box; overflow: hidden; }
+/* 배포 뷰: #flow 페이지 스크롤을 끄고 자식 체인이 높이를 채워 .dep-view 가 실제 높이를 받게 한다.
+   → 레일/메인이 각자 내부 스크롤(아래 overflow:auto)하고 페이지는 함께 스크롤되지 않음. */
+#flow.flow-panel { overflow: hidden; }
+#flow.flow-panel #flow-canvas { display: flex; flex-direction: column; height: 100%; min-height: 0; box-sizing: border-box; }
+#flow.flow-panel #zoom-layer { flex: 1 1 auto; min-height: 0; width: 100%; }
+
+/* #columns(id) 기본 규칙(align-items:flex-start; width:max-content)을 이겨야 레일/메인이
+   stretch 되어 .dep-view 높이에 묶이고 각자 내부 스크롤한다 → id+class 로 우선순위 확보. */
+#columns.dep-view { display: flex; align-items: stretch; height: 100%; width: 100%; box-sizing: border-box; overflow: hidden; }
 .dep-loading { color: var(--text-dim); font-size: 13px; padding: 20px; }
 .dep-hint { color: var(--text-dim); font-size: 12px; padding: 12px; line-height: 1.5; }
 .dep-empty .be-ico { font-size: 30px; }
@@ -10,6 +18,18 @@
   width: 290px; flex: none; overflow: auto; border-right: 1px solid var(--border);
   background: var(--bg-panel); padding: 10px 10px 24px;
 }
+/* 스크롤 위치 날짜 힌트 — 레일(290px) 중앙에 떠서, 스크롤 중에만 보였다가 사라짐 */
+.dep-scroll-hint {
+  position: absolute; left: 145px; top: 50%; transform: translate(-50%, -50%);
+  z-index: 6; pointer-events: none; opacity: 0; transition: opacity .2s ease;
+}
+.dep-scroll-hint.show { opacity: 1; }
+.dep-sh-pill {
+  display: inline-block; background: rgba(15, 23, 42, .88); color: #fff;
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+  padding: 6px 13px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0, 0, 0, .28); white-space: nowrap;
+}
+
 .dep-rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .dep-rail-title { font-size: 14px; font-weight: 700; color: var(--text); }
 .dep-picks { display: flex; align-items: center; gap: 6px; }

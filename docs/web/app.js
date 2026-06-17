@@ -648,6 +648,9 @@ function render() {
   document.getElementById('overview-batch-btn').classList.toggle('active', state.overview && state.overviewKind === 'batch');
   document.getElementById('structure-btn').classList.toggle('active', state.structure);
   document.querySelectorAll('#nav .nav-btn[data-view]').forEach(b => b.classList.toggle('active', state.view === b.dataset.view));
+  // 배포 영향도는 좌(레일)·우(영향도) 패널이 각자 내부 스크롤하는 고정 높이 레이아웃.
+  // → #flow 의 페이지 스크롤을 끄고 자식 체인이 높이를 채우게 한다(다른 뷰로 가면 해제).
+  document.getElementById('flow').classList.toggle('flow-panel', state.view === 'deploy');
   if (state.view) { renderFeatureView(); return; }
   if (state.overview) renderOverview();
   else if (state.structure) renderStructure();
@@ -2964,7 +2967,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '36';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '39';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
