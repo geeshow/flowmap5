@@ -47,6 +47,27 @@
 .dep-dg-dow { font-size: 11px; color: var(--text-dim); }
 
 /* 레일 필터 + 빈 상태 (커밋 영향도와 동일 톤) */
+/* 상태 탭(전체/요청/승인/완료/취소) — 하위 메뉴와 동기화 */
+.dep-status-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.dep-stab {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  padding: 3px 9px; font-size: 11px; font-weight: 600;
+  background: var(--bg-input); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 999px;
+}
+.dep-stab:hover { color: var(--text); }
+.dep-stab .dep-stab-n {
+  font-size: 10px; font-weight: 700; line-height: 1; padding: 1px 5px; border-radius: 999px;
+  background: var(--bg-panel); color: var(--text-dim); border: 1px solid var(--border);
+}
+.dep-stab.on { color: #fff; border-color: transparent; }
+.dep-stab.on .dep-stab-n { background: rgba(255,255,255,.25); color: #fff; border-color: transparent; }
+.dep-stab.st-all.on      { background: #475569; }
+.dep-stab.st-request.on  { background: #f59e0b; }
+.dep-stab.st-approved.on { background: #2563eb; }
+.dep-stab.st-done.on     { background: #16a34a; }
+.dep-stab.st-cancel.on   { background: #ef4444; }
+
 .dep-filter {
   width: 100%; box-sizing: border-box; padding: 6px 9px; margin-bottom: 10px;
   background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: 7px; font-size: 12px;

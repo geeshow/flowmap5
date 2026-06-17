@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>flowmap — 호출관계분석</title>
-  <link rel="stylesheet" href="style.css?v=64">
+  <link rel="stylesheet" href="style.css?v=65">
 </head>
 <body>
   <!-- 좌측 사이드바: 브랜드 + 네비 + 통계 -->
@@ -22,6 +22,12 @@
       <button id="overview-batch-btn" class="nav-btn" title="배치 진입 기준 전체 서비스 지도"><span class="nb-ico">⏱️</span><span class="nb-label">전체보기(배치)</span></button>
       <button class="nav-btn" data-view="commits" title="git 커밋별 변경 메서드 → 영향받는 API 엔드포인트 분석"><span class="nb-ico">🧾</span><span class="nb-label">커밋 영향도</span></button>
       <button class="nav-btn" data-view="deploy" title="일별 배포 → PR 목록 + 서비스 레벨 영향(연관관계)"><span class="nb-ico">🚀</span><span class="nb-label">배포 영향도</span></button>
+      <div class="nav-subs">
+        <button class="nav-btn nav-sub" data-view="deploy" data-st="request" title="요청 상태 배포만"><span class="nb-dot">●</span><span class="nb-label">요청</span></button>
+        <button class="nav-btn nav-sub" data-view="deploy" data-st="approved" title="승인 상태 배포만"><span class="nb-dot">●</span><span class="nb-label">승인</span></button>
+        <button class="nav-btn nav-sub" data-view="deploy" data-st="done" title="완료 상태 배포만"><span class="nb-dot">●</span><span class="nb-label">완료</span></button>
+        <button class="nav-btn nav-sub" data-view="deploy" data-st="cancel" title="취소 상태 배포만"><span class="nb-dot">●</span><span class="nb-label">취소</span></button>
+      </div>
       <button class="nav-btn" data-view="api" title="OpenAPI 기반 API 카탈로그 — 파라미터·요청/응답 스키마 문서"><span class="nb-ico">📖</span><span class="nb-label">API 문서</span></button>
       <button id="structure-btn" class="nav-btn" title="서비스별 어플리케이션 구조 — API + 호출/피호출 관계"><span class="nb-ico">🏗️</span><span class="nb-label">어플리케이션구조</span></button>
     </nav>
@@ -95,6 +101,6 @@
     <div id="process-dock" class="hidden"></div>
   </div>
 
-  <script src="app.js?v=136"></script>
+  <script src="app.js?v=137"></script>
 </body>
 </html>
