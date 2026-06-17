@@ -127,6 +127,26 @@
     if (indexData && indexData.year != null) return String(indexData.year);
     return (indexData && indexData.years[0]) || '';
   }
+  // 선택 년도에서 데이터(배포/PR)가 있는 월 목록 (최신순, '01'~'12').
+  function monthsOf(year) {
+    const s = new Set();
+    if (indexData) for (const r of indexData.byDate.values())
+      if (r.date.slice(0, 4) === year && ((r.deployCount || 0) > 0 || (r.prCount || 0) > 0)) s.add(r.date.slice(5, 7));
+    return [...s].sort().reverse();
+  }
+  // 현재 월: d 파라미터(딥링크) > m 파라미터 > 오늘 월(현재 년도일 때) > 해당 년도 최신 월.
+  function curMonth() {
+    const d = FM.param('d');
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d.slice(5, 7);
+    const m = FM.param('m');
+    if (m && /^\d{2}$/.test(m)) return m;
+    const y = curYear();
+    const months = monthsOf(y);
+    const now = new Date();
+    const tm = String(now.getMonth() + 1).padStart(2, '0');
+    if (y === String(now.getFullYear()) && (months.includes(tm) || !months.length)) return tm;
+    return months[0] || tm;
+  }
   function nav(params) { FM.pushViewUrl('deploy', params); render(); }
 
   // URL 파라미터(d/t/pr)가 있으면 그대로, 없으면 기본값(첫 배포일·첫 배포·첫 PR)을 채운 "유효 선택".
@@ -150,7 +170,7 @@
 
   FM.registerView('deploy', {
     render,
-    escape() { if (FM.param('t')) nav({ y: curYear() }); else FM.setOverview(true); },
+    escape() { if (FM.param('t')) nav({ y: curYear(), m: curMonth() }); else FM.setOverview(true); },
   });
 
   function render() {
@@ -168,15 +188,19 @@
     const bc = document.getElementById('breadcrumb');
     if (!bc) return;
     bc.style.display = 'flex';
-    const y = curYear();
+    const y = curYear(), m = curMonth();
     const d = eff ? eff.date : FM.param('d'), t = eff ? eff.ticketId : FM.param('t');
     const pr = eff ? eff.prNumber : FM.param('pr');
     const seg = [`<span class="bc-link" data-dep="root">🚀 배포 영향도</span>`];
-    if (indexData && indexData.years.length) seg.push(`<span class="bc-sep">›</span><span class="bc-link" data-dep="year">${FM.esc(y)}</span>`);
+    if (indexData && indexData.years.length) {
+      seg.push(`<span class="bc-sep">›</span><span class="bc-link" data-dep="year">${FM.esc(y)}년</span>`);
+      seg.push(`<span class="bc-sep">›</span><span class="bc-link" data-dep="month">${+m}월</span>`);
+    }
     if (d && t) seg.push(`<span class="bc-sep">›</span><span class="bc-focus">${FM.esc(d)} #${FM.esc(t)}${pr != null && pr !== '' ? ` · PR #${FM.esc(String(pr))}` : ''}</span>`);
     bc.innerHTML = seg.join('');
     bc.querySelector('[data-dep="root"]').onclick = () => nav({ y });
     bc.querySelector('[data-dep="year"]') && (bc.querySelector('[data-dep="year"]').onclick = () => nav({ y }));
+    bc.querySelector('[data-dep="month"]') && (bc.querySelector('[data-dep="month"]').onclick = () => nav({ y, m }));
   }
 
   function afterIndex(seq) {
@@ -200,10 +224,12 @@
     main.innerHTML = '';
     loadYear(curYear()).then((byDate) => {
       if (renderSeq !== seq) return;
-      const eff = computeEffective(byDate);
+      const m = curMonth();
+      const monthByDate = new Map([...byDate].filter(([date]) => date.slice(5, 7) === m));
+      const eff = computeEffective(monthByDate);
       drawBreadcrumb(eff);
-      renderRail(rail, byDate, eff);
-      renderMain(main, byDate, eff, seq);
+      renderRail(rail, monthByDate, eff);
+      renderMain(main, monthByDate, eff, seq);
     });
   }
 
@@ -220,17 +246,25 @@
 
   /* ───────── 좌측 레일: 일자 그룹 → 배포목록 ───────── */
   function renderRail(rail, byDate, eff) {
-    const y = curYear(), curD = eff ? eff.date : FM.param('d'), curT = eff ? eff.ticketId : FM.param('t');
+    const y = curYear(), m = curMonth(), curD = eff ? eff.date : FM.param('d'), curT = eff ? eff.ticketId : FM.param('t');
     rail.innerHTML = '';
     const head = el('div', 'dep-rail-head');
     head.appendChild(el('span', 'dep-rail-title', '🚀 배포'));
+    const picks = el('div', 'dep-picks');
     const sel = el('select', 'dep-year');
     for (const yr of indexData.years) { const o = el('option'); o.value = yr; o.textContent = yr + '년'; if (yr === y) o.selected = true; sel.appendChild(o); }
-    sel.onchange = () => nav({ y: sel.value });
-    head.appendChild(sel);
+    sel.onchange = () => nav({ y: sel.value });   // 년도 변경 → 월 기본값 재계산
+    picks.appendChild(sel);
+    const msel = el('select', 'dep-month');
+    const months = monthsOf(y);
+    if (!months.includes(m)) { months.push(m); months.sort().reverse(); }   // 현재 선택 월이 데이터 없어도 노출
+    for (const mo of months) { const o = el('option'); o.value = mo; o.textContent = (+mo) + '월'; if (mo === m) o.selected = true; msel.appendChild(o); }
+    msel.onchange = () => nav({ y, m: msel.value });
+    picks.appendChild(msel);
+    head.appendChild(picks);
     rail.appendChild(head);
 
-    if (!byDate.size) { rail.appendChild(el('div', 'dep-hint', '이 년도 배포 데이터가 없습니다.')); return; }
+    if (!byDate.size) { rail.appendChild(el('div', 'dep-hint', '이 달 배포 데이터가 없습니다.')); return; }
     for (const [date, grp] of byDate) {
       const g = el('div', 'dep-dgroup');
       const prc = grp.tickets.reduce((n, t) => n + t.prs.length, 0);
@@ -314,12 +348,14 @@
     host.innerHTML = '<div class="dep-loading">커밋 영향도 불러오는 중…</div>';
     sec.appendChild(host);
     main.appendChild(sec);
-    FM.loadFeature('impact').then(() => {
-      if (renderSeq !== seq) return;                    // 그 사이 다른 배포/PR로 재렌더됨
-      const key = FM.impact && FM.impact.prKey(eff.prNumber);
-      if (!key) { host.innerHTML = '<div class="dep-hint">이 PR의 커밋 영향도 데이터가 없습니다 (impact 미수집).</div>'; return; }
-      FM.impact.renderInto(host, [key]);
-    }).catch(() => { host.innerHTML = '<div class="dep-hint">커밋 영향도 모듈 로드 실패.</div>'; });
+    FM.loadFeature('impact')
+      .then(() => FM.impact && FM.impact.ensure())   // 커밋 인덱스 로드(commitBySha 채움) — prKey 조회 전 필수
+      .then(() => {
+        if (renderSeq !== seq) return;                  // 그 사이 다른 배포/PR로 재렌더됨
+        const key = FM.impact && FM.impact.prKey(eff.prNumber);
+        if (!key) { host.innerHTML = '<div class="dep-hint">이 PR의 커밋 영향도 데이터가 없습니다 (impact 미수집).</div>'; return; }
+        FM.impact.renderInto(host, [key]);
+      }).catch(() => { host.innerHTML = '<div class="dep-hint">커밋 영향도 모듈 로드 실패.</div>'; });
   }
 
   function prCard(p, ctx) {
