@@ -350,8 +350,9 @@
         row.dataset.search = [t.id, t.summary, t.service, t.platform, t.createdBy, ...(t.prs || []).map((p) => p.title)]
           .filter(Boolean).join(' ').toLowerCase();
         const svc = t.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(t.service)}</span>` : (t.repo ? `<span class="dep-svc-tag no">미매핑</span>` : '');
+        const tWarn = (t.prs || []).some((p) => !p.merged_at) ? '<span class="dep-di-warn" title="Has un-merged PR(s)">⚠️</span>' : '';
         row.innerHTML =
-          `<div class="dep-di-top"><span class="dep-di-id">#${FM.esc(String(t.id || ''))}</span><span class="dep-di-pr">🔀${t.prs.length}</span></div>` +
+          `<div class="dep-di-top"><span class="dep-di-id">#${FM.esc(String(t.id || ''))}</span><span class="dep-di-pr">${tWarn}🔀${t.prs.length}</span></div>` +
           `<div class="dep-di-summary">${FM.esc(t.summary)}</div>` +
           `<div class="dep-di-meta">${t.platform ? `<span class="dep-chip">${FM.esc(t.platform)}</span>` : ''}${svc}` +
           `${t.createdBy ? `<span class="dep-by">👤 ${FM.esc(t.createdBy)}</span>` : ''}</div>`;
@@ -435,7 +436,9 @@
 
     // PR 목록
     const prSec = el('div', 'dep-section');
-    prSec.appendChild(el('div', 'dep-sec-head', `PR 목록 (${tk.prs.length})`));
+    const unmergedCount = (tk.prs || []).filter((p) => !p.merged_at).length;
+    prSec.appendChild(el('div', 'dep-sec-head', `PR 목록 (${tk.prs.length})` +
+      (unmergedCount ? ` <span class="dep-sec-warn" title="${unmergedCount} un-merged PR(s)">⚠️ Unmerged ${unmergedCount}</span>` : '')));
     if (!tk.prs.length) prSec.appendChild(el('div', 'dep-hint', '연결된 PR이 없습니다.'));
     else {
       const list = el('div', 'dep-pr-grid');
@@ -548,14 +551,16 @@
 
   function prCard(p, ctx) {
     const on = ctx && String(p.number) === String(ctx.sel);
-    const card = el('div', 'dep-prc' + (on ? ' sel' : ''));
+    const merged = !!p.merged_at;   // 머지 시각이 없으면 아직 머지되지 않은 PR
+    const card = el('div', 'dep-prc' + (on ? ' sel' : '') + (merged ? '' : ' warn'));
     const num = p.number != null ? '#' + p.number : '';
+    const warnBadge = merged ? '' : '<span class="dep-prc-warn" title="Not merged — verify it is actually included in this deploy">⚠️ Unmerged</span>';
     card.innerHTML =
       (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '') +
-      `<div class="dep-prc-top"><span class="dep-prc-num">PR ${FM.esc(num)}</span>` +
+      `<div class="dep-prc-top"><span class="dep-prc-numwrap"><span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}</span>` +
       `<span class="dep-prc-detail" data-act="detail">${on ? '▾ 영향도' : '영향도 보기 ↓'}</span></div>` +
       `<div class="dep-prc-title">${FM.esc(p.title || '')}</div>` +
-      `<div class="dep-prc-by">${FM.esc(p.user || '')} · ${FM.esc(fmtTime(p.merged_at))}</div>`;
+      `<div class="dep-prc-by">${FM.esc(p.user || '')} · ${merged ? FM.esc(fmtTime(p.merged_at)) : '<span class="dep-prc-unmerged">Unmerged</span>'}</div>`;
     // PR 클릭 → 배포 영향도 안에서 pr= 선택 (커밋 영향도 뷰로 이동하지 않음). GitHub 링크는 통과.
     const go = (ev) => { if (ev.target.closest('.dep-prc-gh')) return; if (p.number != null) nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) }); };
     card.onclick = go;
