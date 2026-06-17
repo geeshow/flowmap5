@@ -68,6 +68,14 @@ html, body {
   background: rgba(37, 99, 235, .10); color: var(--c-controller);
   box-shadow: inset 3px 0 0 var(--c-controller);
 }
+/* 배포 영향도 하위 메뉴(상태별) */
+.nav-subs { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 2px 14px; padding-left: 8px; border-left: 1px solid var(--border); }
+.nav-btn.nav-sub { height: 30px; font-size: 12px; font-weight: 500; gap: 8px; }
+.nav-btn.nav-sub .nb-dot { font-size: 9px; line-height: 1; color: var(--text-dim); }
+.nav-btn.nav-sub[data-st="request"] .nb-dot { color: #f59e0b; }
+.nav-btn.nav-sub[data-st="approved"] .nb-dot { color: #2563eb; }
+.nav-btn.nav-sub[data-st="done"]     .nb-dot { color: #16a34a; }
+.nav-btn.nav-sub[data-st="cancel"]   .nb-dot { color: #ef4444; }
 
 /* 뷰 탭 */
 #view-tabs { display: flex; gap: 4px; background: var(--bg-input); padding: 3px; border-radius: 9px; border: 1px solid var(--border); }

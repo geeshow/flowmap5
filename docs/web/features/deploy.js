@@ -7,6 +7,29 @@
   const FM = window.Flowmap;
   const BASE = 'data/deploy/';
   const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  // 배포 티켓 상태(ticket_step) — 하위 메뉴/탭 분리 기준
+  const STATUS_ORDER = ['request', 'approved', 'done', 'cancel'];
+  const STATUS_LABEL = { request: '요청', approved: '승인', done: '완료', cancel: '취소' };
+  function normStatus(step) {
+    const s = String(step || '').toLowerCase();
+    if (s === 'cancel' || s === 'canceled' || s === 'cancelled') return 'cancel';
+    return STATUS_LABEL[s] ? s : s;   // 알 수 없는 값은 원문 유지(전체에만 노출)
+  }
+  function curStatus() { const s = FM.param('st'); return STATUS_ORDER.includes(s) ? s : null; }
+  function filterByStatus(byDate, st) {
+    if (!st) return byDate;
+    const m = new Map();
+    for (const [date, grp] of byDate) {
+      const tickets = grp.tickets.filter((t) => t.status === st);
+      if (tickets.length) m.set(date, Object.assign({}, grp, { tickets }));
+    }
+    return m;
+  }
+  function statusCounts(byDate) {
+    const c = { all: 0 }; for (const s of STATUS_ORDER) c[s] = 0;
+    for (const [, grp] of byDate) for (const t of grp.tickets) { c.all++; if (c[t.status] != null) c[t.status]++; }
+    return c;
+  }
 
   let indexData;                 // undefined=미로드, null=데이터없음, {byDate,years,year}
   const dayCache = new Map();    // date → Promise<{deploy, pr}>
@@ -62,7 +85,7 @@
   function loadYear(year) {
     if (yearCache.has(year)) return yearCache.get(year);
     const recs = [...indexData.byDate.values()].filter((r) => r.date.slice(0, 4) === year && ((r.deployCount || 0) > 0 || (r.prCount || 0) > 0));
-    const projs = projectSet();
+    const projs = serviceIndex();
     const p = Promise.all(recs.map((r) => loadDay(r).then(({ deploy, pr }) => ({ date: r.date, rec: r, tickets: buildTickets(deploy, pr, projs) }))))
       .then((arr) => { arr.sort((a, b) => b.date.localeCompare(a.date)); const m = new Map(); for (const x of arr) if (x.tickets.length) m.set(x.date, x); return m; });
     yearCache.set(year, p);
@@ -70,14 +93,24 @@
   }
 
   /* ───────── 서비스 매핑 ───────── */
-  function projectSet() {
-    const s = new Set((FM.META && FM.META.projects) || []);
-    for (const p of (FM.MANIFEST && FM.MANIFEST.projects) || []) if (p && p.name) s.add(p.name);
-    return s;
+  // names: 모든 프로젝트명(정확매칭용). byRepo: git 저장소 식별자 → 그 repo의 대표 서비스.
+  // 모노레포는 sub-root가 여러 프로젝트(`my-mono-packages-*`)로 쪼개지지만 매니페스트의 `repo`
+  // 필드(분석기가 찍는 git 저장소명, 예 `my-mono`)가 같으므로, 배포의 git_repository 를 그 repo의
+  // 대표 서비스(impact 보유분 우선)로 매핑한다 — 그래서 모노레포 배포도 "미매핑"이 되지 않는다.
+  function serviceIndex() {
+    const names = new Set((FM.META && FM.META.projects) || []);
+    const byRepo = new Map();
+    for (const p of (FM.MANIFEST && FM.MANIFEST.projects) || []) {
+      if (!p || !p.name) continue;
+      names.add(p.name);
+      if (p.repo && (!byRepo.has(p.repo) || p.impact)) byRepo.set(p.repo, p.name); // impact 보유 서비스 우선
+    }
+    return { names, byRepo };
   }
-  function mapRepoToService(repo, projectName, projs) {
-    if (repo && projs.has(repo)) return repo;
-    if (projectName && projs.has(projectName)) return projectName;
+  function mapRepoToService(repo, projectName, idx) {
+    if (repo && idx.names.has(repo)) return repo;             // 단일 repo=서비스 정확매칭
+    if (projectName && idx.names.has(projectName)) return projectName;
+    if (repo && idx.byRepo.has(repo)) return idx.byRepo.get(repo); // 모노레포: repo → 대표 서비스
     return null;
   }
   function buildTickets(deploy, pr, projs) {
@@ -101,6 +134,7 @@
         monitorBy: (dep && dep.monitor_by) || '',
         businessMonitorBy: (dep && dep.business_monitor_by) || '',
         org, repo, projectName,
+        status: normStatus((dep && dep.ticket_step) || (t && t.ticket_step)),
         prs: (t && t.prs) || [],
         service: mapRepoToService(repo, projectName, projs),
       };
@@ -153,7 +187,11 @@
     if (y === String(now.getFullYear()) && (months.includes(tm) || !months.length)) return tm;
     return months[0] || tm;
   }
-  function nav(params) { FM.pushViewUrl('deploy', params); render(); }
+  // 일반 이동은 현재 상태(st)를 유지. 상태 탭/하위메뉴는 st 를 명시(전체='')해 덮어쓴다.
+  function nav(params) {
+    if (!('st' in params)) { const st = curStatus(); if (st) params = Object.assign({ st }, params); }
+    FM.pushViewUrl('deploy', params); render();
+  }
 
   // URL 파라미터(d/t/pr)가 있으면 그대로, 없으면 기본값(첫 배포일·첫 배포·첫 PR)을 채운 "유효 선택".
   // 배포 영향도 진입 시 URL 을 더럽히지 않고도 첫 배포·첫 PR 이 선택된 상태로 보이게 한다.
@@ -202,11 +240,14 @@
       seg.push(`<span class="bc-sep">›</span><span class="bc-link" data-dep="year">${FM.esc(y)}년</span>`);
       seg.push(`<span class="bc-sep">›</span><span class="bc-link" data-dep="month">${+m}월</span>`);
     }
+    const st = curStatus();
+    if (st) seg.push(`<span class="bc-sep">›</span><span class="bc-link" data-dep="status">${FM.esc(STATUS_LABEL[st])}</span>`);
     if (d && t) seg.push(`<span class="bc-sep">›</span><span class="bc-focus">${FM.esc(d)} #${FM.esc(t)}${pr != null && pr !== '' ? ` · PR #${FM.esc(String(pr))}` : ''}</span>`);
     bc.innerHTML = seg.join('');
-    bc.querySelector('[data-dep="root"]').onclick = () => nav({ y });
+    bc.querySelector('[data-dep="root"]').onclick = () => nav({ y, st: '' });
     bc.querySelector('[data-dep="year"]') && (bc.querySelector('[data-dep="year"]').onclick = () => nav({ y }));
     bc.querySelector('[data-dep="month"]') && (bc.querySelector('[data-dep="month"]').onclick = () => nav({ y, m }));
+    bc.querySelector('[data-dep="status"]') && (bc.querySelector('[data-dep="status"]').onclick = () => nav({ y, m, st }));
   }
 
   function afterIndex(seq) {
@@ -232,10 +273,12 @@
       if (renderSeq !== seq) return;
       const m = curMonth();
       const monthByDate = new Map([...byDate].filter(([date]) => date.slice(5, 7) === m));
-      const eff = computeEffective(monthByDate);
+      const counts = statusCounts(monthByDate);              // 상태 탭 배지(필터 전 기준)
+      const shownByDate = filterByStatus(monthByDate, curStatus());
+      const eff = computeEffective(shownByDate);
       drawBreadcrumb(eff);
-      renderRail(rail, monthByDate, eff);
-      renderMain(main, monthByDate, eff, seq);
+      renderRail(rail, shownByDate, eff, counts);
+      renderMain(main, shownByDate, eff, seq);
     });
   }
 
@@ -251,7 +294,7 @@
   }
 
   /* ───────── 좌측 레일: 일자 그룹 → 배포목록 ───────── */
-  function renderRail(rail, byDate, eff) {
+  function renderRail(rail, byDate, eff, counts) {
     const y = curYear(), m = curMonth(), curD = eff ? eff.date : FM.param('d'), curT = eff ? eff.ticketId : FM.param('t');
     rail.innerHTML = '';
     const head = el('div', 'dep-rail-head');
@@ -270,6 +313,21 @@
     head.appendChild(picks);
     rail.appendChild(head);
 
+    // 상태 탭(전체/요청/승인/완료/취소) — 클릭 시 st 로 필터. 데이터 없어도 항상 노출.
+    const st = curStatus();
+    const cnt = counts || { all: 0 };
+    const tabs = el('div', 'dep-status-tabs');
+    const mkTab = (key, label) => {
+      const n = key === 'all' ? (cnt.all || 0) : (cnt[key] || 0);
+      const b = el('button', 'dep-stab st-' + key + ((key === 'all' ? !st : st === key) ? ' on' : ''));
+      b.innerHTML = `${FM.esc(label)}<span class="dep-stab-n">${n}</span>`;
+      b.onclick = () => nav({ y, m, st: key === 'all' ? '' : key });
+      return b;
+    };
+    tabs.appendChild(mkTab('all', '전체'));
+    for (const k of STATUS_ORDER) tabs.appendChild(mkTab(k, STATUS_LABEL[k]));
+    rail.appendChild(tabs);
+
     // 텍스트 필터(담당자/요약/서비스/#ID/PR제목)
     const filter = el('input', 'dep-filter');
     filter.type = 'text';
@@ -280,7 +338,7 @@
     empty.style.display = 'none';
     rail.appendChild(empty);
 
-    if (!byDate.size) { rail.appendChild(el('div', 'dep-hint', '이 달 배포 데이터가 없습니다.')); return; }
+    if (!byDate.size) { rail.appendChild(el('div', 'dep-hint', st ? `이 달 '${STATUS_LABEL[st]}' 상태 배포가 없습니다.` : '이 달 배포 데이터가 없습니다.')); return; }
     for (const [date, grp] of byDate) {
       const g = el('div', 'dep-dgroup');
       g.dataset.date = date;                       // 스크롤 힌트가 현재 영역 날짜 식별용
