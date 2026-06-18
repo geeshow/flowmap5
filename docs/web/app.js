@@ -125,8 +125,10 @@ async function loadGraphData() {
   }
   MANIFEST = manifest;
   COMPRESSED = !!manifest.compressed;   // 이후 프로젝트 graph/join·lazy 데이터는 .gz 로 로드
+  // graph 가 null 인 항목(예: repo 단위 impact 전용 프로젝트 — 모노레포 PR 영향도)은 그래프가 없다.
+  // 페치하지 않고 g:null 로 둬 전체보기/구조 뷰에선 제외하고, commit/PR 뷰만 impact 를 읽게 한다.
   const results = await Promise.all(manifest.projects.map(p =>
-    jsonFetch('data/' + p.graph).then(g => ({ p, g }))));
+    p.graph ? jsonFetch('data/' + p.graph).then(g => ({ p, g })) : Promise.resolve({ p, g: null })));
 
   // 프론트 정규 이름 결정 (1차 스캔): 그래프 노드들의 다수결 project.
   //   매니페스트 name 은 그래프 파일명(graph-*) 기준이라 노드 project 와 어긋날 수 있어, 다수결 값을
@@ -147,7 +149,10 @@ async function loadGraphData() {
   const okProjects = [];
   let edgeAccum = [];
   for (const { p, g } of results) {
-    if (!g || !Array.isArray(g.nodes)) { console.warn('[flowmap] 프로젝트 그래프 로드 실패, 건너뜀:', p.name, p.graph); continue; }
+    if (!g || !Array.isArray(g.nodes)) {
+      if (p.graph) console.warn('[flowmap] 프로젝트 그래프 로드 실패, 건너뜀:', p.name, p.graph);  // graph:null 은 의도된 impact-전용 항목
+      continue;
+    }
     // 다수결 이름이 유일하면 그걸 정규 이름으로(깔끔). 여러 프로젝트와 겹치면(모노레포 sub-root)
     // 매니페스트 name 을 유지해 패키지별로 분리한다.
     let canon = p.name, forceProject = false;
@@ -3193,7 +3198,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '49';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '50';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }

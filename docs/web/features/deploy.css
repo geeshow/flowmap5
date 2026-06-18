@@ -155,7 +155,8 @@
 .dep-imp-note code { font-family: ui-monospace, monospace; }
 .dep-svc-graph { position: relative; }
 .dep-svc-note { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
-.dep-svc-nodes { display: flex; flex-wrap: wrap; gap: 12px; position: relative; z-index: 1; }
+/* 서비스 카드 간격을 넓혀 그 위에 그려지는 연관관계(s2s/join) 선이 보이도록 한다 */
+.dep-svc-nodes { display: flex; flex-wrap: wrap; gap: 40px 72px; position: relative; z-index: 1; }
 .dep-svc { border-left-width: 3px; border-left-style: solid; min-width: 150px; padding: 8px 11px; opacity: .58; }
 .dep-svc.touched { opacity: 1; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
 .dep-svc-name { font-size: 12.5px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }
