@@ -374,6 +374,16 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 .ov-svc-name { font-size: 15px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
 .ov-svc-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
 .ov-svc-sub { font-size: 11px; color: var(--text-dim); margin-top: 5px; }
+/* wallga 모노레포 분해: 모듈 카드들을 한 슬롯에 묶는 래퍼 */
+.ov-svc-group { display: flex; flex-direction: column; gap: 8px; padding: 6px 0 6px 10px; border-left: 2px dashed hsl(var(--svc-hue, 210) 60% 50% / .5); }
+.ovg-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--text); }
+.ovg-tag { font-size: 9px; font-weight: 600; color: var(--text-dim); background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+.node-card.ovg-modcard { width: 210px; padding: 10px 12px; }
+.node-card.ovg-modcard .ov-svc-name { font-size: 13px; font-family: ui-monospace, monospace; }
+.node-card.ovg-modcard.other { opacity: .75; }
+.node-card.ovg-modcard.other .ov-svc-name { font-family: inherit; font-style: italic; }
+.ov-svc-group.dim { opacity: .14; filter: brightness(.6); }
+.ov-svc-group.orphan-hidden { display: none; }
 /* 카드 타입 뱃지 (화면/서비스/배치/외부/인프라) — 이름 행 우측 정렬 */
 .ov-tag {
   margin-left: auto; flex: none; font-size: 9px; font-weight: 800; letter-spacing: .3px;

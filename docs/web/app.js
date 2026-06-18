@@ -1765,7 +1765,7 @@ function renderOverview() {
     head.className = 'column-head';
     head.textContent = lv === 0 ? head0 : (HEAD[lv] || `의존 ${lv}`);
     col.appendChild(head);
-    for (const s of inLevel) col.appendChild(makeServiceCard(s, stats[s]));
+    for (const s of inLevel) { const mods = decomposeModulesOf(s); col.appendChild(mods ? makeServiceGroupCard(s, mods) : makeServiceCard(s, stats[s])); }
     if (withBatch) for (const b of batchList) col.appendChild(makeBatchCard(b));
     if (withExternal) col.appendChild(makeInfraTypeCard('external', (infraMembers['external'] || new Set()).size));
     colsEl.appendChild(col);
@@ -2104,6 +2104,54 @@ function makeServiceCard(svc, st, onClick) {
   card.addEventListener('mouseleave', () => clearAlign());
   cardEls.set('svc:' + svc, card);
   return card;
+}
+
+// wallga(모노레포 분리) 계열 spring 프로젝트: 노드 module 필드(<project>-<suffix>)로 sub-project 분해.
+//   2개 이상의 <project>- 모듈이 있을 때만 분해 대상(예: trf-loan → trf-loan-api/core).
+//   매칭 안 되는(module=src·없음·다른 접두사) 노드는 '(기타)' 카드로 모은다. 아니면 null.
+function decomposeModulesOf(svc) {
+  if (isFrontendProject(svc)) return null;
+  const byMod = new Map();
+  const other = { module: svc + ' (기타)', eps: 0, nodes: 0, other: true };
+  for (const n of NODES) {
+    if (n.project !== svc) continue;
+    const m = (n.module && n.module.startsWith(svc + '-')) ? n.module : null;
+    const t = m ? (byMod.get(m) || byMod.set(m, { module: m, eps: 0, nodes: 0 }).get(m)) : other;
+    t.nodes++;
+    if (n.layer === 'CONTROLLER' && n.endpoint) t.eps++;
+  }
+  if (byMod.size < 2) return null;
+  const mods = [...byMod.values()].sort((a, b) => b.nodes - a.nodes);
+  if (other.nodes) mods.push(other);
+  return mods;
+}
+
+// 분해 대상 프로젝트: 모듈 카드들을 래퍼(=svc:<project>, 엣지 앵커)로 묶어 한 티어 슬롯에 배치.
+//   래퍼만 cardEls 에 등록 → 기존 서비스 엣지/하이라이트/정리(dim·orphan)가 그대로 동작.
+function makeServiceGroupCard(svc, mods) {
+  const wrap = document.createElement('div');
+  wrap.className = 'ov-svc-group' + (('svc:' + svc) === state.sel ? ' sel' : '');
+  wrap.dataset.node = 'svc:' + svc;
+  const hue = serviceHue(svc);
+  wrap.style.setProperty('--svc-hue', hue);
+  const head = document.createElement('div');
+  head.className = 'ovg-head';
+  head.innerHTML = `<span class="ov-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${esc(svc)}`
+    + `<span class="ovg-tag">모노레포 · ${mods.length}모듈</span>`;
+  wrap.appendChild(head);
+  for (const md of mods) {
+    const c = document.createElement('div');
+    c.className = 'node-card ov-svc ovg-modcard' + (md.other ? ' other' : '');
+    c.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
+    c.innerHTML = `<div class="ov-svc-name">${esc(md.module)}</div>`
+      + `<div class="ov-svc-sub">${md.eps} endpoints · ${md.nodes} nodes</div>`;
+    c.addEventListener('click', () => setService(svc));
+    c.addEventListener('mouseenter', () => alignNeighbors('svc:' + svc));
+    c.addEventListener('mouseleave', () => clearAlign());
+    wrap.appendChild(c);
+  }
+  cardEls.set('svc:' + svc, wrap);
+  return wrap;
 }
 
 // 서비스 보기 단계 컬럼: 외부/인프라 버킷을 전체보기처럼 단일 카드로 축약 (id = 버킷 key, 엣지 타깃과 일치)
