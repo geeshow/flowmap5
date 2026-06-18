@@ -331,6 +331,40 @@
   box-shadow: 0 0 0 4px rgba(249,115,22,.07), 0 8px 26px rgba(249,115,22,.14);
 }
 
+/* ───────── 서비스(영역) 단위 재배치 레이아웃 ───────── */
+/* 가로 스크롤로 서비스 박스를 왼쪽(유입원)→오른쪽(유출처) 순으로 늘어놓는다. */
+.imp-graph-svc {
+  gap: 56px;
+  width: max-content;
+  min-width: 100%;
+}
+.imp-svc-box {
+  flex: 0 0 auto;
+  width: 300px;
+  padding: 10px 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255,255,255,.015);
+}
+/* 변경·영향 노드가 든 서비스 = 주황 강조 박스 */
+.imp-svc-box.has-changed {
+  border-color: var(--imp-changed);
+  background: var(--imp-tint);
+  box-shadow: 0 0 0 3px rgba(249,115,22,.06), 0 8px 24px rgba(249,115,22,.12);
+}
+.imp-svc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.imp-svc-head .imp-proj { font-size: 12px; max-width: 220px; }
+.imp-svc-count { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+.imp-svc-body { display: flex; flex-direction: column; gap: 12px; }
+.imp-svc-box .node-card { width: 100%; }
+
 /* 변경 노드 ◆ — 2px 주황 실선 링 */
 .node-card.imp-changed {
   box-shadow: 0 0 0 2px var(--imp-changed), 0 4px 12px rgba(0,0,0,.5);

@@ -751,17 +751,21 @@ function collectChainFlow(base, adjOut, adjIn) {
   return { nodes, edges, segOf, segLabels, truncated: count >= MAX };
 }
 
-// 기능 뷰(커밋 영향도 등) 프로세스 독용 — 실제 그래프에서 base 의 다운스트림 폐포로 제한한 인접.
-// 컬럼이 경계만 보여줘도, 독에서는 내부 실행 체인 전체(CONTROLLER→SERVICE→…→EXTERNAL)를 그린다.
-function downstreamChainAdj(base) {
+// 기능 뷰 프로세스 독용 — base 의 양방향(피호출∪호출) 연결 폐포. 어떤 노드를 눌러도 그 노드가 속한
+// 전체 프로세스 흐름(누가 부르는지 + 무엇을 부르는지)을 한 번에 보여준다.
+//   변경 엔드포인트를 누르면 유출 단계까지, 유출 단계를 누르면 피호출 단계까지 같은 체인으로 묶인다.
+function fullChainAdj(base) {
   const bases = Array.isArray(base) ? base : [base];
   const seen = new Set(bases);
   let frontier = [...bases];
   while (frontier.length) {
     const next = [];
-    for (const id of frontier)
+    for (const id of frontier) {
       for (const e of (outEdges.get(id) || []))
         if (nodeById.has(e.target) && !seen.has(e.target)) { seen.add(e.target); next.push(e.target); }
+      for (const e of (inEdges.get(id) || []))
+        if (nodeById.has(e.source) && !seen.has(e.source)) { seen.add(e.source); next.push(e.source); }
+    }
     frontier = next;
   }
   const aOut = new Map(), aIn = new Map();
@@ -813,8 +817,9 @@ function dockCardEl(id, rootId) {
   return el;
 }
 
-// 독 내부 SVG 연결선 — kind 색/화살표/sync·async 구분/relation 라벨 (hoverId: 연결선 강조)
-function drawDockConnectors(dock, edges, elOf, hoverId) {
+// 독 내부 SVG 연결선 — kind 색/화살표/sync·async 구분/relation 라벨
+//   active: 강조 기준 노드(있으면 비활성 엣지 dim) · chain: active 가 속한 연결 체인 전체(이 안의 엣지를 hot)
+function drawDockConnectors(dock, edges, elOf, active, chain) {
   const wrap = dock.querySelector('.dock-flow');
   const svg = dock.querySelector('.dock-svg');
   if (!wrap || !svg || !wrap.offsetParent) return;
@@ -836,7 +841,8 @@ function drawDockConnectors(dock, edges, elOf, hoverId) {
     const dx = Math.max(24, Math.abs(x2 - x1) * 0.45);
     const kc = kindClass(e); used.add(kc);
     const isAsync = e.mode === 'async';
-    const stateCls = hoverId ? (e.source === hoverId || e.target === hoverId ? ' hot' : ' dim') : '';
+    // 연결 체인 전체를 강조: 체인 안의 엣지(양 끝 노드 모두 체인 소속)는 hot, 나머지는 dim
+    const stateCls = active ? ((chain && chain.has(e.source) && chain.has(e.target)) ? ' hot' : ' dim') : '';
     paths += `<path class="edge-path k-${kc}${isAsync ? ' async' : ''}${stateCls}" `
       + `d="M${x1.toFixed(1)},${y1.toFixed(1)} C${(x1 + (fwd ? dx : -dx)).toFixed(1)},${y1.toFixed(1)} ${(x2 - (fwd ? dx : -dx)).toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" `
       + `marker-end="url(#dk-${kc})"/>`;
@@ -888,7 +894,7 @@ function renderProcessDock() {
   const n = nodeById.get(base);
   const { nodes, edges, segOf, segLabels, truncated } = svcMode
     ? collectChainFlow(base)
-    : (() => { const { aOut, aIn } = downstreamChainAdj(base); return collectChainFlow(base, aOut, aIn); })();
+    : (() => { const { aOut, aIn } = fullChainAdj(base); return collectChainFlow(base, aOut, aIn); })();
 
   // 레이어 구성 요약 칩
   const counts = new Map();
@@ -966,29 +972,63 @@ function renderProcessDock() {
   dock.querySelector('.dock-resizer').addEventListener('mousedown', e => startDockResize(e, dock));
   dock.classList.remove('hidden');
 
-  // hover/클릭 강조: 마우스 오버 시 연결 노드만 강조(.overlay+dim), 노드를 클릭하면 그 강조를 고정(pin)
-  let hoverId = null, pinnedId = null;
+  // hover/클릭 강조: active 노드가 속한 연결 체인 전체(전이적 피호출∪호출, 중간 단계 포함)를 강조.
+  // 노드를 클릭하면 그 강조를 고정(pin). 기능 뷰(커밋 영향도)는 기준 노드의 체인을 기본으로 펼쳐둔다.
+  const chainOf = (active) => {
+    const chain = new Set();
+    if (!active) return chain;
+    chain.add(active);
+    // 하류(호출) + 상류(피호출) 양방향 전이 폐포 — 같은 흐름에 속한 노드를 모두 모은다
+    for (const up of [false, true]) {
+      let f = [active];
+      while (f.length) {
+        const nx = [];
+        for (const cur of f) for (const e of edges) {
+          const nb = up ? (e.target === cur ? e.source : null) : (e.source === cur ? e.target : null);
+          if (nb && !chain.has(nb)) { chain.add(nb); nx.push(nb); }
+        }
+        f = nx;
+      }
+    }
+    return chain;
+  };
+  // 경계 노드 = 흐름의 시작/끝 의미 단위(엔드포인트/화면/외부/인프라). 그 사이의 SERVICE/REPOSITORY 등
+  // 중간 plumbing 단계는 강조 대상에서 빼서 투명 처리한다.
+  const isBoundaryNode = (id) => {
+    const nn = nodeById.get(id);
+    if (!nn) return false;
+    return nn.layer === 'CONTROLLER' || nn.layer === 'SCREEN' || nn.layer === 'EXTERNAL' || isInfra(id, nn);
+  };
+  let hoverId = null, pinnedId = (!svcMode && elOf.has(base)) ? base : null;
   const applyDockHover = () => {
     const active = hoverId || pinnedId;
-    const neighbors = new Set();
-    if (active) for (const e of edges) {
-      if (e.source === active) neighbors.add(e.target);
-      if (e.target === active) neighbors.add(e.source);
-    }
+    const chain = chainOf(active);
+    // 강조(밝게) = 기준 노드 + 체인 안의 경계 노드. 중간 단계는 체인에 속해도 투명 처리.
+    const bright = new Set();
+    if (active) { bright.add(active); for (const id of chain) if (isBoundaryNode(id)) bright.add(id); }
     for (const [nid, el] of elOf) {
-      el.classList.toggle('dim', !!active && nid !== active && !neighbors.has(nid));
+      el.classList.toggle('dim', !!active && !bright.has(nid));
       el.classList.toggle('pinned', nid === pinnedId);
     }
     dock.querySelector('.dock-svg').classList.toggle('overlay', !!active);
-    drawDockConnectors(dock, edges, elOf, active);
+    drawDockConnectors(dock, edges, elOf, active, chain);   // 연결선은 체인 전체를 hot 으로 — 흐름 가독성 유지
   };
   for (const [nid, el] of elOf) {
     el.addEventListener('mouseenter', () => { hoverId = nid; applyDockHover(); });
     el.addEventListener('mouseleave', () => { hoverId = null; applyDockHover(); });
     el.addEventListener('click', () => { pinnedId = pinnedId === nid ? null : nid; hoverId = null; applyDockHover(); });
   }
-  dockDraw = () => drawDockConnectors(dock, edges, elOf, hoverId || pinnedId);
-  requestAnimationFrame(dockDraw);
+  dockDraw = () => { const active = hoverId || pinnedId; drawDockConnectors(dock, edges, elOf, active, chainOf(active)); };
+  requestAnimationFrame(applyDockHover);
+
+  // 노드를 눌러 프로세스 흐름을 열면 선택한(기준) 노드가 보이도록 독을 스크롤하고 살짝 바운스시킨다.
+  const rootCard = elOf.get(base);
+  if (rootCard) requestAnimationFrame(() => {
+    rootCard.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    rootCard.classList.remove('dock-bounce');
+    void rootCard.offsetWidth;            // 리플로우 — 같은 노드 재선택 시에도 애니메이션 재시작
+    rootCard.classList.add('dock-bounce');
+  });
 }
 
 // ---- 패널 크기 조절 (하단 독 높이 / 상세 패널 너비) ----
@@ -3153,7 +3193,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '48';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '49';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
