@@ -1602,6 +1602,8 @@ function superId(id) {
   if (n) {
     // 배치는 진입점 — 서비스(project) 단위로 묶어 진입/화면 컬럼에 '{service}-batch' 카드로 배치한다.
     if (n.layer === 'BATCH') return 'batch:' + (n.project || n.fqcn || id);
+    // 외부호출이 yml host 매칭으로 다른 백엔드 서비스(s2sService)로 해석되면 그 서비스로 귀속 → server-to-server.
+    if (isExtCallNode(id, n) && n.s2sService && (META.projects || []).includes(n.s2sService)) return 'svc:' + n.s2sService;
     // 외부 API 호출 노드는 기본적으로 공유 '외부 API' 로 묶는다 (project 태그 무시).
     //   같은 외부 URL 을 여러 프론트가 호출하면 id 충돌로 한 프론트 소속이 되어 화면↔화면 가짜 연결이 생기기 때문.
     //   (단, buildServiceGraph 가 join 엣지의 ext source 만 예외로 그 프론트 svc 에 귀속시켜 front→backend 흐름은 유지)
@@ -1626,7 +1628,10 @@ function buildServiceGraph() {
       if (sn && sn.project && isExtCallNode(e.source, sn)) ss = 'svc:' + sn.project;
     }
     if (ss === st) continue;
-    const kc = e.kind === 's2s' ? 's2s' : e.kind === 'join' ? 'join' : kindClass(e);
+    // 외부호출이 s2sService 로 해석돼 백엔드 서비스로 귀속된 경우(svc:… 타깃) server-to-server 로 표기.
+    const tn = nodeById.get(e.target);
+    const extResolved = e.kind === 'external' && tn && tn.s2sService && st.startsWith('svc:');
+    const kc = e.kind === 's2s' || extResolved ? 's2s' : e.kind === 'join' ? 'join' : kindClass(e);
     const key = ss + '|' + st + '|' + kc;
     let a = agg.get(key);
     if (!a) { a = { source: ss, target: st, kc, count: 0, async: false }; agg.set(key, a); }
