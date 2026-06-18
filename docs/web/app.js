@@ -2106,16 +2106,21 @@ function makeServiceCard(svc, st, onClick) {
   return card;
 }
 
-// wallga(모노레포 분리) 계열 spring 프로젝트: 노드 module 필드(<project>-<suffix>)로 sub-project 분해.
-//   2개 이상의 <project>- 모듈이 있을 때만 분해 대상(예: trf-loan → trf-loan-api/core).
-//   매칭 안 되는(module=src·없음·다른 접두사) 노드는 '(기타)' 카드로 모은다. 아니면 null.
+// wallga 모노레포 sub-project 판별: manifest 의 repo(=gitRepo 모노레포명)가 있고 프로젝트명과 다르면
+//   해당 프로젝트는 모노레포(예: tera-terafi)의 sub-project → 분해 대상. (standalone 은 repo===name 또는 null)
+function monorepoOf(svc) {
+  const p = (MANIFEST?.projects || []).find(x => x.name === svc);
+  return p && p.repo && p.repo !== svc ? p.repo : null;
+}
+// wallga 모노레포 sub-project 를 Gradle 모듈 단위로 분해. 모듈(=node.module, src 제외) 2개 이상일 때만.
+//   모듈 없는(src/null) 노드는 '(기타)' 카드로 모은다. 분해 대상 아니면 null.
 function decomposeModulesOf(svc) {
-  if (isFrontendProject(svc)) return null;
+  if (isFrontendProject(svc) || !monorepoOf(svc)) return null;
   const byMod = new Map();
   const other = { module: svc + ' (기타)', eps: 0, nodes: 0, other: true };
   for (const n of NODES) {
     if (n.project !== svc) continue;
-    const m = (n.module && n.module.startsWith(svc + '-')) ? n.module : null;
+    const m = (n.module && n.module !== 'src') ? n.module : null;
     const t = m ? (byMod.get(m) || byMod.set(m, { module: m, eps: 0, nodes: 0 }).get(m)) : other;
     t.nodes++;
     if (n.layer === 'CONTROLLER' && n.endpoint) t.eps++;
@@ -2137,7 +2142,7 @@ function makeServiceGroupCard(svc, mods) {
   const head = document.createElement('div');
   head.className = 'ovg-head';
   head.innerHTML = `<span class="ov-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${esc(svc)}`
-    + `<span class="ovg-tag">모노레포 · ${mods.length}모듈</span>`;
+    + `<span class="ovg-tag">${monorepoOf(svc) ? esc(monorepoOf(svc)) + ' · ' : ''}${mods.length}모듈</span>`;
   wrap.appendChild(head);
   for (const md of mods) {
     const c = document.createElement('div');
