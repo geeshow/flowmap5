@@ -625,8 +625,8 @@
     }
     bases.forEach(id => level.set(id, 0));
 
-    const expand = (edgeMap, sign, maxHops) => {
-      let frontier = bases.slice();
+    const expand = (startIds, edgeMap, sign, maxHops) => {
+      let frontier = startIds.slice();
       for (let d = 0; d < maxHops && frontier.length; d++) {
         const next = [];
         for (const anchor of frontier) {
@@ -643,8 +643,11 @@
       }
     };
 
-    expand(FM.outEdges, 1, MAX_DOWN);   // 유출: 엔드포인트가 호출하는 외부 API/다른 서비스/kafka
-    expand(FM.inEdges, -1, MAX_UP);     // 유입: 엔드포인트에 닿는 화면/s2s 호출원
+    expand(bases, FM.outEdges, 1, MAX_DOWN);   // 유출: 변경·영향 엔드포인트가 호출하는 외부 API/다른 서비스/kafka
+    // 유입(피호출)은 "직접 수정된 노드"에만 연결한다 — 롤업 영향·유출(호출) 노드의 피호출은 클러터라 제외.
+    // (직접 수정된 경계 노드가 하나도 없으면(순수 롤업 변경) 빈 유입 대신 전체 기준으로 폴백)
+    const inboundSeeds = bases.filter(id => changedSha.has(id));
+    expand(inboundSeeds.length ? inboundSeeds : bases, FM.inEdges, -1, MAX_UP);   // 유입: 직접 수정 노드에 닿는 화면/s2s 호출원
 
     // 상단 분석 바
     main.appendChild(buildBar(selected, changedSha, epIds, truncated, outOfGraph, opts.embedded));
