@@ -18,7 +18,7 @@
 정적 자산은 버전 쿼리로 캐시 관리. 안 올리면 브라우저가 옛 파일을 씀.
 - `docs/web/index.html`: `style.css?v=NN`, `app.js?v=NN`
 - `docs/web/app.js`: `const FEATURE_VER = 'NN'` — `features/*.js`·`features/*.css` 모듈 캐시키
-- **현재 값**: style.css `v=65`, app.js `v=137`, FEATURE_VER `45`
+- **현재 값**: style.css `v=67`, app.js `v=143`, FEATURE_VER `49`
 
 ## 핵심 파일
 
@@ -29,7 +29,8 @@
 
 ## 데이터
 
-- **위치**: `docs/web/data/` (git 추적됨). `data/manifest.json` 을 로드(프로젝트별 독립 그래프 병합),
+- **위치**: `docs/web/data/` (**`.gitignore` 대상 — git 추적 안 됨, 파이프라인 재생성 산출물**).
+  `data/manifest.json` 을 로드(프로젝트별 독립 그래프 병합),
   없으면 `data/graph.json` 폴백(현재 없음). `.gz` 있으면 우선 사용(DecompressionStream).
 - 프로젝트별: `<svc>.json`(그래프), `<svc>.openapi.json`(API 문서), 각 `.gz`.
 - **배포 영향도 데이터**: `data/deploy/` — `index.json`·`pr_index.json`(년/일 인덱스) +

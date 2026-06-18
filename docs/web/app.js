@@ -751,17 +751,21 @@ function collectChainFlow(base, adjOut, adjIn) {
   return { nodes, edges, segOf, segLabels, truncated: count >= MAX };
 }
 
-// 기능 뷰(커밋 영향도 등) 프로세스 독용 — 실제 그래프에서 base 의 다운스트림 폐포로 제한한 인접.
-// 컬럼이 경계만 보여줘도, 독에서는 내부 실행 체인 전체(CONTROLLER→SERVICE→…→EXTERNAL)를 그린다.
-function downstreamChainAdj(base) {
+// 기능 뷰 프로세스 독용 — base 의 양방향(피호출∪호출) 연결 폐포. 어떤 노드를 눌러도 그 노드가 속한
+// 전체 프로세스 흐름(누가 부르는지 + 무엇을 부르는지)을 한 번에 보여준다.
+//   변경 엔드포인트를 누르면 유출 단계까지, 유출 단계를 누르면 피호출 단계까지 같은 체인으로 묶인다.
+function fullChainAdj(base) {
   const bases = Array.isArray(base) ? base : [base];
   const seen = new Set(bases);
   let frontier = [...bases];
   while (frontier.length) {
     const next = [];
-    for (const id of frontier)
+    for (const id of frontier) {
       for (const e of (outEdges.get(id) || []))
         if (nodeById.has(e.target) && !seen.has(e.target)) { seen.add(e.target); next.push(e.target); }
+      for (const e of (inEdges.get(id) || []))
+        if (nodeById.has(e.source) && !seen.has(e.source)) { seen.add(e.source); next.push(e.source); }
+    }
     frontier = next;
   }
   const aOut = new Map(), aIn = new Map();
@@ -813,8 +817,9 @@ function dockCardEl(id, rootId) {
   return el;
 }
 
-// 독 내부 SVG 연결선 — kind 색/화살표/sync·async 구분/relation 라벨 (hoverId: 연결선 강조)
-function drawDockConnectors(dock, edges, elOf, hoverId) {
+// 독 내부 SVG 연결선 — kind 색/화살표/sync·async 구분/relation 라벨
+//   active: 강조 기준 노드(있으면 비활성 엣지 dim) · chain: active 가 속한 연결 체인 전체(이 안의 엣지를 hot)
+function drawDockConnectors(dock, edges, elOf, active, chain) {
   const wrap = dock.querySelector('.dock-flow');
   const svg = dock.querySelector('.dock-svg');
   if (!wrap || !svg || !wrap.offsetParent) return;
@@ -836,7 +841,8 @@ function drawDockConnectors(dock, edges, elOf, hoverId) {
     const dx = Math.max(24, Math.abs(x2 - x1) * 0.45);
     const kc = kindClass(e); used.add(kc);
     const isAsync = e.mode === 'async';
-    const stateCls = hoverId ? (e.source === hoverId || e.target === hoverId ? ' hot' : ' dim') : '';
+    // 연결 체인 전체를 강조: 체인 안의 엣지(양 끝 노드 모두 체인 소속)는 hot, 나머지는 dim
+    const stateCls = active ? ((chain && chain.has(e.source) && chain.has(e.target)) ? ' hot' : ' dim') : '';
     paths += `<path class="edge-path k-${kc}${isAsync ? ' async' : ''}${stateCls}" `
       + `d="M${x1.toFixed(1)},${y1.toFixed(1)} C${(x1 + (fwd ? dx : -dx)).toFixed(1)},${y1.toFixed(1)} ${(x2 - (fwd ? dx : -dx)).toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" `
       + `marker-end="url(#dk-${kc})"/>`;
@@ -888,7 +894,7 @@ function renderProcessDock() {
   const n = nodeById.get(base);
   const { nodes, edges, segOf, segLabels, truncated } = svcMode
     ? collectChainFlow(base)
-    : (() => { const { aOut, aIn } = downstreamChainAdj(base); return collectChainFlow(base, aOut, aIn); })();
+    : (() => { const { aOut, aIn } = fullChainAdj(base); return collectChainFlow(base, aOut, aIn); })();
 
   // 레이어 구성 요약 칩
   const counts = new Map();
@@ -966,29 +972,63 @@ function renderProcessDock() {
   dock.querySelector('.dock-resizer').addEventListener('mousedown', e => startDockResize(e, dock));
   dock.classList.remove('hidden');
 
-  // hover/클릭 강조: 마우스 오버 시 연결 노드만 강조(.overlay+dim), 노드를 클릭하면 그 강조를 고정(pin)
-  let hoverId = null, pinnedId = null;
+  // hover/클릭 강조: active 노드가 속한 연결 체인 전체(전이적 피호출∪호출, 중간 단계 포함)를 강조.
+  // 노드를 클릭하면 그 강조를 고정(pin). 기능 뷰(커밋 영향도)는 기준 노드의 체인을 기본으로 펼쳐둔다.
+  const chainOf = (active) => {
+    const chain = new Set();
+    if (!active) return chain;
+    chain.add(active);
+    // 하류(호출) + 상류(피호출) 양방향 전이 폐포 — 같은 흐름에 속한 노드를 모두 모은다
+    for (const up of [false, true]) {
+      let f = [active];
+      while (f.length) {
+        const nx = [];
+        for (const cur of f) for (const e of edges) {
+          const nb = up ? (e.target === cur ? e.source : null) : (e.source === cur ? e.target : null);
+          if (nb && !chain.has(nb)) { chain.add(nb); nx.push(nb); }
+        }
+        f = nx;
+      }
+    }
+    return chain;
+  };
+  // 경계 노드 = 흐름의 시작/끝 의미 단위(엔드포인트/화면/외부/인프라). 그 사이의 SERVICE/REPOSITORY 등
+  // 중간 plumbing 단계는 강조 대상에서 빼서 투명 처리한다.
+  const isBoundaryNode = (id) => {
+    const nn = nodeById.get(id);
+    if (!nn) return false;
+    return nn.layer === 'CONTROLLER' || nn.layer === 'SCREEN' || nn.layer === 'EXTERNAL' || isInfra(id, nn);
+  };
+  let hoverId = null, pinnedId = (!svcMode && elOf.has(base)) ? base : null;
   const applyDockHover = () => {
     const active = hoverId || pinnedId;
-    const neighbors = new Set();
-    if (active) for (const e of edges) {
-      if (e.source === active) neighbors.add(e.target);
-      if (e.target === active) neighbors.add(e.source);
-    }
+    const chain = chainOf(active);
+    // 강조(밝게) = 기준 노드 + 체인 안의 경계 노드. 중간 단계는 체인에 속해도 투명 처리.
+    const bright = new Set();
+    if (active) { bright.add(active); for (const id of chain) if (isBoundaryNode(id)) bright.add(id); }
     for (const [nid, el] of elOf) {
-      el.classList.toggle('dim', !!active && nid !== active && !neighbors.has(nid));
+      el.classList.toggle('dim', !!active && !bright.has(nid));
       el.classList.toggle('pinned', nid === pinnedId);
     }
     dock.querySelector('.dock-svg').classList.toggle('overlay', !!active);
-    drawDockConnectors(dock, edges, elOf, active);
+    drawDockConnectors(dock, edges, elOf, active, chain);   // 연결선은 체인 전체를 hot 으로 — 흐름 가독성 유지
   };
   for (const [nid, el] of elOf) {
     el.addEventListener('mouseenter', () => { hoverId = nid; applyDockHover(); });
     el.addEventListener('mouseleave', () => { hoverId = null; applyDockHover(); });
     el.addEventListener('click', () => { pinnedId = pinnedId === nid ? null : nid; hoverId = null; applyDockHover(); });
   }
-  dockDraw = () => drawDockConnectors(dock, edges, elOf, hoverId || pinnedId);
-  requestAnimationFrame(dockDraw);
+  dockDraw = () => { const active = hoverId || pinnedId; drawDockConnectors(dock, edges, elOf, active, chainOf(active)); };
+  requestAnimationFrame(applyDockHover);
+
+  // 노드를 눌러 프로세스 흐름을 열면 선택한(기준) 노드가 보이도록 독을 스크롤하고 살짝 바운스시킨다.
+  const rootCard = elOf.get(base);
+  if (rootCard) requestAnimationFrame(() => {
+    rootCard.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    rootCard.classList.remove('dock-bounce');
+    void rootCard.offsetWidth;            // 리플로우 — 같은 노드 재선택 시에도 애니메이션 재시작
+    rootCard.classList.add('dock-bounce');
+  });
 }
 
 // ---- 패널 크기 조절 (하단 독 높이 / 상세 패널 너비) ----
@@ -1602,6 +1642,8 @@ function superId(id) {
   if (n) {
     // 배치는 진입점 — 서비스(project) 단위로 묶어 진입/화면 컬럼에 '{service}-batch' 카드로 배치한다.
     if (n.layer === 'BATCH') return 'batch:' + (n.project || n.fqcn || id);
+    // 외부호출이 yml host 매칭으로 다른 백엔드 서비스(s2sService)로 해석되면 그 서비스로 귀속 → server-to-server.
+    if (isExtCallNode(id, n) && n.s2sService && (META.projects || []).includes(n.s2sService)) return 'svc:' + n.s2sService;
     // 외부 API 호출 노드는 기본적으로 공유 '외부 API' 로 묶는다 (project 태그 무시).
     //   같은 외부 URL 을 여러 프론트가 호출하면 id 충돌로 한 프론트 소속이 되어 화면↔화면 가짜 연결이 생기기 때문.
     //   (단, buildServiceGraph 가 join 엣지의 ext source 만 예외로 그 프론트 svc 에 귀속시켜 front→backend 흐름은 유지)
@@ -1626,7 +1668,10 @@ function buildServiceGraph() {
       if (sn && sn.project && isExtCallNode(e.source, sn)) ss = 'svc:' + sn.project;
     }
     if (ss === st) continue;
-    const kc = e.kind === 's2s' ? 's2s' : e.kind === 'join' ? 'join' : kindClass(e);
+    // 외부호출이 s2sService 로 해석돼 백엔드 서비스로 귀속된 경우(svc:… 타깃) server-to-server 로 표기.
+    const tn = nodeById.get(e.target);
+    const extResolved = e.kind === 'external' && tn && tn.s2sService && st.startsWith('svc:');
+    const kc = e.kind === 's2s' || extResolved ? 's2s' : e.kind === 'join' ? 'join' : kindClass(e);
     const key = ss + '|' + st + '|' + kc;
     let a = agg.get(key);
     if (!a) { a = { source: ss, target: st, kc, count: 0, async: false }; agg.set(key, a); }
@@ -1765,7 +1810,7 @@ function renderOverview() {
     head.className = 'column-head';
     head.textContent = lv === 0 ? head0 : (HEAD[lv] || `의존 ${lv}`);
     col.appendChild(head);
-    for (const s of inLevel) col.appendChild(makeServiceCard(s, stats[s]));
+    for (const s of inLevel) { const mods = decomposeModulesOf(s); col.appendChild(mods ? makeServiceGroupCard(s, mods) : makeServiceCard(s, stats[s])); }
     if (withBatch) for (const b of batchList) col.appendChild(makeBatchCard(b));
     if (withExternal) col.appendChild(makeInfraTypeCard('external', (infraMembers['external'] || new Set()).size));
     colsEl.appendChild(col);
@@ -2104,6 +2149,59 @@ function makeServiceCard(svc, st, onClick) {
   card.addEventListener('mouseleave', () => clearAlign());
   cardEls.set('svc:' + svc, card);
   return card;
+}
+
+// wallga 모노레포 sub-project 판별: manifest 의 repo(=gitRepo 모노레포명)가 있고 프로젝트명과 다르면
+//   해당 프로젝트는 모노레포(예: tera-terafi)의 sub-project → 분해 대상. (standalone 은 repo===name 또는 null)
+function monorepoOf(svc) {
+  const p = (MANIFEST?.projects || []).find(x => x.name === svc);
+  return p && p.repo && p.repo !== svc ? p.repo : null;
+}
+// wallga 모노레포 sub-project 를 Gradle 모듈 단위로 분해. 모듈(=node.module, src 제외) 2개 이상일 때만.
+//   모듈 없는(src/null) 노드는 '(기타)' 카드로 모은다. 분해 대상 아니면 null.
+function decomposeModulesOf(svc) {
+  if (isFrontendProject(svc) || !monorepoOf(svc)) return null;
+  const byMod = new Map();
+  const other = { module: svc + ' (기타)', eps: 0, nodes: 0, other: true };
+  for (const n of NODES) {
+    if (n.project !== svc) continue;
+    const m = (n.module && n.module !== 'src') ? n.module : null;
+    const t = m ? (byMod.get(m) || byMod.set(m, { module: m, eps: 0, nodes: 0 }).get(m)) : other;
+    t.nodes++;
+    if (n.layer === 'CONTROLLER' && n.endpoint) t.eps++;
+  }
+  if (byMod.size < 2) return null;
+  const mods = [...byMod.values()].sort((a, b) => b.nodes - a.nodes);
+  if (other.nodes) mods.push(other);
+  return mods;
+}
+
+// 분해 대상 프로젝트: 모듈 카드들을 래퍼(=svc:<project>, 엣지 앵커)로 묶어 한 티어 슬롯에 배치.
+//   래퍼만 cardEls 에 등록 → 기존 서비스 엣지/하이라이트/정리(dim·orphan)가 그대로 동작.
+function makeServiceGroupCard(svc, mods) {
+  const wrap = document.createElement('div');
+  wrap.className = 'ov-svc-group' + (('svc:' + svc) === state.sel ? ' sel' : '');
+  wrap.dataset.node = 'svc:' + svc;
+  const hue = serviceHue(svc);
+  wrap.style.setProperty('--svc-hue', hue);
+  const head = document.createElement('div');
+  head.className = 'ovg-head';
+  head.innerHTML = `<span class="ov-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${esc(svc)}`
+    + `<span class="ovg-tag">${monorepoOf(svc) ? esc(monorepoOf(svc)) + ' · ' : ''}${mods.length}모듈</span>`;
+  wrap.appendChild(head);
+  for (const md of mods) {
+    const c = document.createElement('div');
+    c.className = 'node-card ov-svc ovg-modcard' + (md.other ? ' other' : '');
+    c.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
+    c.innerHTML = `<div class="ov-svc-name">${esc(md.module)}</div>`
+      + `<div class="ov-svc-sub">${md.eps} endpoints · ${md.nodes} nodes</div>`;
+    c.addEventListener('click', () => setService(svc));
+    c.addEventListener('mouseenter', () => alignNeighbors('svc:' + svc));
+    c.addEventListener('mouseleave', () => clearAlign());
+    wrap.appendChild(c);
+  }
+  cardEls.set('svc:' + svc, wrap);
+  return wrap;
 }
 
 // 서비스 보기 단계 컬럼: 외부/인프라 버킷을 전체보기처럼 단일 카드로 축약 (id = 버킷 key, 엣지 타깃과 일치)
@@ -3095,7 +3193,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '48';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '49';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }

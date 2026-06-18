@@ -665,18 +665,8 @@
       return;
     }
 
-    // 컬럼 전개 — 왼쪽 = 피호출(영향 범위), 가운데 = 변경 노드, 오른쪽 = 호출(다운스트림 체인)
-    const byLevel = new Map();
-    level.forEach((lv, id) => {
-      if (!byLevel.has(lv)) byLevel.set(lv, []);
-      byLevel.get(lv).push(id);
-    });
-    const lvs = [...byLevel.keys()];
-    const minLv = Math.min(...lvs);
-    const maxLv = Math.max(...lvs);
-
     const gwrap = el('div', 'imp-gwrap');
-    const graph = el('div', 'imp-graph');
+    const graph = el('div', 'imp-graph imp-graph-svc');
     gwrap.appendChild(graph);
     main.appendChild(gwrap);
     let scrollRaf = 0;
@@ -698,55 +688,88 @@
       if (FM.state.sel != null) setSelection(null);
     });
 
-    for (let lv = minLv; lv <= maxLv; lv++) {
-      const ids = byLevel.get(lv);
-      if (!ids || !ids.length) continue;
-      const headLabel = lv === 0 ? `◆ 변경·영향 ${nounOf(ids)} (${ids.length})`
-        : lv < 0 ? `유입 ${-lv}단계`
-        : `유출 ${lv}단계`;
-      const col = el('div', 'column' + (lv === 0 ? ' imp-base' : ''));
-      col.appendChild(FM.mkHead(headLabel));
+    // 카드 장식 — 변경(◆)/영향(◇)/경계 단계 배지를 레벨·레이어로 부여 (서비스 박스 안에서도 동일)
+    const decorateCard = (card, id, lv) => {
+      const node = FM.nodeById.get(id);
+      const layer = node && node.layer;
+      const shas = changedSha.get(id);
+      if (lv === 0 && shas) {            // 직접 변경된 경계 노드(엔드포인트/화면 등)
+        card.classList.add('imp-changed');
+        card.prepend(el('div', 'imp-flag',
+          `◆ ${FM.esc(shas[0])}${shas.length > 1 ? ` +${shas.length - 1}` : ''}`));
+      } else if (lv === 0) {             // 변경이 롤업된 영향 대상(화면/엔드포인트)
+        card.classList.add('imp-endpoint');
+        card.prepend(el('div', 'imp-flag ' + (isScreenId(id) ? 'screen' : 'ep'), '◇ 영향 ' + targetNoun(id)));
+      } else if (layer === 'SCREEN') {
+        card.classList.add('imp-endpoint');   // 화면 뱃지는 makeCard 가 표시 (전체보기와 동일)
+      } else if (layer === 'CONTROLLER') {
+        card.classList.add('imp-endpoint');
+        card.prepend(el('div', 'imp-flag ep', lv < 0 ? '↘ 유입 엔드포인트' : '↗ s2s 엔드포인트'));
+      } else if (layer === 'EXTERNAL') {
+        card.classList.add('imp-path');
+        card.prepend(el('div', 'imp-flag ext', '🌐 외부 API'));
+      } else if (layer === 'RESOURCE') {
+        card.classList.add('imp-path');
+        const rt = node && node.resourceType;
+        const resFlag = rt === 'kafka-topic' ? '📨 Kafka'
+          : rt === 'redis' ? '🧱 Redis'
+          : rt === 'db-table' ? '🗄️ DB' : '🗄️ 인프라';
+        card.prepend(el('div', 'imp-flag res', resFlag));
+      } else {
+        card.classList.add('imp-path');
+      }
+      // 유출/유입 단계에 떠오른 노드가 실제로 변경된 노드면(수정된 외부 클라이언트 등) ◆ 로 표시
+      if (lv !== 0 && shas) {
+        card.classList.add('imp-changed');
+        card.prepend(el('div', 'imp-flag',
+          `◆ ${FM.esc(shas[0])}${shas.length > 1 ? ` +${shas.length - 1}` : ''}`));
+      }
+      if (id === ep) card.classList.add('imp-ep-target');
+    };
+
+    // 서비스(영역) 단위 재배치 — 노드를 소속 서비스 박스로 묶는다. 레벨은 박스 정렬(왼쪽=유입원,
+    // 오른쪽=유출처)과 박스 안 카드 정렬에만 쓴다. 박스 헤더 칩은 커밋 레일과 동일한 색(projectHue).
+    const areaOf = (id) => {
+      const n = FM.nodeById.get(id);
+      if (n && n.project) return n.project;
+      if (n && n.layer === 'EXTERNAL') return '외부 API';
+      if (n && n.layer === 'RESOURCE') return '인프라';
+      return '(기타)';
+    };
+    const byArea = new Map();        // area → [id…]
+    const areaLevel = new Map();     // area → 최소 레벨(박스 정렬용)
+    level.forEach((lv, id) => {
+      const a = areaOf(id);
+      if (!byArea.has(a)) byArea.set(a, []);
+      byArea.get(a).push(id);
+      if (!areaLevel.has(a) || lv < areaLevel.get(a)) areaLevel.set(a, lv);
+    });
+    const areas = [...byArea.keys()].sort((x, y) =>
+      (areaLevel.get(x) - areaLevel.get(y)) || x.localeCompare(y));
+
+    areas.forEach(area => {
+      // 박스 안에서는 유입(음수) → 변경·영향(0) → 유출(양수) 순으로 카드 정렬
+      const ids = byArea.get(area).slice().sort((a, b) =>
+        (level.get(a) - level.get(b)) ||
+        String(FM.nodeById.get(a) && FM.nodeById.get(a).method || a)
+          .localeCompare(FM.nodeById.get(b) && FM.nodeById.get(b).method || b));
+      const hasChanged = ids.some(id => changedSha.has(id));
+      const box = el('div', 'imp-svc-box' + (hasChanged ? ' has-changed' : ''));
+      const h = projectHue(area);
+      const head = el('div', 'imp-svc-head',
+        `<span class="imp-proj" style="color:hsl(${h} 55% 38%);border-color:hsl(${h} 50% 55% / .45);` +
+          `background:hsl(${h} 70% 55% / .12)" title="${FM.escAttr(area)}">${FM.esc(area)}</span>` +
+        `<span class="imp-svc-count">${ids.length}</span>`);
+      box.appendChild(head);
+      const body = el('div', 'imp-svc-body');
       ids.forEach(id => {
-        const card = FM.makeCard(id, { noCenter: true, onPick: setSelection, showProject: true });
-        const node = FM.nodeById.get(id);
-        const layer = node && node.layer;
-        const shas = changedSha.get(id);
-        if (lv === 0 && shas) {            // 직접 변경된 경계 노드(엔드포인트/화면 등)
-          card.classList.add('imp-changed');
-          card.prepend(el('div', 'imp-flag',
-            `◆ ${FM.esc(shas[0])}${shas.length > 1 ? ` +${shas.length - 1}` : ''}`));
-        } else if (lv === 0) {             // 변경이 롤업된 영향 대상(화면/엔드포인트)
-          card.classList.add('imp-endpoint');
-          card.prepend(el('div', 'imp-flag ' + (isScreenId(id) ? 'screen' : 'ep'), '◇ 영향 ' + targetNoun(id)));
-        } else if (layer === 'SCREEN') {
-          card.classList.add('imp-endpoint');   // 화면 뱃지는 makeCard 가 표시 (전체보기와 동일)
-        } else if (layer === 'CONTROLLER') {
-          card.classList.add('imp-endpoint');
-          card.prepend(el('div', 'imp-flag ep', '↗ s2s 엔드포인트'));
-        } else if (layer === 'EXTERNAL') {
-          card.classList.add('imp-path');
-          card.prepend(el('div', 'imp-flag ext', '🌐 외부 API'));
-        } else if (layer === 'RESOURCE') {
-          card.classList.add('imp-path');
-          const rt = node && node.resourceType;
-          const resFlag = rt === 'kafka-topic' ? '📨 Kafka'
-            : rt === 'redis' ? '🧱 Redis'
-            : rt === 'db-table' ? '🗄️ DB' : '🗄️ 인프라';
-          card.prepend(el('div', 'imp-flag res', resFlag));
-        } else {
-          card.classList.add('imp-path');
-        }
-        // 유출 단계에 떠오른 노드가 실제로 변경된 노드면(수정된 외부 클라이언트 등) ◆ 로 표시
-        if (lv !== 0 && shas) {
-          card.classList.add('imp-changed');
-          card.prepend(el('div', 'imp-flag',
-            `◆ ${FM.esc(shas[0])}${shas.length > 1 ? ` +${shas.length - 1}` : ''}`));
-        }
-        if (id === ep) card.classList.add('imp-ep-target');
-        col.appendChild(card);
+        const card = FM.makeCard(id, { noCenter: true, onPick: setSelection });
+        decorateCard(card, id, level.get(id));
+        body.appendChild(card);
       });
-      graph.appendChild(col);
-    }
+      box.appendChild(body);
+      graph.appendChild(box);
+    });
 
     FM.setCanvasEdges(edges);
 
