@@ -5,8 +5,8 @@
   const FM = window.Flowmap;
   const DATA_URL = 'data/impact.json';
   const MAX_NODES = 200;   // 노드 폭증 가드 (기존 200호출 상한과 동일 정책)
-  const MAX_UP = 3;        // 유입(피호출) 경계 투영 최대 hop — 변경 노드에 닿는 화면/서비스/엔드포인트
-  const MAX_DOWN = 3;      // 유출(호출) 경계 투영 최대 hop — 변경 노드가 호출하는 외부/다른 서비스
+  const MAX_HOP = 3;       // 경계 투영 최대 표시 단계 (1/2/3차 버튼 상한)
+  let hopDepth = 1;        // 현재 표시 단계 — 기본 1차(직접 변경 엔드포인트 + 1차 연결 포인트만)
 
   // 커밋 링크 — impact.json이 커밋마다 제공하는 commitUrl(저장소의 해당 커밋 페이지)을 그대로 쓴다.
   // 없으면 top-level repoUrl + '/commit/<sha>' 로 폴백, 그것도 없으면 링크 버튼을 숨긴다.
@@ -548,6 +548,13 @@
 
   function renderGraph(main, selected, ep, opts) {
     opts = opts || {};
+    const prevSel = FM.state.sel;          // 단계 변경(재렌더) 시 선택 노드 유지용
+    main.innerHTML = '';                    // 재호출(단계 전환) 시 이전 내용 비우고 다시 그림
+    // 단계(1/2/3차) 버튼이 누르면 같은 컨테이너에 hopDepth 만 바꿔 다시 그린다.
+    const rerender = () => {
+      renderGraph(main, selected, ep, Object.assign({}, opts, { _keepSel: true }));
+      requestAnimationFrame(() => { FM.drawConnectors(); FM.applyHighlight(); });
+    };
     // 선택 커밋 합집합 수집
     const changedSha = new Map();   // nodeId -> [shortSha…]  (inGraph만)
     const outOfGraph = [];          // {id, sha}
@@ -643,11 +650,11 @@
       }
     };
 
-    expand(bases, FM.outEdges, 1, MAX_DOWN);   // 유출: 변경·영향 엔드포인트가 호출하는 외부 API/다른 서비스/kafka
+    expand(bases, FM.outEdges, 1, hopDepth);   // 유출: 변경·영향 엔드포인트가 호출하는 외부 API/다른 서비스/kafka (현재 표시 단계까지)
     // 유입(피호출)은 "직접 수정된 노드"에만 연결한다 — 롤업 영향·유출(호출) 노드의 피호출은 클러터라 제외.
     // (직접 수정된 경계 노드가 하나도 없으면(순수 롤업 변경) 빈 유입 대신 전체 기준으로 폴백)
     const inboundSeeds = bases.filter(id => changedSha.has(id));
-    expand(inboundSeeds.length ? inboundSeeds : bases, FM.inEdges, -1, MAX_UP);   // 유입: 직접 수정 노드에 닿는 화면/s2s 호출원
+    expand(inboundSeeds.length ? inboundSeeds : bases, FM.inEdges, -1, hopDepth);   // 유입: 직접 수정 노드에 닿는 화면/s2s 호출원 (현재 표시 단계까지)
 
     // 상단 분석 바
     main.appendChild(buildBar(selected, changedSha, epIds, truncated, outOfGraph, opts.embedded));
@@ -667,6 +674,9 @@
       }
       return;
     }
+
+    // 표시 단계(1/2/3차) 컨트롤 — 그래프가 있을 때만
+    main.appendChild(buildDepthCtl(rerender));
 
     const gwrap = el('div', 'imp-gwrap');
     const graph = el('div', 'imp-graph imp-graph-svc');
@@ -730,6 +740,45 @@
       if (id === ep) card.classList.add('imp-ep-target');
     };
 
+    // 엔드포인트 아래로 매달릴 "수정된 서비스/컴포넌트" 자식 — 엔드포인트에서 내부(비경계) 노드만 타고
+    // 내려가며 닿는 변경 노드(changedSha)들. 다른 서비스/외부/인프라 경계는 넘지 않는다.
+    const childChangedOf = (endpointId) => {
+      const out = [];
+      const seen = new Set([endpointId]);
+      const stack = [endpointId];
+      while (stack.length) {
+        const cur = stack.pop();
+        for (const e of (FM.outEdges.get(cur) || [])) {
+          const t = e.target;
+          if (seen.has(t) || !FM.nodeById.has(t)) continue;
+          seen.add(t);
+          if (isBoundary(t)) continue;            // 경계(다른 엔드포인트/외부/인프라)는 자식에 안 넣고 멈춤
+          if (changedSha.has(t)) out.push(t);
+          stack.push(t);                          // 내부 노드는 계속 따라 내려감
+        }
+      }
+      return out;
+    };
+    const KID_MAX = 8;
+    const appendChangedChildren = (card, endpointId) => {
+      const kids = childChangedOf(endpointId);
+      if (!kids.length) return;
+      const wrap = el('div', 'imp-kids');
+      kids.slice(0, KID_MAX).forEach(kid => {
+        const kn = FM.nodeById.get(kid);
+        const row = el('div', 'imp-kid',
+          `<span class="imp-kid-layer">${FM.esc(kn.layer || 'CODE')}</span>` +
+          `<span class="imp-kid-name">${FM.esc(kn.method || kid)}</span>` +
+          `<span class="imp-kid-tag">수정</span>`);
+        row.title = [kn.fqcn, kn.file ? kn.file + (kn.line ? ':' + kn.line : '') : null, kn.description]
+          .filter(Boolean).join('\n');
+        row.addEventListener('click', e => { e.stopPropagation(); if (FM.nodeById.has(kid)) FM.setSel(kid); });
+        wrap.appendChild(row);
+      });
+      if (kids.length > KID_MAX) wrap.appendChild(el('div', 'imp-kid more', `+${kids.length - KID_MAX} 수정`));
+      card.appendChild(wrap);
+    };
+
     // 서비스(영역) 단위 재배치 — 노드를 소속 서비스 박스로 묶는다. 레벨은 박스 정렬(왼쪽=유입원,
     // 오른쪽=유출처)과 박스 안 카드 정렬에만 쓴다. 박스 헤더 칩은 커밋 레일과 동일한 색(projectHue).
     const areaOf = (id) => {
@@ -768,6 +817,7 @@
       ids.forEach(id => {
         const card = FM.makeCard(id, { noCenter: true, onPick: setSelection });
         decorateCard(card, id, level.get(id));
+        if (level.get(id) === 0) appendChangedChildren(card, id);   // 영향 엔드포인트에 수정 서비스/컴포넌트를 자식으로
         body.appendChild(card);
       });
       box.appendChild(body);
@@ -777,15 +827,30 @@
     FM.setCanvasEdges(edges);
 
     // 커밋 (재)선택 시엔 닫힌 상태로 시작 — ep 딥링크일 때만 해당 엔드포인트를 자동 선택해 연다.
+    // 단계(1/2/3차) 전환으로 다시 그릴 땐(_keepSel) 직전 선택을 유지(그 노드가 여전히 보이면).
     if (ep && level.has(ep)) {
       setSelection(ep);
       requestAnimationFrame(() => {
         const card = FM.cardEls && FM.cardEls.get && FM.cardEls.get(ep);
         if (card && card.scrollIntoView) card.scrollIntoView({ block: 'center', inline: 'nearest' });
       });
+    } else if (opts._keepSel && prevSel && level.has(prevSel)) {
+      setSelection(prevSel);
     } else {
       setSelection(null);
     }
+  }
+
+  // 표시 단계(1/2/3차) 선택 컨트롤 — 누르면 hopDepth 를 바꿔 그래프를 다시 그린다.
+  function buildDepthCtl(rerender) {
+    const box = el('div', 'imp-depthctl', '<span class="imp-depthctl-label">표시 단계</span>');
+    for (let d = 1; d <= MAX_HOP; d++) {
+      const btn = el('button', 'imp-depthbtn' + (d === hopDepth ? ' on' : ''), d + '차');
+      btn.title = `직접 변경 노드 기준 ${d}차 연결까지 표시`;
+      btn.onclick = () => { if (hopDepth !== d) { hopDepth = d; rerender(); } };
+      box.appendChild(btn);
+    }
+    return box;
   }
 
   // embedded=true 면 배포 영향도 하단 임베드용 — 커밋 영향도 URL 을 바꾸는 컨트롤(칩 ✕ · 전체 해제)을 숨긴다.

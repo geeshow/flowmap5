@@ -365,6 +365,35 @@
 .imp-svc-body { display: flex; flex-direction: column; gap: 12px; }
 .imp-svc-box .node-card { width: 100%; }
 
+/* ───────── 표시 단계(1/2/3차) 컨트롤 ───────── */
+.imp-depthctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0 10px; }
+.imp-depthctl-label { font-size: 11px; color: var(--text-dim); margin-right: 2px; }
+.imp-depthbtn {
+  font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 14px;
+  border: 1px solid var(--border); background: var(--bg-input); color: var(--text-dim); cursor: pointer;
+}
+.imp-depthbtn:hover { border-color: var(--imp-changed); color: var(--text); }
+.imp-depthbtn.on { background: var(--imp-changed); border-color: var(--imp-changed); color: #fff; }
+
+/* ───────── 영향 엔드포인트의 자식: 수정된 서비스/컴포넌트 ───────── */
+.imp-kids {
+  margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.imp-kid {
+  position: relative; display: flex; align-items: center; gap: 6px;
+  font-size: 11px; padding: 3px 6px 3px 16px; cursor: pointer;
+  border-left: 2px solid var(--imp-changed); border-radius: 0 6px 6px 0;
+  background: var(--imp-tint);
+}
+.imp-kid::before { content: '└'; position: absolute; left: 4px; font-size: 10px; color: var(--text-dim); }
+.imp-kid:hover { background: rgba(249,115,22,.16); }
+.imp-kid-layer { flex: none; font-size: 9px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--text-dim); }
+.imp-kid-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 600; }
+.imp-kid-tag { margin-left: auto; flex: none; font-size: 9px; font-weight: 700; color: var(--imp-changed); border: 1px solid var(--imp-changed); border-radius: 4px; padding: 0 4px; }
+.imp-kid.more { cursor: default; border-left-style: dotted; color: var(--text-dim); font-size: 10px; }
+.imp-kid.more::before { content: ''; }
+
 /* 변경 노드 ◆ — 2px 주황 실선 링 */
 .node-card.imp-changed {
   box-shadow: 0 0 0 2px var(--imp-changed), 0 4px 12px rgba(0,0,0,.5);
