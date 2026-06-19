@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# [04] backend: OpenAPI per project + repo-wide _openapi.json.
+# DISABLED: `.disabled` 확장자라 run-all.sh 의 `[0-9][0-9]-*.sh` 글롭에서 제외됨(전체 실행·명시적 `4` 모두 미실행).
+#   다시 켜려면 파일명을 `04-backend-openapi.sh` 로 되돌릴 것.
+. "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+step "$SK/scripts/04-openapi.sh" "[04] backend openapi"
