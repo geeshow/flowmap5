@@ -841,8 +841,8 @@ function dockCardEl(id, rootId) {
 }
 
 // 독 내부 SVG 연결선 — kind 색/화살표/sync·async 구분/relation 라벨
-//   active: 강조 기준 노드(있으면 비활성 엣지 dim) · chain: active 가 속한 연결 체인 전체(이 안의 엣지를 hot)
-function drawDockConnectors(dock, edges, elOf, active, chain) {
+//   bright: 강조(밝게 표시)된 노드 집합. 이 집합에 한쪽이라도 닿는 엣지만 선명(hot), 나머지는 흐리게(dim).
+function drawDockConnectors(dock, edges, elOf, bright) {
   const wrap = dock.querySelector('.dock-flow');
   const svg = dock.querySelector('.dock-svg');
   if (!wrap || !svg || !wrap.offsetParent) return;
@@ -864,8 +864,9 @@ function drawDockConnectors(dock, edges, elOf, active, chain) {
     const dx = Math.max(24, Math.abs(x2 - x1) * 0.45);
     const kc = kindClass(e); used.add(kc);
     const isAsync = e.mode === 'async';
-    // 연결 체인 전체를 강조: 체인 안의 엣지(양 끝 노드 모두 체인 소속)는 hot, 나머지는 dim
-    const stateCls = active ? ((chain && chain.has(e.source) && chain.has(e.target)) ? ' hot' : ' dim') : '';
+    // 강조된 노드에 닿는 엣지만 선명(hot), 나머지는 흐리게(dim). 강조 노드가 없으면 평상(흐림) 상태.
+    const hl = bright && bright.size > 0;
+    const stateCls = hl ? ((bright.has(e.source) || bright.has(e.target)) ? ' hot' : ' dim') : '';
     paths += `<path class="edge-path k-${kc}${isAsync ? ' async' : ''}${stateCls}" `
       + `d="M${x1.toFixed(1)},${y1.toFixed(1)} C${(x1 + (fwd ? dx : -dx)).toFixed(1)},${y1.toFixed(1)} ${(x2 - (fwd ? dx : -dx)).toFixed(1)},${y2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" `
       + `marker-end="url(#dk-${kc})"/>`;
@@ -1022,26 +1023,35 @@ function renderProcessDock() {
     if (!nn) return false;
     return nn.layer === 'CONTROLLER' || nn.layer === 'SCREEN' || nn.layer === 'EXTERNAL' || isInfra(id, nn);
   };
+  // 기능 뷰: 기준(선택) 노드 + 이 커밋/PR 에서 수정된 노드는 hover 와 무관하게 항상 강조.
+  const alwaysBright = new Set();
+  if (dockFeature) {
+    if (elOf.has(base)) alwaysBright.add(base);
+    for (const id of dockChangedNodes) if (elOf.has(id)) alwaysBright.add(id);
+  }
+  // 강조(밝게) 집합 = 항상강조(기준·수정) ∪ active 가 속한 체인의 경계 노드. 중간 plumbing 단계는 제외(흐림).
+  const brightOf = (active) => {
+    const bright = new Set(alwaysBright);
+    if (active) { bright.add(active); for (const id of chainOf(active)) if (isBoundaryNode(id)) bright.add(id); }
+    return bright;
+  };
   let hoverId = null, pinnedId = (!svcMode && elOf.has(base)) ? base : null;
   const applyDockHover = () => {
-    const active = hoverId || pinnedId;
-    const chain = chainOf(active);
-    // 강조(밝게) = 기준 노드 + 체인 안의 경계 노드. 중간 단계는 체인에 속해도 투명 처리.
-    const bright = new Set();
-    if (active) { bright.add(active); for (const id of chain) if (isBoundaryNode(id)) bright.add(id); }
+    const bright = brightOf(hoverId || pinnedId);
+    const hl = bright.size > 0;
     for (const [nid, el] of elOf) {
-      el.classList.toggle('dim', !!active && !bright.has(nid));
+      el.classList.toggle('dim', hl && !bright.has(nid));
       el.classList.toggle('pinned', nid === pinnedId);
     }
-    dock.querySelector('.dock-svg').classList.toggle('overlay', !!active);
-    drawDockConnectors(dock, edges, elOf, active, chain);   // 연결선은 체인 전체를 hot 으로 — 흐름 가독성 유지
+    dock.querySelector('.dock-svg').classList.toggle('overlay', hl);
+    drawDockConnectors(dock, edges, elOf, bright);   // 강조 노드에 닿는 엣지만 선명(hot), 나머지 dim
   };
   for (const [nid, el] of elOf) {
     el.addEventListener('mouseenter', () => { hoverId = nid; applyDockHover(); });
     el.addEventListener('mouseleave', () => { hoverId = null; applyDockHover(); });
     el.addEventListener('click', () => { pinnedId = pinnedId === nid ? null : nid; hoverId = null; applyDockHover(); });
   }
-  dockDraw = () => { const active = hoverId || pinnedId; drawDockConnectors(dock, edges, elOf, active, chainOf(active)); };
+  dockDraw = () => drawDockConnectors(dock, edges, elOf, brightOf(hoverId || pinnedId));
   requestAnimationFrame(applyDockHover);
 
   // 노드를 눌러 프로세스 흐름을 열면 선택한(기준) 노드가 보이도록 독을 스크롤하고 살짝 바운스시킨다.
@@ -3216,7 +3226,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '54';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '56';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }

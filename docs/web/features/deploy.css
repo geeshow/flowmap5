@@ -103,6 +103,23 @@
 
 /* ── 우측 메인 (풀폭) ── */
 .dep-main { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 16px 22px 30px; position: relative; }
+
+/* 임베드 영향 그래프의 가로 스크롤바를 메인 패널 하단에 항상 고정(sticky proxy). 그래프
+   자체 가로 스크롤바는 숨기고(아래) 이 바 하나로만 좌우 이동한다 → 세로 위치 무관 항상 노출. */
+.dep-impact .imp-gwrap { scrollbar-width: none; }
+.dep-impact .imp-gwrap::-webkit-scrollbar { height: 0; width: 0; display: none; }
+.dep-hbar {
+  position: sticky; bottom: 0; z-index: 6;
+  overflow-x: auto; overflow-y: hidden;
+  height: 0; margin-top: -14px;            /* 평소엔 레이아웃 영향 0, show 시 14px 만큼 위로 띄워 콘텐츠 위 오버레이 */
+}
+.dep-hbar.show {
+  height: 14px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 14px rgba(0,0,0,.16);
+}
+.dep-hbar-in { height: 1px; }
 .dep-main-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70%; color: var(--text-dim); gap: 8px; }
 .dme-ico { font-size: 34px; opacity: .5; }
 .dme-msg { font-size: 13px; }

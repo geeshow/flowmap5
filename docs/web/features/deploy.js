@@ -285,6 +285,7 @@
       if (scrollRaf) return;
       scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; FM.drawConnectors(); });
     });
+    attachStickyHScroll(main);
     rail.innerHTML = '<div class="dep-loading">불러오는 중…</div>';
     main.innerHTML = '';
     loadYear(curYear()).then((byDate) => {
@@ -567,6 +568,43 @@
       }).catch(() => { host.innerHTML = '<div class="dep-hint">커밋 영향도 모듈 로드 실패.</div>'; });
   }
 
+  // 임베드 영향 그래프(.imp-gwrap)의 가로 스크롤바를 dep-main 하단에 sticky 로 고정한다.
+  // 그래프 블록이 길어 세로로 한참 내려야 닿던 가로 스크롤을, 세로 위치와 무관하게 패널
+  // 하단에서 항상 잡게 만든다. .imp-gwrap 의 자체 scroll 핸들러가 커넥터를 다시 그리므로
+  // 여기서는 scrollLeft 만 양방향 동기화한다(폭 차이는 비율 매핑으로 보정).
+  function attachStickyHScroll(main) {
+    const bar = el('div', 'dep-hbar');
+    const spacer = el('div', 'dep-hbar-in');
+    bar.appendChild(spacer); main.appendChild(bar);
+    let lock = false, raf = 0;
+    const gwrap = () => main.querySelector('.dep-impact .imp-gwrap');
+    function sync() {
+      const g = gwrap();
+      if (!g || g.scrollWidth - g.clientWidth < 2) { bar.classList.remove('show'); return; }
+      bar.classList.add('show');
+      spacer.style.width = g.scrollWidth + 'px';
+      if (lock) return;
+      lock = true;
+      const bMax = bar.scrollWidth - bar.clientWidth, gMax = g.scrollWidth - g.clientWidth;
+      bar.scrollLeft = bMax > 0 ? (g.scrollLeft / gMax) * bMax : 0;
+      lock = false;
+    }
+    bar.addEventListener('scroll', () => {
+      if (lock) return; const g = gwrap(); if (!g) return;
+      lock = true;
+      const bMax = bar.scrollWidth - bar.clientWidth, gMax = g.scrollWidth - g.clientWidth;
+      g.scrollLeft = bMax > 0 ? (bar.scrollLeft / bMax) * gMax : 0;  // gwrap 자체 핸들러가 커넥터 재계산
+      lock = false;
+    });
+    // .imp-gwrap 의 휠/트랙패드 가로 스크롤(scroll 은 버블 안 하므로 캡처로 잡음) → 바 위치 반영
+    main.addEventListener('scroll', () => {
+      if (raf) return; raf = requestAnimationFrame(() => { raf = 0; sync(); });
+    }, true);
+    new ResizeObserver(() => sync()).observe(main);
+    new MutationObserver(() => sync()).observe(main, { childList: true, subtree: true });
+    sync();
+  }
+
   function prCard(p, ctx) {
     const on = ctx && String(p.number) === String(ctx.sel);
     const merged = !!p.merged_at;   // 머지 시각이 없으면 아직 머지되지 않은 PR
@@ -585,19 +623,21 @@
     return card;
   }
 
-  // 배포 서비스(touched)에서 s2s/join 으로 hops 단계까지 양방향 확장한 서비스 집합
+  // 배포 서비스(touched)에서 "영향받는 쪽"(업스트림=호출측)으로만 hops 단계까지 확장한 서비스 집합.
+  //   엣지 source→target = source 가 target 을 호출/의존. touched 가 바뀌면 그것을 호출하는 source 가
+  //   영향받으므로, 영향은 target→source(역방향)로 전파된다. 그래서 callee→callers(역인접)만 따라간다.
+  //   (양방향 확장은 무관한 다운스트림 의존까지 끌어와 서비스가 과다 출력되던 원인 → 영향 방향으로 한정)
   function expandSvcHops(touched, allEdges, hops) {
-    const adj = new Map();
+    const radj = new Map();   // callee(target) → 그를 호출하는 서비스들(sources)
     for (const e of allEdges) {
-      if (!adj.has(e.sp)) adj.set(e.sp, new Set());
-      if (!adj.has(e.tp)) adj.set(e.tp, new Set());
-      adj.get(e.sp).add(e.tp); adj.get(e.tp).add(e.sp);   // 양방향(호출/피호출)
+      if (!radj.has(e.tp)) radj.set(e.tp, new Set());
+      radj.get(e.tp).add(e.sp);
     }
     const display = new Set(touched);
     let frontier = [...touched];
     for (let h = 0; h < hops && frontier.length; h++) {
       const next = [];
-      for (const s of frontier) for (const nb of (adj.get(s) || [])) if (!display.has(nb)) { display.add(nb); next.push(nb); }
+      for (const s of frontier) for (const nb of (radj.get(s) || [])) if (!display.has(nb)) { display.add(nb); next.push(nb); }
       frontier = next;
     }
     return display;
@@ -608,7 +648,7 @@
     const box = el('div', 'dep-depthctl', '<span class="dep-depthctl-label">표시 단계</span>');
     for (let d = 1; d <= 3; d++) {
       const btn = el('button', 'dep-depthbtn' + (d === svcHop ? ' on' : ''), d + '차');
-      btn.title = `배포 서비스 기준 ${d}차 연관 서비스까지 표시`;
+      btn.title = `배포 서비스를 호출/의존하는 ${d}차 영향 서비스까지 표시`;
       btn.onclick = () => { if (svcHop !== d) { svcHop = d; renderServiceGraph(wrap, touched); } };
       box.appendChild(btn);
     }
@@ -626,7 +666,7 @@
     const grid = el('div', 'dep-svc-nodes');
     for (const svc of [...display].sort((a, b) => (touched.has(b) - touched.has(a)) || a.localeCompare(b))) grid.appendChild(serviceCard(svc, touched.has(svc), nodeCount.get(svc) || 0));
     wrap.appendChild(grid);
-    if (display.size <= 1) wrap.appendChild(el('div', 'dep-svc-note', '직접 연결된(s2s/join) 서비스가 없습니다.'));
+    if (display.size <= 1) wrap.appendChild(el('div', 'dep-svc-note', '이 배포 서비스를 호출(의존)하는 영향 서비스가 없습니다.'));
     const edges = allEdges.filter((e) => display.has(e.sp) && display.has(e.tp));
     FM.setCanvasEdges(edges);
     requestAnimationFrame(() => { FM.drawConnectors(); });
