@@ -2225,7 +2225,7 @@ function renderRepoSubs() {
     b.dataset.repo = r;
     b.title = `${r} 관련 서비스만 — sub-project ${n}개 + 직접 호출/피호출 서비스`;
     b.style.setProperty('--repo-hue', serviceHue(r));
-    b.innerHTML = `<span class="nb-dot">📦</span><span class="nb-label">${svcBadge(r)}</span><span class="nb-cnt">${n}</span>`;
+    b.innerHTML = `<span class="nb-label">${svcBadge(r)}</span><span class="nb-cnt">${n}</span>`;
     b.addEventListener('click', () => setOverview(true, r));
     host.appendChild(b);
   }

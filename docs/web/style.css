@@ -78,7 +78,6 @@ html, body {
 .nav-btn.nav-sub[data-st="cancel"]   .nb-dot { color: #ef4444; }
 /* main project 별 전체보기 하위 메뉴 — 항목이 많으면 영역 내에서 스크롤(범례 가림 방지) */
 #repo-subs { max-height: 38vh; overflow-y: auto; }
-.nav-btn.nav-sub-repo .nb-dot { font-size: 11px; }
 .nav-btn.nav-sub-repo .nb-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-btn.nav-sub-repo .nb-cnt {
   margin-left: auto; font-size: 10px; font-weight: 700; color: var(--text-dim);
