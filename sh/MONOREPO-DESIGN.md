@@ -43,15 +43,17 @@
     (주석에 "bare openapi.json/impact.json (nexcore)" 명시), spring `Manifest` 가 graph meta `gitRepo`→`repo`,
     graph 없는 impact→repo 엔트리를 만든다. → nexcore 출력과 호환됨.
 
-### flowmap-react (TS) — ✏️ 부분 변경
-- 현재: `impact-repos` 가 이미 **git work tree 단위로 impact 1회** + 비대표 impact prune. `cli.ts:788-831`
-  → impact 는 표준에 가깝다.
-- 차이: 프론트 모노레포를 **모듈(앱/패키지)별 graph 로 쪼개지 않고** repo 1 graph 로 둠
-  (`front-official-desktop` = name===repo, graph+impact). `cli.ts:243-290`
-- 작업(선택): "모듈 graph 폴더 유지" 패턴을 프론트도 적용하려면 `cmdAnalyze` 가 `discoverProjectRoots()`
-  결과대로 **앱/패키지별 graph 를 `<R>/<app>.json` 로 emit** + repo 엔트리(graph null, impact)로 분리.
-  그래프 meta `gitRepo=R` 는 이미 찍음(`cli.ts:263-269`). manifest emit 도 repo 필드 사용(`jsonOutput.ts:88-100`).
-  - **단**, 단일 graph 변형도 웹이 지원하므로 react 는 현행 유지해도 동작은 함. 우선순위 낮음.
+### flowmap-react (TS) — ✅ 구현 완료 (tsc + vitest 159 통과, 실 repo E2E 미검증)
+- 이미 갖춰진 것: `cmdAnalyze` 가 root(앱/패키지)별 graph 를 `<svc>/graph.json` 로 emit + meta `gitRepo=R`
+  (`cli.ts:243-290`), `impact-repos` 가 git work tree 단위로 impact 1회(`cli.ts:788-831`).
+- 표준 정렬로 바꾼 것:
+  1. `cmdImpactRepos`: impact 를 대표 sub-root 가 아니라 **git work tree 이름 폴더**
+     `<out-dir>/<R>/<base>.impact.json`(graph 없는 repo 폴더, +샤드)로 기록. 다른 sub-root 의 이전 impact 정리.
+     단일 root 면 폴더명이 같아 기존과 동일(single-graph 변형).
+  2. `jsonOutput.writeManifest`: graph 없는 `<R>/` (impact 만 있는 폴더)를 **impact-only repo 엔트리**
+     (repo===name, graph=null)로 추가 → spring/nexcore 와 동일 shape.
+  - 결과: 모듈(sub-root) 엔트리(graph, repo=R) + repo 엔트리(graph=null, repo=R, impact). 웹
+    `mapRepoToService(R)` 가 정확매칭, `touchedServicesFor` 가 모듈 전체 touched.
 
 ## 3. 파이프라인(sh/) — 구조 변경 거의 없음
 - 폴더 구조는 **분석기가 산출**한다. `sh/` 는 오케스트레이션만 → 본 작업으로 인한 sh 변경 불필요.
