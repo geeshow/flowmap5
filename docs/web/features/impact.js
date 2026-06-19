@@ -108,15 +108,52 @@
    * 목록 "영향 N"·미선택 집계표는 샤드 없이 인덱스만으로 그린다. 변경 시드(changedApiMethods,
    * 비-private)는 샤드에 있고 그래프 뷰(커밋 클릭)에서 "수정된 메서드" 강조에만 쓰인다. */
 
-  // 커밋이 영향 주는 엔드포인트(레퍼런스 배열) — 인덱스 사전계산값.
+  // 커밋이 영향 주는 엔드포인트(레퍼런스 배열) — 인덱스 사전계산값(서비스 단위).
   function commitImpactedEndpoints(c) { return (c && c.impactedEndpoints) || []; }
 
-  // 집계: 엔드포인트 → 영향 준 커밋 목록(역인덱스). 인덱스의 PR별 impactedEndpoints 를 뒤집는다.
+  // cross-service 확장: 사전계산 영향 엔드포인트(서비스 단위)에 더해, alias 해석된 그래프(FM.inEdges)를
+  //   거슬러 다른 서비스에서 그 엔드포인트를 호출하는(s2s / 화면 join) 경계까지 영향으로 포함한다.
+  //   예) nexcore .jmd 트랜잭션을 /std·/lng 프리픽스로 호출한 s2s·화면. FM 그래프는 부팅 시
+  //   reconcileS2S/loadAndApplyJoins 로 alias 매핑이 이미 반영돼 있어 별도 매칭 없이 호출자가 잡힌다.
+  //   (목록 카운트·집계 전용. 그래프 뷰는 자체 inbound 확장으로 동일 효과를 내므로 건드리지 않는다.)
+  const IMPX_CAP = 400;
+  function impactedEndpointsX(c) {
+    if (c && c._impEpsX) return c._impEpsX;
+    const base = commitImpactedEndpoints(c);
+    const out = base.slice();
+    const have = new Set(base.map(e => e.id));
+    const homeProj = new Set();   // 변경 서비스 집합 — 같은 서비스 경계는 이미 사전계산에 포함됨
+    base.forEach(e => { const n = FM.nodeById.get(e.id); if (n && n.project) homeProj.add(n.project); });
+    const seen = new Set(have);
+    const stack = base.map(e => e.id).filter(id => FM.nodeById.has(id));
+    while (stack.length && out.length < IMPX_CAP) {
+      const cur = stack.pop();
+      for (const e of (FM.inEdges.get(cur) || [])) {   // 피호출(=이 엔드포인트를 부르는 쪽) 방향
+        const src = e.source;
+        if (seen.has(src) || !FM.nodeById.has(src)) continue;
+        seen.add(src);
+        const sn = FM.nodeById.get(src);
+        if (isBoundary(src)) {
+          if (!have.has(src) && sn.project && !homeProj.has(sn.project)) {   // 다른 서비스의 경계만 새 영향으로
+            have.add(src);
+            out.push({ id: src, httpMethod: sn.httpMethod || null, endpoint: sn.endpoint || sn.route || null, service: sn.project || null });
+          }
+          stack.push(src);   // 그 호출자를 부르는 상위 호출자까지 전파
+        } else {
+          stack.push(src);   // 내부(숨김) 노드 → 접어서 계속
+        }
+      }
+    }
+    if (c) c._impEpsX = out;
+    return out;
+  }
+
+  // 집계: 엔드포인트 → 영향 준 커밋 목록(역인덱스). cross-service 확장본을 뒤집는다.
   function getEndpointImpact() {
     if (data._endpointImpact) return data._endpointImpact;
     const byEp = new Map();   // epId -> { ref, shas:Set }
     (data.commits || []).forEach(c => {
-      commitImpactedEndpoints(c).forEach(ep => {
+      impactedEndpointsX(c).forEach(ep => {
         if (!byEp.has(ep.id)) byEp.set(ep.id, { ref: ep, shas: new Set() });
         byEp.get(ep.id).shas.add(c.shortSha);
       });
@@ -450,7 +487,7 @@
           (noCode
             ? `<span class="imp-cc none">코드 영향 없음</span><span class="imp-cc">파일 ${c.changedFileCount}</span>`
             : `<span class="imp-cc chg">◆ 변경 <b>${c.changedNodeCount}</b></span>` +
-              `<span class="imp-cc imp">◇ 영향 <b>${commitImpactedEndpoints(c).length}</b></span>`) +
+              `<span class="imp-cc imp">◇ 영향 <b>${impactedEndpointsX(c).length}</b></span>`) +
         `</div>` +
       `</div>` +
       (link

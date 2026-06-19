@@ -312,7 +312,7 @@
     if (!bc) return;
     bc.style.display = 'flex';
     bc.innerHTML = '<span class="bc-link" data-doc-root>📖 API 문서</span>' +
-      (asvc ? `<span class="bc-sep">›</span><span class="bc-link">${FM.esc(asvc)}</span>` : '');
+      (asvc ? `<span class="bc-sep">›</span><span class="bc-link">${FM.svcBadge(asvc)}</span>` : '');
     const root = bc.querySelector('[data-doc-root]');
     if (root && asvc) {
       root.addEventListener('click', () => { pushApiUrl({}); render(); });
@@ -356,7 +356,7 @@
     const grid = el('div', 'doc-svc-grid');
     for (const [svc, count] of serviceCounts()) {
       const card = el('div', 'doc-svc-card',
-        `<div class="doc-svc-name">${FM.esc(svc)}</div>` +
+        `<div class="doc-svc-name">${FM.svcBadge(svc, 'lg')}</div>` +
         `<div class="doc-svc-count">${count} endpoints</div>`);
       card.addEventListener('click', () => { pushApiUrl({ asvc: svc }); render(); });
       grid.appendChild(card);

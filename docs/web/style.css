@@ -76,6 +76,18 @@ html, body {
 .nav-btn.nav-sub[data-st="approved"] .nb-dot { color: #2563eb; }
 .nav-btn.nav-sub[data-st="done"]     .nb-dot { color: #16a34a; }
 .nav-btn.nav-sub[data-st="cancel"]   .nb-dot { color: #ef4444; }
+/* main project 별 전체보기 하위 메뉴 — 항목이 많으면 영역 내에서 스크롤(범례 가림 방지) */
+#repo-subs { max-height: 38vh; overflow-y: auto; }
+.nav-btn.nav-sub-repo .nb-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-btn.nav-sub-repo .nb-cnt {
+  margin-left: auto; font-size: 10px; font-weight: 700; color: var(--text-dim);
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; min-width: 16px; text-align: center;
+}
+.nav-btn.nav-sub-repo.active {
+  background: hsl(var(--repo-hue, 210) 70% 50% / .14);
+  box-shadow: inset 2px 0 0 hsl(var(--repo-hue, 210) 65% 48%);
+}
+.nav-btn.nav-sub-repo.active .nb-cnt { color: #fff; background: hsl(var(--repo-hue, 210) 65% 48%); border-color: transparent; }
 
 /* 뷰 탭 */
 #view-tabs { display: flex; gap: 4px; background: var(--bg-input); padding: 3px; border-radius: 9px; border: 1px solid var(--border); }
@@ -264,6 +276,8 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 .bc-link { cursor: pointer; color: var(--c-controller); padding: 3px 8px; border-radius: 6px; background: var(--bg-panel); border: 1px solid var(--border); }
 .bc-link:hover { color: var(--c-controller); border-color: var(--c-controller); }
 .bc-link:last-child { color: #fff; background: var(--c-controller); border-color: var(--c-controller); }
+/* 서비스명 뱃지를 품은 브레드크럼 링크/포커스는 자체 장식 제거(뱃지가 곧 라벨) */
+.bc-link:has(.svc-tag), .bc-focus:has(.svc-tag) { padding: 0; background: none; border: none; }
 .bc-sep { color: var(--text-dim); }
 .bc-focus { color: #fbbf24; font-weight: 700; padding: 3px 8px; }
 
@@ -348,6 +362,15 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 .svc-badge-dot { width: 8px; height: 8px; border-radius: 50%; background: hsl(var(--bh) 60% 50%); }
 .column.ext-col { border-left: 1px dashed var(--border); padding-left: 24px; }
 
+/* 서비스명 뱃지 — 커밋영향도(.imp-proj)와 동일 형태. 색은 인라인(serviceHue) 지정.
+   기본 size 는 작게(메뉴/리스트), .lg 는 카드 제목용으로 키운다. */
+.svc-tag {
+  display: inline-block; font-size: 10px; font-weight: 600; line-height: 1;
+  padding: 3px 7px; border-radius: 6px; border: 1px solid;
+  white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+}
+.svc-tag.lg { font-size: 14px; padding: 5px 10px; border-radius: 7px; max-width: 100%; }
+
 /* 호출관계분석: 서비스/인프라 열 */
 .svc-col, .infra-col {
   background: rgba(148,163,184,.06); border: 1px solid var(--border);
@@ -384,6 +407,17 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 .node-card.ovg-modcard.other .ov-svc-name { font-family: inherit; font-style: italic; }
 .ov-svc-group.dim { opacity: .14; filter: brightness(.6); }
 .ov-svc-group.orphan-hidden { display: none; }
+/* repo 한정 전체보기 — 그 repo 소유 서비스 카드를 저장소 색 테두리로 묶어 강조 */
+.node-card.ov-svc.ov-repo-own {
+  outline: 2.5px solid hsl(var(--repo-hue, 210) 70% 48%);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px hsl(var(--repo-hue, 210) 70% 50% / .12);
+}
+.ov-svc-group.ov-repo-own {
+  outline: 2.5px solid hsl(var(--repo-hue, 210) 70% 48%);
+  outline-offset: 3px; border-radius: 8px;
+  box-shadow: 0 0 0 5px hsl(var(--repo-hue, 210) 70% 50% / .12);
+}
 /* 카드 타입 뱃지 (화면/서비스/배치/외부/인프라) — 이름 행 우측 정렬 */
 .ov-tag {
   margin-left: auto; flex: none; font-size: 9px; font-weight: 800; letter-spacing: .3px;
