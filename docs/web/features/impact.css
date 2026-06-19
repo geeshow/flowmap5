@@ -112,20 +112,8 @@
 }
 .imp-clink:hover { color: #fff; background: var(--imp-changed); border-color: var(--imp-changed); }
 .imp-crow1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
-/* 프로젝트 칩 — 색상은 인라인 style(hsl)로 주입 */
-.imp-proj {
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 3px 7px;
-  border-radius: 6px;
-  border: 1px solid;
-  white-space: nowrap;
-  flex-shrink: 0;
-  max-width: 130px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* 프로젝트 칩 = 공통 .svc-tag(style.css). 레일 행에서는 줄바꿈 방지·축소 금지만 보강 */
+.imp-crow1 .svc-tag { flex-shrink: 0; max-width: 130px; }
 .imp-csha {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
@@ -360,7 +348,7 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
-.imp-svc-head .imp-proj { font-size: 12px; max-width: 220px; }
+.imp-svc-head .svc-tag { font-size: 12px; max-width: 220px; }
 .imp-svc-count { font-size: 11px; color: var(--text-dim); margin-left: auto; }
 .imp-svc-body { display: flex; flex-direction: column; gap: 12px; }
 .imp-svc-box .node-card { width: 100%; }

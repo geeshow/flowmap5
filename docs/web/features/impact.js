@@ -52,13 +52,8 @@
     const p = n => String(n).padStart(2, '0');
     return `${p(d.getHours())}:${p(d.getMinutes())}`;
   }
-  // 프로젝트명 → 고정 색상(hue). 같은 프로젝트는 항상 같은 색.
-  // 접두사가 비슷해도(예: tera-cloud-*) 잘 흩어지도록 FNV-1a 해시로 섞는다.
-  function projectHue(name) {
-    let h = 2166136261;
-    for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return (h >>> 0) % 360;
-  }
+  // 프로젝트명 → 고정 색상(hue). 코어 FM.serviceHue 와 동일(뷰 간 색 일치 + 황금각 분배로 다양화).
+  function projectHue(name) { return FM.serviceHue(name); }
 
   // PR 식별자('PR<번호>' 또는 repo 한정 'PR<번호>@<repo>')는 화면에 '#<번호>'로 표시(커밋 shortSha는 그대로).
   function shaLabel(sha) { const m = /^PR(\d+)(?:@|$)/.exec(sha); return m ? '#' + m[1] : sha; }
@@ -419,7 +414,7 @@
       `<div class="imp-rail-title">변경이력 <span class="grid-count">${FM.esc(String(data.commitCount))}</span></div>`);
     const filter = el('input', 'imp-filter');
     filter.type = 'text';
-    filter.placeholder = '작성자 / 메시지 / 파일 필터…';
+    filter.placeholder = '작성자 / 메시지 / 서비스명 / PR 주소 검색…';
     filter.value = railFilter;
     head.appendChild(filter);
     rail.appendChild(head);
@@ -466,18 +461,17 @@
   function commitCard(c, selSet) {
     const on = selSet.has(c.shortSha);
     const card = el('div', 'imp-commit' + (on ? ' on' : ''));
+    // 검색 대상: 작성자 · 메시지 · sha/PR번호 · 서비스명(_project) · PR(커밋) 주소. (파일명은 샤드라 제외)
     card.dataset.search =
-      (c.author + ' ' + c.subject + ' ' + c.shortSha).toLowerCase();   // 파일명은 샤드라 필터 제외
+      [c.author, c.subject, c.shortSha, c._pull != null ? '#' + c._pull : '',
+       c._project, commitUrl(c)].filter(Boolean).join(' ').toLowerCase();
     card.dataset.day = fmtDay(c.date);
 
     const noCode = !c.changedNodeCount;
     const link = commitUrl(c);
     const proj = c._project || '';
     const h = projectHue(proj);
-    const projChip = proj
-      ? `<span class="imp-proj" title="${FM.escAttr(proj)}" ` +
-        `style="color:hsl(${h} 55% 38%);border-color:hsl(${h} 50% 55% / .45);background:hsl(${h} 70% 55% / .12)">${FM.esc(proj)}</span>`
-      : '';
+    const projChip = proj ? FM.svcBadge(proj) : '';   // 공통 서비스 뱃지(.svc-tag)
     card.innerHTML =
       `<span class="imp-dot" style="background:hsl(${h} 60% 62%)"></span>` +
       `<div class="imp-cbody">` +
@@ -857,10 +851,8 @@
           .localeCompare(FM.nodeById.get(b) && FM.nodeById.get(b).method || b));
       const hasChanged = ids.some(id => changedSha.has(id));
       const box = el('div', 'imp-svc-box' + (hasChanged ? ' has-changed' : ''));
-      const h = projectHue(area);
       const head = el('div', 'imp-svc-head',
-        `<span class="imp-proj" style="color:hsl(${h} 55% 38%);border-color:hsl(${h} 50% 55% / .45);` +
-          `background:hsl(${h} 70% 55% / .12)" title="${FM.escAttr(area)}">${FM.esc(area)}</span>` +
+        FM.svcBadge(area) +   // 공통 서비스 뱃지(.svc-tag)
         `<span class="imp-svc-count">${ids.length}</span>`);
       box.appendChild(head);
       const body = el('div', 'imp-svc-body');

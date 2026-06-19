@@ -1749,15 +1749,15 @@ function renderOverview() {
   bc.style.display = 'flex';
   if (repo) {
     const n = repoServices(repo).length;
-    bc.innerHTML = `<span class="bc-focus bc-link" id="ov-all-link" title="repo 한정 해제 — 전체 지도로">🗺️ 전체 서비스 지도</span>`
+    bc.innerHTML = `<span class="bc-focus bc-link" id="ov-all-link" title="repo 한정 해제 — 전체 지도로">전체 서비스 지도</span>`
       + `<span class="bc-sep">›</span>`
-      + `<span class="bc-focus" style="padding-left:2px">📦 ${svcBadge(repo, 'lg')}</span>`
+      + `<span class="bc-focus">${svcBadge(repo, 'lg')}</span>`
       + `<span class="bc-sep">·</span>`
       + `<span class="ov-hint">sub-project <b>${n}</b>개(테두리) + 직접 `
       + `<b style="color:var(--e-s2s)">호출/피호출</b> 서비스만</span>`;
     bc.querySelector('#ov-all-link').addEventListener('click', () => setOverview(true));
   } else {
-    bc.innerHTML = `<span class="bc-focus">🗺️ 전체 서비스 지도</span>`
+    bc.innerHTML = `<span class="bc-focus">전체 서비스 지도</span>`
       + `<span class="bc-sep">·</span>`
       + `<span class="ov-hint"><b>화면</b> 진입 기준 — `
       + `<b style="color:var(--e-s2s)">s2s 호출</b> · <b style="color:var(--e-kafka)">이벤트/인프라</b> 의존, 카드 클릭 시 이동</span>`;
@@ -2153,19 +2153,31 @@ function renderStructFlow() {
   requestAnimationFrame(() => { drawConnectors(); applyHighlight(); });
 }
 
-// 서비스명 → 고정 색상(hue). impact.js projectHue 와 동일한 FNV-1a 로 뷰 간 색을 일치시킨다.
-function serviceHue(name) {
+// 서비스명 → 고정 색상(hue). 등록 서비스(META.projects)는 정렬 인덱스에 황금각(137.5°)으로 hue 를
+//   분배해 인접/유사 이름(예 sample-shop·sample-shop-react)도 서로 충분히 다른 색이 되게 한다.
+//   미등록 이름(repo명·인프라 등)은 FNV-1a 해시로 흩뿌린다. 모든 뷰가 FM.serviceHue 로 같은 색을 쓴다.
+let _hueByName = null;
+function hueIndex() {
+  if (_hueByName) return _hueByName;
+  _hueByName = new Map();
+  (META.projects || []).slice().sort().forEach((name, i) => _hueByName.set(name, Math.round((i * 137.508) % 360)));
+  return _hueByName;
+}
+function hashHue(name) {
   let h = 2166136261;
   for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0) % 360;
+}
+function serviceHue(name) {
+  const idx = hueIndex();
+  return idx.has(name) ? idx.get(name) : hashHue(name);
 }
 
 // 서비스명 뱃지 — 커밋영향도(.imp-proj)와 동일 형태. 색은 serviceHue 로 인라인 지정.
 //   cls: 'lg' 면 카드 제목용 큰 사이즈.
 function svcBadge(name, cls) {
-  const h = serviceHue(name);
   return `<span class="svc-tag${cls ? ' ' + cls : ''}" title="${escAttr(name)}" `
-    + `style="color:hsl(${h} 55% 38%);border-color:hsl(${h} 50% 55% / .45);background:hsl(${h} 70% 55% / .12)">${esc(name)}</span>`;
+    + `style="--svc-h:${serviceHue(name)}">${esc(name)}</span>`;
 }
 
 // 전체보기/하위 카드 타입 뱃지 — 화면/서비스/배치/외부/인프라
@@ -3250,7 +3262,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '59';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '61';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
