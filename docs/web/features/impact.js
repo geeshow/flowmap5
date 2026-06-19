@@ -620,7 +620,18 @@
     // 엔드포인트가 아니므로 중심에 두지 않고, 아래 경계 투영에서 유입(화면)/유출(infra)으로 배치한다.
     const centerSet = new Set();
     epIds.forEach(id => { if (FM.nodeById.has(id)) centerSet.add(id); });
-    let bases = [...centerSet];
+    // 변경된 코드가 속한 프로젝트(서비스) — "수정된 endpoint" 는 이 프로젝트의 영향 엔드포인트다.
+    const changedProjects = new Set();
+    changedInGraph.forEach(id => { const n = FM.nodeById.get(id); if (n && n.project) changedProjects.add(n.project); });
+    // 중심(앵커) = 수정된 endpoint = 직접 변경됐거나 변경 프로젝트에 속한 영향 엔드포인트만.
+    // 다른 서비스에서 이 endpoint 를 호출하는(=영향 받은) 엔드포인트는 앵커로 두지 않는다 — 앵커로 두면
+    // 1차인데도 그 호출 서비스가 부르는 또 다른 endpoint(2단계)까지 유출로 펼쳐진다. 그런 호출원은
+    // 유입(피호출) 확장으로만 등장시킨다.
+    let bases = [...centerSet].filter(id => {
+      const n = FM.nodeById.get(id);
+      return n && (changedSha.has(id) || (n.project && changedProjects.has(n.project)));
+    });
+    if (!bases.length) bases = [...centerSet];   // 수정 endpoint 를 못 가리면 전체 영향 엔드포인트로 폴백
     // 폴백: endpoint 로 롤업되지 않는 변경(엔드포인트 없는 내부 코드 등) → 변경 노드의 인접 경계를 중심으로
     if (!bases.length && changedInGraph.length) {
       const fb = new Set();
