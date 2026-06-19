@@ -18,7 +18,7 @@
 정적 자산은 버전 쿼리로 캐시 관리. 안 올리면 브라우저가 옛 파일을 씀.
 - `docs/web/index.html`: `style.css?v=NN`, `app.js?v=NN`
 - `docs/web/app.js`: `const FEATURE_VER = 'NN'` — `features/*.js`·`features/*.css` 모듈 캐시키
-- **현재 값**: style.css `v=72`, app.js `v=159`, FEATURE_VER `58`
+- **현재 값**: style.css `v=72`, app.js `v=160`, FEATURE_VER `59`
 
 ## 핵심 파일
 
@@ -36,7 +36,8 @@
 - **배포 영향도 데이터**: `data/deploy/` — `index.json`·`pr_index.json`(년/일 인덱스) +
   `<년도>/<날짜>/deploy_list.json`·`pr_list.json`. `features/deploy.js` 가 로드(지연). PR→`view=commits` 딥링크.
 - **생성 파이프라인**: `sh/` 스크립트 — `sh/run-all.sh` 가 단계 01~14 오케스트레이션
-  (backend pull→analyze→merge→openapi→impact → **nexcore refresh** → frontend refresh→analyze→screens→join→**impact** → sync → **deploy-sync** → verify).
+  (backend pull→analyze→merge→~~openapi~~→impact → **nexcore refresh** → frontend refresh→analyze→screens→join→**impact** → sync → **deploy-sync** → verify).
+  - **04 openapi 는 비활성** — `sh/04-backend-openapi.sh.disabled` 로 이름 변경되어 글롭 제외(되돌리려면 `.disabled` 제거).
   세 분석기(spring-kotlin·nexcore·react)가 각자 `json/` 에 산출물을 만들고, **sync(12)** 가 그
   세 디렉터리를 한 번에 `docs/web/data` 로 취합 + `manifest.json` 재생성(spring-kotlin `sync` 의
   `--frontend-dir` CSV 로 nexcore·react json 을 동시 투입).

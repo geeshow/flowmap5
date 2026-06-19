@@ -562,7 +562,8 @@
       .then(() => FM.impact && FM.impact.ensure())   // 커밋 인덱스 로드(commitBySha 채움) — prKey 조회 전 필수
       .then(() => {
         if (renderSeq !== seq) return;                  // 그 사이 다른 배포/PR로 재렌더됨
-        const key = FM.impact && FM.impact.prKey(eff.prNumber);
+        const repo = eff.ticket && eff.ticket.repo;   // 배포 git_repository — impact _project(=repoUrl 끝segment) 와 매칭
+        const key = FM.impact && FM.impact.prKey(eff.prNumber, repo);
         if (!key) { host.innerHTML = '<div class="dep-hint">이 PR의 커밋 영향도 데이터가 없습니다 (impact 미수집).</div>'; return; }
         FM.impact.renderInto(host, [key]);
       }).catch(() => { host.innerHTML = '<div class="dep-hint">커밋 영향도 모듈 로드 실패.</div>'; });
