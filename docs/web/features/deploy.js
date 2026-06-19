@@ -36,6 +36,7 @@
   const yearCache = new Map();   // year → Promise<Map<date,{date,rec,tickets}>>
   let renderSeq = 0;
   let railFilter = '';           // 레일 텍스트 필터(담당자/요약/서비스/#ID) — 재렌더 간 유지
+  let svcHop = 1;                // 서비스 영향도 연관관계 표시 단계 — 기본 1차(배포 서비스에 직접 연결된 서비스만)
 
   function el(tag, cls, html) {
     const e = document.createElement(tag);
@@ -567,13 +568,44 @@
     return card;
   }
 
-  function renderServiceGraph(wrap, touched) {
-    const allEdges = serviceEdges();
+  // 배포 서비스(touched)에서 s2s/join 으로 hops 단계까지 양방향 확장한 서비스 집합
+  function expandSvcHops(touched, allEdges, hops) {
+    const adj = new Map();
+    for (const e of allEdges) {
+      if (!adj.has(e.sp)) adj.set(e.sp, new Set());
+      if (!adj.has(e.tp)) adj.set(e.tp, new Set());
+      adj.get(e.sp).add(e.tp); adj.get(e.tp).add(e.sp);   // 양방향(호출/피호출)
+    }
     const display = new Set(touched);
-    for (const e of allEdges) { if (touched.has(e.sp)) display.add(e.tp); if (touched.has(e.tp)) display.add(e.sp); }
+    let frontier = [...touched];
+    for (let h = 0; h < hops && frontier.length; h++) {
+      const next = [];
+      for (const s of frontier) for (const nb of (adj.get(s) || [])) if (!display.has(nb)) { display.add(nb); next.push(nb); }
+      frontier = next;
+    }
+    return display;
+  }
+
+  // 표시 단계(1/2/3차) 버튼 — 누르면 svcHop 을 바꿔 서비스 그래프를 다시 그린다.
+  function buildSvcDepthCtl(wrap, touched) {
+    const box = el('div', 'dep-depthctl', '<span class="dep-depthctl-label">표시 단계</span>');
+    for (let d = 1; d <= 3; d++) {
+      const btn = el('button', 'dep-depthbtn' + (d === svcHop ? ' on' : ''), d + '차');
+      btn.title = `배포 서비스 기준 ${d}차 연관 서비스까지 표시`;
+      btn.onclick = () => { if (svcHop !== d) { svcHop = d; renderServiceGraph(wrap, touched); } };
+      box.appendChild(btn);
+    }
+    return box;
+  }
+
+  function renderServiceGraph(wrap, touched) {
+    wrap.innerHTML = '';                 // 단계 전환 재호출 시 비우고 다시 그림
+    const allEdges = serviceEdges();
+    const display = expandSvcHops(touched, allEdges, svcHop);
     const nodeCount = new Map();
     for (const n of FM.NODES) if (n.project) nodeCount.set(n.project, (nodeCount.get(n.project) || 0) + 1);
 
+    wrap.appendChild(buildSvcDepthCtl(wrap, touched));
     const grid = el('div', 'dep-svc-nodes');
     for (const svc of [...display].sort((a, b) => (touched.has(b) - touched.has(a)) || a.localeCompare(b))) grid.appendChild(serviceCard(svc, touched.has(svc), nodeCount.get(svc) || 0));
     wrap.appendChild(grid);

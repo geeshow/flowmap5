@@ -154,6 +154,15 @@
 .dep-imp-note { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; background: var(--bg-input); border-radius: 8px; padding: 11px 13px; }
 .dep-imp-note code { font-family: ui-monospace, monospace; }
 .dep-svc-graph { position: relative; }
+/* 서비스 영향도 표시 단계(1/2/3차) 컨트롤 — 커밋 영향도와 동일 룩(--imp-changed) */
+.dep-depthctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+.dep-depthctl-label { font-size: 11px; color: var(--text-dim); margin-right: 2px; }
+.dep-depthbtn {
+  font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 14px;
+  border: 1px solid var(--border); background: var(--bg-input); color: var(--text-dim); cursor: pointer;
+}
+.dep-depthbtn:hover { border-color: var(--imp-changed); color: var(--text); }
+.dep-depthbtn.on { background: var(--imp-changed); border-color: var(--imp-changed); color: #fff; }
 .dep-svc-note { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
 /* 서비스 카드 간격을 넓혀 그 위에 그려지는 연관관계(s2s/join) 선이 보이도록 한다 */
 .dep-svc-nodes { display: flex; flex-wrap: wrap; gap: 40px 72px; position: relative; z-index: 1; }
