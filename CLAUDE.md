@@ -35,11 +35,16 @@
 - 프로젝트별: `<svc>.json`(그래프), `<svc>.openapi.json`(API 문서), 각 `.gz`.
 - **배포 영향도 데이터**: `data/deploy/` — `index.json`·`pr_index.json`(년/일 인덱스) +
   `<년도>/<날짜>/deploy_list.json`·`pr_list.json`. `features/deploy.js` 가 로드(지연). PR→`view=commits` 딥링크.
-- **생성 파이프라인**: `sh/` 스크립트 — `sh/run-all.sh` 가 단계 01~13 오케스트레이션
-  (backend pull→analyze→merge→openapi→impact → **nexcore refresh** → frontend refresh→analyze→screens→join→**impact** → sync → verify).
+- **생성 파이프라인**: `sh/` 스크립트 — `sh/run-all.sh` 가 단계 01~14 오케스트레이션
+  (backend pull→analyze→merge→openapi→impact → **nexcore refresh** → frontend refresh→analyze→screens→join→**impact** → sync → **deploy-sync** → verify).
   세 분석기(spring-kotlin·nexcore·react)가 각자 `json/` 에 산출물을 만들고, **sync(12)** 가 그
   세 디렉터리를 한 번에 `docs/web/data` 로 취합 + `manifest.json` 재생성(spring-kotlin `sync` 의
   `--frontend-dir` CSV 로 nexcore·react json 을 동시 투입).
+  - **13 deploy-sync**(`13-deploy-sync.sh`): 배포 영향도 데이터(`data/deploy/`)를 생성하는 별도 분석
+    프로그램. **sync(12) 다음**이라야 방금 재생성된 `manifest.json` 과 deploy 의 `git_repository` 가
+    신선하게 조인됨(`features/deploy.js` 가 둘을 런타임 조인). 파일은 별도 환경 산출물이며,
+    `run-all` 글롭(`[0-9][0-9]-*.sh`)이 있으면 자동 편입·없으면 건너뜀.
+  - **14 verify**(`14-verify.sh`): 취합된 web data 의 cross-graph 연결성 검증.
 - 레거시 `graphs/*.json` + `scripts/build.py` 경로는 제거됨(사용 안 함).
 
 ## 색/선 규칙 (통일 규칙)
