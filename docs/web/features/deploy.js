@@ -114,6 +114,23 @@
     if (repo && idx.byRepo.has(repo)) return idx.byRepo.get(repo); // 모노레포: repo → 대표 서비스
     return null;
   }
+  // 모노레포 repo 의 "그래프 보유 모듈 서비스" 목록 (manifest.repo 마커 기반).
+  //   tera-terafi 처럼 graph 없는 repo 엔트리(=repo 단위 pulls/impact 보유) 자신은 제외하고,
+  //   trf-credit·trf-loan 같은 모듈만 돌려준다. 단일 repo(모듈 없음)면 빈 배열.
+  function modulesOfRepo(repo) {
+    if (!repo) return [];
+    return (FM.MANIFEST && FM.MANIFEST.projects || [])
+      .filter((p) => p && p.graph && p.repo === repo && p.name !== repo)
+      .map((p) => p.name);
+  }
+  // 배포가 건드린(touched) 서비스 집합 — 모노레포면 모듈 서비스 전체, 아니면 대표 서비스 하나.
+  //   서비스 영향도 연관관계 그래프는 이 집합을 기준으로 그린다(그래프 없는 repo 엔트리는 제외돼야
+  //   빈 카드/연결 0 문제가 안 생긴다). pulls/impact 조회는 별도로 tk.service(대표=repo 엔트리)를 쓴다.
+  function touchedServicesFor(tk) {
+    const mods = modulesOfRepo(tk.repo);
+    if (mods.length) return new Set(mods);
+    return tk.service ? new Set([tk.service]) : new Set();
+  }
   function buildTickets(deploy, pr, projs) {
     const deployList = (deploy && deploy.deploy_list) || [];
     const depByTicket = new Map(deployList.map((d) => [d.release_ticket_id, d]));
@@ -458,7 +475,7 @@
     } else {
       const wrap = el('div', 'dep-svc-graph');
       impSec.appendChild(wrap);
-      renderServiceGraph(wrap, new Set([tk.service]));
+      renderServiceGraph(wrap, touchedServicesFor(tk));   // 모노레포면 모듈 서비스 전체를 기준으로
     }
     main.appendChild(impSec);
 
