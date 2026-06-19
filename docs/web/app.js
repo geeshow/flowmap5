@@ -194,6 +194,7 @@ function reconcileS2S() {
   if (!MANIFEST) return;   // 단일 통합 그래프는 이미 s2s 처리됨
   const frontProjects = new Set(MANIFEST.projects.filter(p => p.type === 'frontend').map(p => p.name));
   const ctrlByPath = new Map();
+  const ctrlByAlias = new Map();   // alias(예: nexcore .jmd 트랜잭션 Tid) → 노드. alias 없는 백엔드는 비어 무영향
   const nodeIndex = new Map();
   for (const n of NODES) {
     nodeIndex.set(n.id, n);
@@ -201,6 +202,13 @@ function reconcileS2S() {
       const k = normPath(n.endpoint);
       if (!ctrlByPath.has(k)) ctrlByPath.set(k, []);
       ctrlByPath.get(k).push(n);
+    }
+    if (Array.isArray(n.aliases)) {
+      for (const a of n.aliases) {
+        if (!a) continue;
+        if (!ctrlByAlias.has(a)) ctrlByAlias.set(a, []);
+        ctrlByAlias.get(a).push(n);
+      }
     }
   }
   const absorbed = new Set();
@@ -210,11 +218,21 @@ function reconcileS2S() {
     if (src && frontProjects.has(src.project)) continue;   // 프론트 외부호출은 join 으로 처리
     const ext = nodeIndex.get(e.target);
     if (!ext || !ext.endpoint) continue;        // endpoint 없는 서드파티(외부 URL만)는 external 유지
+    const diffSvc = c => c.project !== ext.project || c.module !== ext.module;  // 서비스 단위(프로젝트/모듈)가 달라야 S2S
     const cands = (ctrlByPath.get(normPath(ext.endpoint)) || [])
-      // 서비스 단위(프로젝트 또는 모듈)가 다르면 S2S 후보 — 멀티모듈 모노레포(모듈=서비스) 지원
-      .filter(c => verbCompatible(ext.httpMethod, c.httpMethod) && (c.project !== ext.project || c.module !== ext.module));
-    if (cands.length !== 1) continue;            // 0=미매칭 유지, 2+=ambiguous 보수적 유지
-    e.kind = 's2s'; e.relation = 'call'; e.target = cands[0].id;
+      .filter(c => verbCompatible(ext.httpMethod, c.httpMethod) && diffSvc(c));
+    let targetId = null;
+    if (cands.length === 1) {
+      targetId = cands[0].id;                    // ① 직접 경로 매칭
+    } else if (cands.length === 0) {
+      // ② alias 폴백: nexcore 트랜잭션을 /std·/lng 프리픽스(+.jmd)로 호출한 s2s — 토큰 세그먼트로 매칭.
+      //    (spring Feign/RestTemplate 등 백엔드 간 호출이 nexcore .jmd 트랜잭션을 부르는 경우)
+      const aliasId = aliasMatch(ext.endpoint, ext.httpMethod, ctrlByAlias);
+      const t = aliasId && nodeIndex.get(aliasId);
+      if (t && diffSvc(t)) targetId = aliasId;
+    }
+    if (!targetId) continue;                      // 미매칭/ambiguous(2+)는 보수적으로 external 유지
+    e.kind = 's2s'; e.relation = 'call'; e.target = targetId;
     absorbed.add(ext.id);
   }
   if (absorbed.size) {
