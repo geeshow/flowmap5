@@ -721,6 +721,10 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 .dock-node:hover { border-color: var(--lc, #9ca3af); }
 .dock-node.root { box-shadow: 0 0 0 2px #fbbf24; }
 .dock-node.pinned { box-shadow: 0 0 0 2px #38bdf8; }
+/* 이 커밋/PR 에서 실제 수정된 노드 — 프로세스 흐름에서 주황 링으로 항상 강조 */
+.dock-node.dock-changed { box-shadow: 0 0 0 2px var(--imp-changed); border-color: var(--imp-changed); }
+.dock-node.dock-changed.pinned { box-shadow: 0 0 0 2px #38bdf8, 0 0 0 4px var(--imp-changed); }
+.dock-node.dock-changed.dim { opacity: .55; }   /* 강조 노드는 dim 되지 않지만, 혹시 모를 경우 덜 흐리게 */
 .dock-node.dim { opacity: .3; }
 /* 노드 클릭으로 프로세스 흐름을 열 때 기준 노드를 살짝 바운스 */
 @keyframes dockBounce {
