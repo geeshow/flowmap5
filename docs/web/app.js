@@ -46,7 +46,8 @@ function cleanSynthNodes() { for (const id of synthNodeIds) nodeById.delete(id);
 
 const state = {
   view: null,                // 기능 모듈 뷰 (commits/topic/api — features/*.js lazy load)
-  overview: false,           // 전체 서비스 지도 모드
+  overview: false,           // 전체 서비스 지도 모드 (화면 진입 기준)
+  overviewRepo: null,        // 전체보기 repo(저장소) 한정 — 그 repo sub-project + 직접 연관 서비스만
   structure: false,          // 어플리케이션구조 메뉴 컨텍스트 (3단계 드릴다운)
   structSvc: null,           //   ② 선택 서비스 — endpoint path {path1}/{path2} 그룹 보기
   structPath: null,          //   ③ 선택 경로 — 그 경로 관련 파일 단위 그래프
@@ -415,7 +416,9 @@ function parseUrl() {
   const viewRaw = rawParam('view');
   state.view = viewRaw && FEATURE_OF_VIEW[viewRaw] ? viewRaw : null;
   state.overview = viewRaw === 'overview';
-  state.overviewKind = rawParam('ov') === 'batch' ? 'batch' : 'screen';   // 전체보기 화면/배치 진입 분리
+  const repoRaw = rawParam('repo');                                       // 전체보기 repo 한정
+  const repoVal = repoRaw ? decodeURIComponent(repoRaw) : null;
+  state.overviewRepo = state.overview && repoVal && repoList().includes(repoVal) ? repoVal : null;
   const svcView = rawParam('service');
   state.service = svcView && (META.projects || []).includes(decodeURIComponent(svcView)) ? decodeURIComponent(svcView) : null;
   // 어플리케이션구조 3단계: view=structure (picker) → app=<svc> (경로 그룹) → p=<path> (프로세스 흐름)
@@ -447,7 +450,7 @@ function pushUrl() {
   const parts = [];
   if (state.overview) {
     parts.push('view=overview');
-    if (state.overviewKind === 'batch') parts.push('ov=batch');
+    if (state.overviewRepo) parts.push('repo=' + encodeURIComponent(state.overviewRepo));
     history.pushState({}, '', location.pathname + '?' + parts.join('&'));
     return;
   }
@@ -484,10 +487,10 @@ function shareUrl() { return location.origin + location.pathname + location.sear
 // =========================================================================
 // 액션
 // =========================================================================
-function setOverview(on, kind) {
+function setOverview(on, repo) {
   state.view = null;
   state.overview = !!on;
-  state.overviewKind = kind || 'screen';
+  state.overviewRepo = on ? (repo || null) : null;
   if (on) { state.structure = false; state.structSvc = null; state.structPath = null; state.structFile = null; state.focus = null; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null; }
   pushUrl(); render(); renderDetail();
 }
@@ -667,8 +670,9 @@ function render() {
     document.getElementById('analysis-bar').classList.remove('svc-mode');
   }
   document.getElementById('analysis-bar').classList.remove('no-depth');
-  document.getElementById('overview-btn').classList.toggle('active', state.overview && state.overviewKind !== 'batch');
-  document.getElementById('overview-batch-btn').classList.toggle('active', state.overview && state.overviewKind === 'batch');
+  document.getElementById('overview-btn').classList.toggle('active', state.overview);
+  document.querySelectorAll('#repo-subs .nav-sub-repo').forEach(b =>
+    b.classList.toggle('active', state.overview && state.overviewRepo === b.dataset.repo));
   document.getElementById('structure-btn').classList.toggle('active', state.structure);
   const navSt = rawParam('st');
   document.querySelectorAll('#nav .nav-btn[data-view]').forEach(b => {
@@ -1194,7 +1198,7 @@ function renderServiceView() {
   document.getElementById('back-to-browse').textContent = '⟵ 전체보기';
   const pickNode = state.svcPick ? nodeById.get(state.svcPick) : null;
   document.getElementById('ab-focus').innerHTML =
-    `<span class="ab-focus-label svc">서비스</span> <b>${esc(svc)}</b>`
+    `<span class="ab-focus-label svc">서비스</span> ${svcBadge(svc, 'lg')}`
     + `<span class="ab-proj">${eps.length} APIs</span>`;
 
   // 브레드크럼: 전체보기 › 서비스 (노드 선택 시 › {METHOD} {API PATH} 3단계)
@@ -1203,9 +1207,9 @@ function renderServiceView() {
   bc.innerHTML = `<a class="bc-link" id="bc-root">🗺️ 전체보기</a>`
     + `<span class="bc-sep">›</span>`
     + (pickNode
-      ? `<a class="bc-link" id="bc-svc">${esc(svc)}</a>`
+      ? `<a class="bc-link" id="bc-svc">${svcBadge(svc)}</a>`
         + `<span class="bc-sep">›</span><span class="bc-focus">${esc(pickLabelOf(pickNode))}</span>`
-      : `<span class="bc-focus">${esc(svc)}</span>`);
+      : svcBadge(svc, 'lg'));
   bc.querySelector('#bc-root').addEventListener('click', () => setOverview(true));
   bc.querySelector('#bc-svc')?.addEventListener('click', () => setService(svc));
 
@@ -1378,7 +1382,7 @@ function renderServicePathDrill() {
   bc.style.display = 'flex';
   bc.innerHTML = `<a class="bc-link" id="bc-root">🗺️ 전체보기</a>`
     + `<span class="bc-sep">›</span>`
-    + `<a class="bc-link" id="bc-svc">${esc(svc)}</a>`
+    + `<a class="bc-link" id="bc-svc">${svcBadge(svc)}</a>`
     + `<span class="bc-sep">›</span><span class="bc-focus">${esc(key)}</span>`;
   bc.querySelector('#bc-root').addEventListener('click', () => setOverview(true));
   bc.querySelector('#bc-svc').addEventListener('click', () => setService(svc));
@@ -1710,26 +1714,12 @@ function buildServiceGraph() {
     if (!a) { a = { source: ss, target: st, kc, count: 0, async: false }; agg.set(key, a); }
     a.count++; if (e.mode === 'async') a.async = true;
   }
-  // 배치 → 소속 서비스 진입 엣지. 배치는 자체(batch) 호출만 있어 서비스 그래프상 고립되므로,
-  //   진입점이 구동하는 서비스로 연결해 진입/화면/배치 컬럼에서 흐름이 보이게 한다.
-  for (const project of batchProjects()) {
-    const source = 'batch:' + project, target = 'svc:' + project;
-    if (source === target) continue;
-    const key = source + '|' + target + '|batch';
-    if (!agg.has(key)) agg.set(key, { source, target, kc: 'batch', count: 1, async: false });
-  }
   return [...agg.values()];
-}
-// 배치(BATCH 레이어) 노드를 가진 서비스(project) 집합 — 서비스 단위 배치 진입 노드의 기준
-function batchProjects() {
-  const s = new Set();
-  for (const n of NODES) if (n.layer === 'BATCH' && n.project) s.add(n.project);
-  return s;
 }
 
 // 화면 기준 서비스 티어 분류 (전체보기·어플리케이션구조 picker 공용):
 //   0 진입(화면)  ·  1 1차(화면이 join 으로 직접 호출)  ·  2 2차(1차가 s2s 호출)  ·  3 제공 서비스(나머지)
-const TIER_HEAD = { 0: '진입 / 화면 / 배치', 1: '1차 · 직접 호출', 2: '2차 · 서버 호출', 3: '제공 서비스' };
+const TIER_HEAD = { 0: '진입 / 화면', 1: '1차 · 직접 호출', 2: '2차 · 서버 호출', 3: '제공 서비스' };
 function computeServiceTiers() {
   const svcs = META.projects.slice();
   const frontSet = new Set((MANIFEST?.projects || []).filter(p => p.type === 'frontend').map(p => p.name));
@@ -1754,15 +1744,37 @@ function renderOverview() {
   document.getElementById('analysis-bar').classList.add('hidden');
   document.getElementById('flow-canvas').querySelector('#grid-toolbar')?.remove();
 
-  const kind = state.overviewKind === 'batch' ? 'batch' : 'screen';
+  const repo = state.overviewRepo;
   const bc = document.getElementById('breadcrumb');
   bc.style.display = 'flex';
-  bc.innerHTML = `<span class="bc-focus">🗺️ 전체 서비스 지도</span>`
-    + `<span class="bc-sep">·</span>`
-    + `<span class="ov-hint">${kind === 'batch' ? '<b>배치</b> 진입' : '<b>화면</b> 진입'} 기준 — `
-    + `<b style="color:var(--e-s2s)">s2s 호출</b> · <b style="color:var(--e-kafka)">이벤트/인프라</b> 의존, 카드 클릭 시 이동</span>`;
+  if (repo) {
+    const n = repoServices(repo).length;
+    bc.innerHTML = `<span class="bc-focus bc-link" id="ov-all-link" title="repo 한정 해제 — 전체 지도로">🗺️ 전체 서비스 지도</span>`
+      + `<span class="bc-sep">›</span>`
+      + `<span class="bc-focus" style="padding-left:2px">📦 ${svcBadge(repo, 'lg')}</span>`
+      + `<span class="bc-sep">·</span>`
+      + `<span class="ov-hint">sub-project <b>${n}</b>개(테두리) + 직접 `
+      + `<b style="color:var(--e-s2s)">호출/피호출</b> 서비스만</span>`;
+    bc.querySelector('#ov-all-link').addEventListener('click', () => setOverview(true));
+  } else {
+    bc.innerHTML = `<span class="bc-focus">🗺️ 전체 서비스 지도</span>`
+      + `<span class="bc-sep">·</span>`
+      + `<span class="ov-hint"><b>화면</b> 진입 기준 — `
+      + `<b style="color:var(--e-s2s)">s2s 호출</b> · <b style="color:var(--e-kafka)">이벤트/인프라</b> 의존, 카드 클릭 시 이동</span>`;
+  }
 
   const edges = buildServiceGraph();
+
+  // repo 한정 모드: 그 repo 의 sub-project(svc:*) + 직접 호출/피호출로 닿는 서비스/인프라만 노출.
+  const repoOwn = repo ? new Set(repoServices(repo).map(s => 'svc:' + s)) : null;
+  let repoVisible = null;
+  if (repoOwn) {
+    repoVisible = new Set(repoOwn);
+    for (const e of edges) {
+      if (repoOwn.has(e.source)) repoVisible.add(e.target);
+      if (repoOwn.has(e.target)) repoVisible.add(e.source);
+    }
+  }
 
   const svcs = META.projects.slice();
   const { level, HEAD, maxLevel } = computeServiceTiers();
@@ -1797,37 +1809,9 @@ function renderOverview() {
   colsEl.className = 'overview';
   colsEl.innerHTML = '';
 
-  // 배치 — 진입점이므로 tier 0(진입/화면/배치)에 서비스 단위 '{service}-batch' 카드로 묶어 배치
-  const batchTargets = new Set(EDGES.filter(e => e.kind === 'batch').map(e => e.target));
-  const batchAgg = new Map();   // project → { count, modules, ids }
-  for (const n of NODES) {
-    if (n.layer !== 'BATCH') continue;
-    const key = n.project || n.fqcn || n.id;
-    const m = batchAgg.get(key) || { project: n.project, count: 0, modules: new Set(), ids: [] };
-    m.count++; m.ids.push(n.id); if (n.fqcn) m.modules.add(n.fqcn); batchAgg.set(key, m);
-  }
-  const batchList = [...batchAgg].map(([key, m]) => ({
-    key, project: m.project, count: m.count, modules: m.modules.size,
-    label: (m.project || key) + '-batch',
-    jobId: m.ids.find(id => !batchTargets.has(id)) || m.ids[0],   // 진입 Job = 배치 엣지 타깃이 아닌 노드
-  }));
-
-  // 진입 유형별 도달 가능 서브그래프. 화면: 프론트 svc 진입(전체 맵, 배치 카드만 제외).
-  //   배치: batch 진입점에서 forward 로 닿는 서비스/인프라만 표시(배치 서브그래프).
-  const useReach = kind === 'batch';
-  const entries = kind === 'batch'
-    ? batchList.map(b => 'batch:' + b.key)
-    : svcs.filter(isFrontendProject).map(s => 'svc:' + s);
-  const adj = new Map();
-  for (const e of edges) { (adj.get(e.source) || adj.set(e.source, []).get(e.source)).push(e.target); }
-  const reach = new Set(entries);
-  for (let frontier = [...entries]; frontier.length; ) {
-    const nx = [];
-    for (const id of frontier) for (const t of adj.get(id) || []) if (!reach.has(t)) { reach.add(t); nx.push(t); }
-    frontier = nx;
-  }
-  const shown = sup => !useReach || reach.has(sup);
-  const head0 = kind === 'batch' ? '진입 / 배치' : '진입 / 화면';
+  // 화면(프론트) 진입 기준 전체 맵 — repo 한정 시 그 repo 연관 서비스/인프라만 노출.
+  const shown = sup => (!repoVisible || repoVisible.has(sup));
+  const head0 = '진입 / 화면';
 
   // 외부 API 는 "제공 서비스"(레벨 3) 컬럼에 함께 배치 — 제공 서비스가 비어 있어도 컬럼 생성
   const externalCol = infraTypes.has('external') ? 3 : -1;
@@ -1835,8 +1819,7 @@ function renderOverview() {
   for (let lv = 0; lv <= lastCol; lv++) {
     const inLevel = svcs.filter(s => level.get(s) === lv && shown('svc:' + s)).sort((a, b) => stats[b].eps - stats[a].eps);
     const withExternal = lv === externalCol && shown('infra:external');
-    const withBatch = lv === 0 && kind === 'batch' && batchList.length;
-    if (!inLevel.length && !withExternal && !withBatch) continue;
+    if (!inLevel.length && !withExternal) continue;
     const col = document.createElement('div');
     col.className = 'column';
     const head = document.createElement('div');
@@ -1844,7 +1827,6 @@ function renderOverview() {
     head.textContent = lv === 0 ? head0 : (HEAD[lv] || `의존 ${lv}`);
     col.appendChild(head);
     for (const s of inLevel) { const mods = decomposeModulesOf(s); col.appendChild(mods ? makeServiceGroupCard(s, mods) : makeServiceCard(s, stats[s])); }
-    if (withBatch) for (const b of batchList) col.appendChild(makeBatchCard(b));
     if (withExternal) col.appendChild(makeInfraTypeCard('external', (infraMembers['external'] || new Set()).size));
     colsEl.appendChild(col);
   }
@@ -1861,13 +1843,27 @@ function renderOverview() {
     colsEl.appendChild(col);
   }
   if (!colsEl.children.length) {
-    colsEl.innerHTML = `<div class="browse-empty">${kind === 'batch' ? '배치 진입점이' : '화면 진입점이'} 없습니다.</div>`;
+    colsEl.innerHTML = repo
+      ? `<div class="browse-empty"><b>${esc(repo)}</b> 의 표시할 서비스가 없습니다.</div>`
+      : `<div class="browse-empty">화면 진입점이 없습니다.</div>`;
   }
 
-  // 화면 보기는 배치 진입 엣지를 숨기고, 배치 보기는 도달 가능한 엣지만 그린다.
-  currentEdges = edges.filter(e => useReach
-    ? (reach.has(e.source) && reach.has(e.target))
-    : !e.source.startsWith('batch:'));
+  // repo 한정: 그 repo 소유 서비스 카드를 테두리(저장소 색)로 묶어 표시.
+  if (repoOwn) {
+    const rh = serviceHue(repo);
+    for (const sup of repoOwn) {
+      const el = cardEls.get(sup);
+      if (el) { el.classList.add('ov-repo-own'); el.style.setProperty('--repo-hue', rh); }
+    }
+  }
+
+  // 화면 보기는 배치 진입 엣지를 숨긴다.
+  //   repo 한정은 그 repo 를 한쪽 끝으로 갖는(호출/피호출) 엣지만 그린다.
+  currentEdges = edges.filter(e => {
+    if (e.source.startsWith('batch:')) return false;
+    if (repoOwn) return (repoOwn.has(e.source) || repoOwn.has(e.target)) && repoVisible.has(e.source) && repoVisible.has(e.target);
+    return true;
+  });
   buildCurrentAdj();
   requestAnimationFrame(() => { pruneOrphans(); drawConnectors(); applyHighlight(); });
 }
@@ -1959,7 +1955,7 @@ function renderStructPaths() {
   bc.style.display = 'flex';
   bc.innerHTML = `<a class="bc-link" id="bc-struct">🏗️ 어플리케이션구조</a>`
     + `<span class="bc-sep">›</span>`
-    + `<span class="bc-focus">${esc(svc)}</span>`
+    + svcBadge(svc, 'lg')
     + `<span class="bc-sep">·</span>`
     + `<span class="ov-hint">경로를 선택하면 그 경로에 관련된 <b>파일 단위</b> 노드·관계를 보여줍니다</span>`;
   bc.querySelector('#bc-struct').addEventListener('click', () => setStructure(true));
@@ -2030,7 +2026,7 @@ function renderStructFiles() {
   bc.style.display = 'flex';
   bc.innerHTML = `<a class="bc-link" id="bc-struct">🏗️ 어플리케이션구조</a>`
     + `<span class="bc-sep">›</span>`
-    + `<a class="bc-link" id="bc-svc">${esc(svc)}</a>`
+    + `<a class="bc-link" id="bc-svc">${svcBadge(svc)}</a>`
     + `<span class="bc-sep">›</span>`
     + `<span class="bc-focus">📁 ${esc(key)}</span>`
     + `<span class="bc-sep">·</span>`
@@ -2118,7 +2114,7 @@ function renderStructFlow() {
   bc.style.display = 'flex';
   bc.innerHTML = `<a class="bc-link" id="bc-struct">🏗️ 어플리케이션구조</a>`
     + `<span class="bc-sep">›</span>`
-    + `<a class="bc-link" id="bc-svc">${esc(svc)}</a>`
+    + `<a class="bc-link" id="bc-svc">${svcBadge(svc)}</a>`
     + `<span class="bc-sep">›</span>`
     + `<a class="bc-link" id="bc-path">📁 ${esc(key)}</a>`
     + `<span class="bc-sep">›</span>`
@@ -2164,6 +2160,14 @@ function serviceHue(name) {
   return (h >>> 0) % 360;
 }
 
+// 서비스명 뱃지 — 커밋영향도(.imp-proj)와 동일 형태. 색은 serviceHue 로 인라인 지정.
+//   cls: 'lg' 면 카드 제목용 큰 사이즈.
+function svcBadge(name, cls) {
+  const h = serviceHue(name);
+  return `<span class="svc-tag${cls ? ' ' + cls : ''}" title="${escAttr(name)}" `
+    + `style="color:hsl(${h} 55% 38%);border-color:hsl(${h} 50% 55% / .45);background:hsl(${h} 70% 55% / .12)">${esc(name)}</span>`;
+}
+
 // 전체보기/하위 카드 타입 뱃지 — 화면/서비스/배치/외부/인프라
 function ovTag(label, cls) { return `<span class="ov-tag t-${cls}">${label}</span>`; }
 function isFrontendProject(svc) { return (MANIFEST?.projects || []).some(p => p.type === 'frontend' && p.name === svc); }
@@ -2175,7 +2179,7 @@ function makeServiceCard(svc, st, onClick) {
   const hue = serviceHue(svc);
   card.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
   const tag = isFrontendProject(svc) ? ovTag('화면', 'scr') : ovTag('서비스', 'svc');
-  card.innerHTML = `<div class="ov-svc-name"><span class="ov-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${esc(svc)}${tag}</div>`
+  card.innerHTML = `<div class="ov-svc-name">${svcBadge(svc, 'lg')}${tag}</div>`
     + `<div class="ov-svc-sub">${st.eps} endpoints · ${st.nodes} nodes</div>`;
   card.addEventListener('click', onClick || (() => setService(svc)));
   card.addEventListener('mouseenter', () => alignNeighbors('svc:' + svc));
@@ -2189,6 +2193,42 @@ function makeServiceCard(svc, st, onClick) {
 function monorepoOf(svc) {
   const p = (MANIFEST?.projects || []).find(x => x.name === svc);
   return p && p.repo && p.repo !== svc ? p.repo : null;
+}
+// 서비스(project) → 소속 main project. manifest repo(모노레포명)가 있으면 그 repo, 없으면(standalone)
+//   프로젝트 자기 이름이 곧 main project. → nexcore/tera-terafi 는 묶이고, 샘플은 각자 1개로 노출.
+function repoOf(svc) {
+  const p = (MANIFEST?.projects || []).find(x => x.name === svc);
+  return (p && p.repo) || svc;
+}
+// 전체보기 아래 하위 메뉴 대상 = 모든 main project(모노레포는 1개로 묶고, standalone 은 각자 1개).
+let _repoList = null;
+function repoList() {
+  if (_repoList) return _repoList;
+  const repos = new Set((META.projects || []).map(repoOf));
+  _repoList = [...repos].sort();
+  return _repoList;
+}
+function repoServices(repo) { return (META.projects || []).filter(s => repoOf(s) === repo); }
+
+// 전체보기 아래 main project 별 하위 메뉴 버튼을 데이터 기반으로 1회 생성
+function renderRepoSubs() {
+  const host = document.getElementById('repo-subs');
+  if (!host) return;
+  const repos = repoList();
+  host.innerHTML = '';
+  if (!repos.length) { host.classList.add('hidden'); return; }
+  host.classList.remove('hidden');
+  for (const r of repos) {
+    const n = repoServices(r).length;
+    const b = document.createElement('button');
+    b.className = 'nav-btn nav-sub nav-sub-repo';
+    b.dataset.repo = r;
+    b.title = `${r} 관련 서비스만 — sub-project ${n}개 + 직접 호출/피호출 서비스`;
+    b.style.setProperty('--repo-hue', serviceHue(r));
+    b.innerHTML = `<span class="nb-dot">📦</span><span class="nb-label">${svcBadge(r)}</span><span class="nb-cnt">${n}</span>`;
+    b.addEventListener('click', () => setOverview(true, r));
+    host.appendChild(b);
+  }
 }
 // wallga 모노레포 sub-project 를 Gradle 모듈 단위로 분해. 모듈(=node.module, src 제외) 2개 이상일 때만.
 //   모듈 없는(src/null) 노드는 '(기타)' 카드로 모은다. 분해 대상 아니면 null.
@@ -2219,7 +2259,7 @@ function makeServiceGroupCard(svc, mods) {
   wrap.style.setProperty('--svc-hue', hue);
   const head = document.createElement('div');
   head.className = 'ovg-head';
-  head.innerHTML = `<span class="ov-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${esc(svc)}`
+  head.innerHTML = svcBadge(svc, 'lg')
     + `<span class="ovg-tag">${monorepoOf(svc) ? esc(monorepoOf(svc)) + ' · ' : ''}${mods.length}모듈</span>`;
   wrap.appendChild(head);
   for (const md of mods) {
@@ -2286,22 +2326,6 @@ function makeInfraTypeCard(type, count) {
   return card;
 }
 
-// 전체보기: 배치 모듈을 진입 노드(tier 0)로 표현 — 클릭 시 진입 Job 기준 호출관계분석
-function makeBatchCard(b) {
-  const sup = 'batch:' + b.key;
-  const card = document.createElement('div');
-  card.className = 'node-card ov-infra nc-l-batch' + (sup === state.sel ? ' sel' : '');
-  card.dataset.node = sup;
-  const sub = b.modules > 1 ? `${b.modules} jobs · ${b.count} steps` : `${b.count} steps`;
-  card.innerHTML = `<div class="ov-svc-name"><span class="nc-icon">⏱️</span> ${esc(b.label)}${ovTag('배치', 'bat')}</div>`
-    + `<div class="ov-svc-sub">${sub}</div>`;
-  card.addEventListener('click', () => { if (b.jobId) setFocusFromOverview(b.jobId); });
-  card.addEventListener('mouseenter', () => alignNeighbors(sup));
-  card.addEventListener('mouseleave', () => clearAlign());
-  cardEls.set(sup, card);
-  return card;
-}
-
 // 전체보기 › 노드명 (전체보기 인프라/외부 노드에서 드릴다운한 경우)
 function renderFocusFromOverviewCrumb(n) {
   const bc = document.getElementById('breadcrumb');
@@ -2318,7 +2342,7 @@ function renderFocusFromServiceCrumb(n) {
   bc.style.display = 'flex';
   bc.innerHTML = `<a class="bc-link" id="bc-ov">🗺️ 전체보기</a>`
     + `<span class="bc-sep">›</span>`
-    + `<a class="bc-link" id="bc-svc">${esc(state.fromService)}</a>`
+    + `<a class="bc-link" id="bc-svc">${svcBadge(state.fromService)}</a>`
     + `<span class="bc-sep">›</span>`
     + `<span class="bc-focus">🎯 ${esc(n.method || state.focus)} 호출관계분석</span>`;
   bc.querySelector('#bc-ov').addEventListener('click', () => setOverview(true));
@@ -2636,7 +2660,8 @@ function pruneOrphans() {
   const connected = new Set();
   for (const e of currentEdges) { connected.add(e.source); connected.add(e.target); }
   if (state.focus) connected.add(state.focus);
-  for (const [id, el] of cardEls) el.classList.toggle('orphan-hidden', !connected.has(id));
+  // repo 한정 전체보기: 그 repo 소유 카드는 고립이어도 목록에 남긴다(sub-project 전체 표시).
+  for (const [id, el] of cardEls) el.classList.toggle('orphan-hidden', !connected.has(id) && !el.classList.contains('ov-repo-own'));
   // 비어버린 그룹 박스 숨김
   document.querySelectorAll('#columns .path-group').forEach(g => {
     g.classList.toggle('orphan-hidden', !g.querySelector('.node-card:not(.orphan-hidden):not(.hidden)'));
@@ -2903,8 +2928,7 @@ const CAT_LIMIT = 12;            // 카테고리당 상한 (menu 제외)
 
 // 메뉴(뷰 바로가기) — 정적. kw: 매칭 키워드(별칭 포함). act: navigateSearchItem 액션
 const SEARCH_MENUS = [
-  { ico: '🗺️', label: '전체보기(화면)', kw: '전체보기 화면 overview screen 지도 map 홈 home', act: { t: 'overview', kind: 'screen' } },
-  { ico: '⏱️', label: '전체보기(배치)', kw: '전체보기 배치 batch overview 스케줄 schedule', act: { t: 'overview', kind: 'batch' } },
+  { ico: '🗺️', label: '전체보기', kw: '전체보기 화면 overview screen 지도 map 홈 home', act: { t: 'overview' } },
   { ico: '🧾', label: '커밋 영향도', kw: '커밋 영향도 commit impact pr git', act: { t: 'view', view: 'commits' } },
   { ico: '🚀', label: '배포 영향도', kw: '배포 영향도 deploy release 릴리즈', act: { t: 'view', view: 'deploy' } },
   { ico: '📖', label: 'API 문서', kw: 'api 문서 openapi swagger docs', act: { t: 'view', view: 'api' } },
@@ -3036,7 +3060,7 @@ function navigateSearchItem(el) {
     case 'focus':     if (!nodeById.has(a.id)) return; setFocus(a.id, null); break;
     case 'service':   setService(a.svc); break;
     case 'infra':     setInfraType(a.type); break;
-    case 'overview':  setOverview(true, a.kind === 'batch' ? 'batch' : 'screen'); break;
+    case 'overview':  setOverview(true); break;
     case 'structure': setStructure(true); break;
     case 'view':      openView(a.view); break;
     case 'pr':        openView('deploy', { y: (a.d || '').slice(0, 4), m: (a.d || '').slice(5, 7), d: a.d, t: a.tk, pr: a.pr }); break;
@@ -3074,8 +3098,8 @@ function attachHandlers() {
     else clearFocus();
   });
   // 좌측 메뉴 = 해당 페이지로 이동 (토글 OFF 없음 — 다시 눌러도 그 페이지 유지)
-  document.getElementById('overview-btn').addEventListener('click', () => setOverview(true, 'screen'));
-  document.getElementById('overview-batch-btn').addEventListener('click', () => setOverview(true, 'batch'));
+  document.getElementById('overview-btn').addEventListener('click', () => setOverview(true));
+  renderRepoSubs();
   document.getElementById('structure-btn').addEventListener('click', () => setStructure(true));
   document.querySelectorAll('#nav .nav-btn[data-view]').forEach(b =>
     b.addEventListener('click', () => openView(b.dataset.view, b.dataset.st ? { st: b.dataset.st } : undefined)));
@@ -3226,7 +3250,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '56';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '57';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
@@ -3316,6 +3340,7 @@ window.Flowmap = {
   LAYER_CLASS, RES_ICON, KIND_COLOR, INFRA_LABEL, INFRA_ICON,
   // 유틸
   esc, escAttr, shortClass, methodClass, layerColor, kindClass, isInfra, infraGroup, byCallSite, pickLabelOf,
+  serviceHue, svcBadge,
   copyToClipboard, shareUrl, matches, markHit,
   // 렌더 빌딩블록 (카드/컬럼/그룹박스/BFS)
   makeCard, mkHead, appendGroupBox, renderGroupedBoxes, computeColumns,
