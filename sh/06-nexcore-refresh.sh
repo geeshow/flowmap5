@@ -7,5 +7,6 @@
 # Impact auto-skips when the nexcore repo has no git history.
 # Extra flags pass through, e.g. ./06-nexcore-refresh.sh --no-impact --impact-max 20
 . "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+build_step "$NX" "./gradlew -q installDist" "[06] build nexcore analyzer (flowmap-nexcore)"
 echo "──────── [06] nexcore refresh ────────" >&2
 bash "$NX/scripts/01-refresh.sh" "$@"

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Run the UNIFIED cross-repo pipeline in order (backend -> nexcore -> frontend -> sync -> verify).
+# Run the UNIFIED cross-repo pipeline in order (backend -> nexcore -> frontend -> sync -> deploy -> verify).
 #
-#   ./sh/run-all.sh                # full pipeline (stages 01..13)
+#   ./sh/run-all.sh                # full pipeline (stages 01..14)
 #   ./sh/run-all.sh 3 10           # a subset, e.g. backend merge + frontend join
 #   ./sh/run-all.sh 1 2 3 4 5      # backend only (no nexcore/sync/verify)
 #   ./sh/run-all.sh 6              # nexcore only
-#   ./sh/run-all.sh 12 13          # re-assemble web data + verify
+#   ./sh/run-all.sh 12 13 14       # re-assemble web data + deploy-sync + verify
 #
 # Stage scripts are named `<NN>-*.sh`; arguments may be given with or without the
 # leading zero (3 == 03). Any extra flags after a SINGLE stage number are passed

@@ -14,7 +14,8 @@
 #   06    nexcore refresh    -> independent backend graphs into flowmap-nexcore/json
 #   07-11 frontend           -> 10 join reads backend's _combined.json, 11 = PR impact
 #   12    sync               -> assembles web data from ALL THREE (must follow them)
-#   13    verify
+#   13    deploy-sync        -> deploy 영향도 데이터(data/deploy/) — manifest 확정 후라야 repo 조인 정합
+#   14    verify
 #
 # The sync (12) is a SINGLE spring `sync` call that assembles ONE web data dir from all
 # THREE analyzers' per-service staging trees: spring's own OUT_DIR plus the extra source
@@ -42,4 +43,15 @@ step() {  # $1 = script path, $2 = label
   echo "──────── $2 ────────" >&2
   [ -f "$1" ] || { echo "missing step script: $1" >&2; exit 2; }
   bash "$1"
+}
+
+# (re)build a delegated analyzer's CLI from its OWN source, with a header. Runs the
+# given build command from the analyzer dir so a source fix in that analyzer takes
+# effect before its stages run. Builds are INCREMENTAL (gradle installDist / tsc):
+# a near-instant no-op when sources are unchanged, a recompile when they changed —
+# so this is safe to run at the head of every block without slowing repeat runs.
+build_step() {  # $1 = analyzer dir, $2 = build command, $3 = label
+  echo "──────── $3 ────────" >&2
+  [ -d "$1" ] || { echo "missing analyzer dir: $1" >&2; exit 2; }
+  ( cd "$1" && eval "$2" )
 }
