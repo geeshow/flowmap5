@@ -52,16 +52,11 @@
     const p = n => String(n).padStart(2, '0');
     return `${p(d.getHours())}:${p(d.getMinutes())}`;
   }
-  // 프로젝트명 → 고정 색상(hue). 같은 프로젝트는 항상 같은 색.
-  // 접두사가 비슷해도(예: tera-cloud-*) 잘 흩어지도록 FNV-1a 해시로 섞는다.
-  function projectHue(name) {
-    let h = 2166136261;
-    for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return (h >>> 0) % 360;
-  }
+  // 프로젝트명 → 고정 색상(hue). 코어 FM.serviceHue 와 동일(뷰 간 색 일치 + 황금각 분배로 다양화).
+  function projectHue(name) { return FM.serviceHue(name); }
 
-  // PR 식별자('PR<번호>')는 화면에 '#<번호>'로 표시한다 (커밋 shortSha는 그대로).
-  function shaLabel(sha) { return /^PR\d+$/.test(sha) ? '#' + sha.slice(2) : sha; }
+  // PR 식별자('PR<번호>' 또는 repo 한정 'PR<번호>@<repo>')는 화면에 '#<번호>'로 표시(커밋 shortSha는 그대로).
+  function shaLabel(sha) { const m = /^PR(\d+)(?:@|$)/.exec(sha); return m ? '#' + m[1] : sha; }
   function shaChip(sha) {
     return `<span class="imp-sha">◆ ${FM.esc(shaLabel(sha))}</span>`;
   }
@@ -257,6 +252,8 @@
             if (part.repoUrl && !c._repoUrl) c._repoUrl = part.repoUrl;
             if (!c._project) c._project = proj;
             if (!c._shardBase) c._shardBase = shardBase;
+            // PR 키는 번호만으로는 repo 간 충돌(다른 repo의 동일 PR 번호) → repo(프로젝트)로 한정해 유니크화.
+            if (c._pull != null) c.shortSha = 'PR' + c._pull + '@' + (c._project || proj);
           });
         }
         return part;
@@ -417,7 +414,7 @@
       `<div class="imp-rail-title">변경이력 <span class="grid-count">${FM.esc(String(data.commitCount))}</span></div>`);
     const filter = el('input', 'imp-filter');
     filter.type = 'text';
-    filter.placeholder = '작성자 / 메시지 / 파일 필터…';
+    filter.placeholder = '작성자 / 메시지 / 서비스명 / PR 주소 검색…';
     filter.value = railFilter;
     head.appendChild(filter);
     rail.appendChild(head);
@@ -464,18 +461,17 @@
   function commitCard(c, selSet) {
     const on = selSet.has(c.shortSha);
     const card = el('div', 'imp-commit' + (on ? ' on' : ''));
+    // 검색 대상: 작성자 · 메시지 · sha/PR번호 · 서비스명(_project) · PR(커밋) 주소. (파일명은 샤드라 제외)
     card.dataset.search =
-      (c.author + ' ' + c.subject + ' ' + c.shortSha).toLowerCase();   // 파일명은 샤드라 필터 제외
+      [c.author, c.subject, c.shortSha, c._pull != null ? '#' + c._pull : '',
+       c._project, commitUrl(c)].filter(Boolean).join(' ').toLowerCase();
     card.dataset.day = fmtDay(c.date);
 
     const noCode = !c.changedNodeCount;
     const link = commitUrl(c);
     const proj = c._project || '';
     const h = projectHue(proj);
-    const projChip = proj
-      ? `<span class="imp-proj" title="${FM.escAttr(proj)}" ` +
-        `style="color:hsl(${h} 55% 38%);border-color:hsl(${h} 50% 55% / .45);background:hsl(${h} 70% 55% / .12)">${FM.esc(proj)}</span>`
-      : '';
+    const projChip = proj ? FM.svcBadge(proj) : '';   // 공통 서비스 뱃지(.svc-tag)
     card.innerHTML =
       `<span class="imp-dot" style="background:hsl(${h} 60% 62%)"></span>` +
       `<div class="imp-cbody">` +
@@ -855,10 +851,8 @@
           .localeCompare(FM.nodeById.get(b) && FM.nodeById.get(b).method || b));
       const hasChanged = ids.some(id => changedSha.has(id));
       const box = el('div', 'imp-svc-box' + (hasChanged ? ' has-changed' : ''));
-      const h = projectHue(area);
       const head = el('div', 'imp-svc-head',
-        `<span class="imp-proj" style="color:hsl(${h} 55% 38%);border-color:hsl(${h} 50% 55% / .45);` +
-          `background:hsl(${h} 70% 55% / .12)" title="${FM.escAttr(area)}">${FM.esc(area)}</span>` +
+        FM.svcBadge(area) +   // 공통 서비스 뱃지(.svc-tag)
         `<span class="imp-svc-count">${ids.length}</span>`);
       box.appendChild(head);
       const body = el('div', 'imp-svc-body');
@@ -990,8 +984,21 @@
   FM.impact = {
     // impact 데이터 로드(+commitBySha 채움). null=데이터 없음.
     ensure: ensureData,
-    // PR 번호 → 로드된 데이터에 존재하면 커밋 키('PR<번호>'), 없으면 null.
-    prKey(number) { const k = 'PR' + number; return commitBySha.has(k) ? k : null; },
+    // PR 번호(+repo) → 로드된 데이터의 커밋 키. repo 를 주면 그 repo(프로젝트) 의 PR 만 매칭한다
+    //   — 다른 repo 의 동일 PR 번호를 잘못 가져오지 않도록. repo 지정 후 매칭 실패 시 null(오매칭 방지).
+    prKey(number, repo) {
+      const want = String(number);
+      const matchRepo = c => c._project === repo
+        || (c._repoUrl && c._repoUrl.replace(/\/+$/, '').endsWith('/' + repo));
+      let any = null;
+      for (const [k, c] of commitBySha) {
+        if (c._pull == null || String(c._pull) !== want) continue;
+        if (!repo) return k;          // repo 미지정 → 첫 매칭(구 동작)
+        if (matchRepo(c)) return k;
+        any = any || k;
+      }
+      return repo ? null : any;
+    },
     // [container] 에 주어진 커밋/PR(shas)의 영향도 콘텐츠를 임베드 렌더. 커밋 영향도 URL 은 건드리지 않는다.
     async renderInto(container, shas, options) {
       options = options || {};

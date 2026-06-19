@@ -362,11 +362,16 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 .svc-badge-dot { width: 8px; height: 8px; border-radius: 50%; background: hsl(var(--bh) 60% 50%); }
 .column.ext-col { border-left: 1px dashed var(--border); padding-left: 24px; }
 
-/* 서비스명 뱃지 — 커밋영향도(.imp-proj)와 동일 형태. 색은 인라인(serviceHue) 지정.
+/* 서비스명 뱃지 — 공통 클래스. 색은 hue 변수 `--svc-h`(serviceHue)만 인라인으로 받고
+   채도/명도 공식은 여기 한 곳에서 관리(커밋영향도 레일·박스 칩도 동일 클래스 사용).
    기본 size 는 작게(메뉴/리스트), .lg 는 카드 제목용으로 키운다. */
 .svc-tag {
+  --svc-h: 210;
   display: inline-block; font-size: 10px; font-weight: 600; line-height: 1;
   padding: 3px 7px; border-radius: 6px; border: 1px solid;
+  color: hsl(var(--svc-h) 60% 36%);
+  border-color: hsl(var(--svc-h) 55% 55% / .5);
+  background: hsl(var(--svc-h) 72% 55% / .14);
   white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
 }
 .svc-tag.lg { font-size: 14px; padding: 5px 10px; border-radius: 7px; max-width: 100%; }
