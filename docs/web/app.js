@@ -1302,6 +1302,21 @@ function renderServiceView() {
     if (node) node.description = `${g.members.size}개 ${g.layer === 'SCREEN' ? '화면' : 'API'}`;
   }
 
+  // 같은 서비스 안 컴포넌트(예: acgoXXXX) 간 내부 호출을 base 그룹 노드 사이 엣지로 추가
+  //   → base 컬럼에서 컴포넌트들이 개별 노드로 분리되면서 서로의 연결관계(내부 호출)까지 표현된다.
+  const groupKeyOf = id => {
+    const n = nodeById.get(id);
+    if (!n || !n.project || isInfra(id, n)) return null;
+    return 'spath:' + n.project + ':' + pathKeyOf(n);
+  };
+  for (const e of EDGES) {
+    if (e.kind !== 'internal') continue;
+    const sn = nodeById.get(e.source), tn = nodeById.get(e.target);
+    if (!sn || !tn || sn.project !== svc || tn.project !== svc) continue;
+    const sg = groupKeyOf(e.source), tg = groupKeyOf(e.target);
+    if (sg && tg && sg !== tg && epIds.has(sg) && epIds.has(tg)) addEdge(sg, tg, e);
+  }
+
   // 서비스 카드용 통계(전체보기와 동일: endpoints / nodes)
   const stats = {};
   for (const s of META.projects) stats[s] = { eps: 0, nodes: 0 };
@@ -1420,7 +1435,8 @@ function renderServicePathDrill() {
   //   도달 시점의 엣지 kind(resource/external/s2s/join)를 써서 연결선 색이 의미를 갖게 한다.
   //   외부(EXTERNAL)는 join 으로 백엔드에 흡수되지 않은 "진짜 외부 api"(project 없음, isInfra)만 경계로 본다.
   //   join 으로 흡수된 프론트 ext 노드는 내부 취급해 화면→백엔드 엔드포인트로 곧장 잇는다.
-  const isB = id => { const n = nodeById.get(id); return !!n && (n.layer === 'SCREEN' || n.layer === 'CONTROLLER' || isInfra(id, n)); };
+  // 이 드릴 단계는 DB(테이블) 노드를 제외한다 — 화면/엔드포인트/외부·기타 인프라 경계만 표시.
+  const isB = id => { const n = nodeById.get(id); return !!n && (n.layer === 'SCREEN' || n.layer === 'CONTROLLER' || (isInfra(id, n) && infraGroup(id) !== 'db')); };
   const renderable = id => segOf.has(id) && reach.has(id) && isB(id);   // 컬럼에 실제로 그려지는 경계 노드
   // reach 로 제한한 전역 그래프에서 직접 축약 (collectChainFlow 의 MAX=200 엣지 절단을 피한다)
   const cAdj = new Map();
@@ -1753,8 +1769,9 @@ function renderOverview() {
       + `<span class="bc-sep">›</span>`
       + `<span class="bc-focus">${svcBadge(repo, 'lg')}</span>`
       + `<span class="bc-sep">·</span>`
-      + `<span class="ov-hint">sub-project <b>${n}</b>개(테두리) + 직접 `
-      + `<b style="color:var(--e-s2s)">호출/피호출</b> 서비스만</span>`;
+      + `<span class="ov-hint">sub-project <b>${n}</b>개(가운데) · 왼쪽 = 이 저장소를 `
+      + `<b style="color:var(--e-s2s)">호출</b> · 오른쪽 = 이 저장소가 `
+      + `<b style="color:var(--e-s2s)">호출</b></span>`;
     bc.querySelector('#ov-all-link').addEventListener('click', () => setOverview(true));
   } else {
     bc.innerHTML = `<span class="bc-focus">전체 서비스 지도</span>`
@@ -1806,8 +1823,21 @@ function renderOverview() {
   }
 
   const colsEl = document.getElementById('columns');
-  colsEl.className = 'overview';
+  colsEl.className = 'overview' + (repo ? ' repo-focus' : '');
   colsEl.innerHTML = '';
+
+  // repo 한정은 그 저장소를 가운데(컴포넌트 단위로 분해) 두고 호출(좌)·피호출(우) 로 좌우 팬아웃.
+  if (repo) {
+    const { el: centerCol, shown, edges: cedges } = renderRepoFocus(repo, repoOwn, stats, infraMembers, colsEl);
+    currentEdges = cedges.filter(e =>
+      !e.source.startsWith('batch:') && shown.has(e.source) && shown.has(e.target));
+    buildCurrentAdj();
+    requestAnimationFrame(() => {
+      pruneOrphans(); drawConnectors(); applyHighlight();
+      centerCol?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+    });
+    return;
+  }
 
   // 화면(프론트) 진입 기준 전체 맵 — repo 한정 시 그 repo 연관 서비스/인프라만 노출.
   const shown = sup => (!repoVisible || repoVisible.has(sup));
@@ -1866,6 +1896,134 @@ function renderOverview() {
   });
   buildCurrentAdj();
   requestAnimationFrame(() => { pruneOrphans(); drawConnectors(); applyHighlight(); });
+}
+
+// 노드 → 컴포넌트 키 (백엔드 acgoXXXX 등). fqcn 의 .biz. 컴포넌트 우선, 없으면 Gradle module.
+function compKeyOfNode(n) { return componentKeyOf(n) || (n.module && n.module !== 'src' ? n.module : null); }
+
+// repo 포커스 레이아웃: 선택 저장소를 가운데 열에 "컴포넌트(예: acgo0001~acgoXXXX) 개별 노드"로 펼치고,
+//   그 저장소를 호출하는 서비스는 왼쪽, 저장소가 호출하는 서비스/인프라는 오른쪽으로 좌우 팬아웃.
+//   컴포넌트 사이 내부 호출(internal)·컴포넌트↔외부 서비스/인프라 호출을 모두 컴포넌트 단위 엣지로 그린다.
+function renderRepoFocus(repo, repoOwn, stats, infraMembers, colsEl) {
+  const centerSvcs = new Set(repoServices(repo));   // 가운데에 펼칠 서비스(보통 1개, 모노레포면 여러 개)
+  // 가운데 서비스 노드는 컴포넌트 단위 super-id(comp:<svc>:<comp>), 그 외엔 일반 super-id.
+  //   컴포넌트를 못 정하는(배치 진입 등) 노드는 서비스 단위(svc:<svc>)로 폴백.
+  const csuper = id => {
+    const n = nodeById.get(id);
+    if (n && n.project && centerSvcs.has(n.project) && !isInfra(id, n) && !isExtCallNode(id, n) && n.layer !== 'BATCH') {
+      const ck = compKeyOfNode(n);
+      return ck ? 'comp:' + n.project + ':' + ck : 'svc:' + n.project;
+    }
+    return superId(id);
+  };
+
+  // 가운데 컴포넌트 노드 목록 + 통계 (endpoints / nodes)
+  const compStat = new Map();   // sup → { svc, ck, eps, nodes }
+  for (const n of NODES) {
+    if (!centerSvcs.has(n.project) || isInfra(n.id, n) || isExtCallNode(n.id, n) || n.layer === 'BATCH') continue;
+    const ck = compKeyOfNode(n);
+    const sup = ck ? 'comp:' + n.project + ':' + ck : 'svc:' + n.project;
+    const t = compStat.get(sup) || compStat.set(sup, { svc: n.project, ck: ck || n.project, eps: 0, nodes: 0 }).get(sup);
+    t.nodes++; if (n.layer === 'CONTROLLER' && n.endpoint) t.eps++;
+  }
+  const centerSet = new Set(compStat.keys());
+
+  // 컴포넌트 단위 엣지 집계 — 가운데에 닿는 엣지만(내부 호출은 컴포넌트↔컴포넌트만).
+  const agg = new Map();
+  for (const e of EDGES) {
+    if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external' && e.kind !== 'join' && e.kind !== 'internal') continue;
+    let ss = csuper(e.source); const st = csuper(e.target);
+    if (e.kind === 'join') {                          // 프론트 외부호출 source 를 그 프론트 서비스로 귀속
+      const sn = nodeById.get(e.source);
+      if (sn && sn.project && isExtCallNode(e.source, sn)) ss = 'svc:' + sn.project;
+    }
+    if (ss === st || ss.startsWith('batch:')) continue;
+    const sC = ss.startsWith('comp:'), tC = st.startsWith('comp:');
+    if (!sC && !tC) continue;                         // 가운데와 무관한 엣지 제외
+    if (e.kind === 'internal' && !(sC && tC)) continue;   // 내부 호출은 컴포넌트↔컴포넌트만
+    const tn = nodeById.get(e.target);
+    const extResolved = e.kind === 'external' && tn && tn.s2sService && st.startsWith('svc:');
+    const kc = e.kind === 's2s' || extResolved ? 's2s' : e.kind === 'join' ? 'join' : e.kind === 'internal' ? 'internal' : kindClass(e);
+    const key = ss + '|' + st + '|' + kc;
+    let a = agg.get(key);
+    if (!a) { a = { source: ss, target: st, kc, count: 0 }; agg.set(key, a); }
+    a.count++;
+  }
+  const cedges = [...agg.values()];
+
+  // 좌(가운데를 호출) / 우(가운데가 호출) 분류 — 양쪽이면 더 강한 방향(동률 → 좌).
+  const inCnt = new Map(), outCnt = new Map();
+  for (const e of cedges) {
+    const sC = centerSet.has(e.source), tC = centerSet.has(e.target);
+    if (tC && !sC) inCnt.set(e.source, (inCnt.get(e.source) || 0) + e.count);
+    if (sC && !tC) outCnt.set(e.target, (outCnt.get(e.target) || 0) + e.count);
+  }
+  const left = new Set(), right = new Set();
+  for (const sup of new Set([...inCnt.keys(), ...outCnt.keys()]))
+    ((inCnt.get(sup) || 0) >= (outCnt.get(sup) || 0) ? left : right).add(sup);
+
+  const cardFor = sup => {
+    if (sup.startsWith('svc:')) { const s = sup.slice(4); return stats[s] ? makeServiceCard(s, stats[s]) : null; }
+    if (sup.startsWith('infra:')) { const t = sup.slice(6); return makeInfraTypeCard(t, (infraMembers[t] || new Set()).size); }
+    return null;
+  };
+  const mkCol = (cls, headHtml, sups, cntMap) => {
+    const col = document.createElement('div');
+    col.className = 'column ' + cls;
+    const head = document.createElement('div');
+    head.className = 'column-head';
+    head.innerHTML = headHtml;
+    col.appendChild(head);
+    for (const sup of [...sups].sort((a, b) => (cntMap.get(b) || 0) - (cntMap.get(a) || 0))) {
+      const c = cardFor(sup); if (c) col.appendChild(c);
+    }
+    return col;
+  };
+
+  // 왼쪽 = 이 저장소를 호출하는 서비스
+  if (left.size) colsEl.appendChild(mkCol('repo-callers', '이 저장소를 <b style="color:var(--e-s2s)">호출</b> →', left, inCnt));
+
+  // 가운데 = 저장소 컴포넌트 개별 노드. 저장소 색 테두리로 강조.
+  const rh = serviceHue(repo);
+  const multi = centerSvcs.size > 1;
+  const center = document.createElement('div');
+  center.className = 'column repo-center';
+  center.style.setProperty('--repo-hue', rh);
+  const chead = document.createElement('div');
+  chead.className = 'column-head repo-center-head';
+  chead.innerHTML = svcBadge(repo, 'lg');
+  center.appendChild(chead);
+  const centerSups = [...compStat.keys()].sort((a, b) => {
+    const A = compStat.get(a), B = compStat.get(b);
+    return A.svc.localeCompare(B.svc) || A.ck.localeCompare(B.ck, undefined, { numeric: true });
+  });
+  for (const sup of centerSups) {
+    const info = compStat.get(sup);
+    const card = sup.startsWith('comp:') ? makeComponentCard(sup, info, multi) : makeServiceCard(info.svc, stats[info.svc]);
+    card.classList.add('ov-repo-own');
+    card.style.setProperty('--repo-hue', rh);
+    center.appendChild(card);
+  }
+  colsEl.appendChild(center);
+
+  // 오른쪽 = 저장소가 호출하는 서비스/인프라
+  if (right.size) colsEl.appendChild(mkCol('repo-callees', '→ 이 저장소가 <b style="color:var(--e-s2s)">호출</b>', right, outCnt));
+
+  return { el: center, shown: new Set([...centerSet, ...left, ...right]), edges: cedges };
+}
+
+// repo 포커스 가운데 컴포넌트(acgoXXXX 등) 카드 — 클릭하면 그 컴포넌트 경로 드릴(프로세스 흐름)로 이동.
+function makeComponentCard(sup, info, showSvc) {
+  const card = document.createElement('div');
+  card.className = 'node-card ov-svc ov-comp' + (sup === state.sel ? ' sel' : '');
+  card.dataset.node = sup;
+  card.innerHTML = `<div class="ov-svc-name"><span class="ov-comp-key">${esc(info.ck)}</span>${ovTag('컴포넌트', 'cmp')}</div>`
+    + `<div class="ov-svc-sub">${showSvc ? esc(info.svc) + ' · ' : ''}${info.eps} endpoints · ${info.nodes} nodes</div>`;
+  card.addEventListener('click', () => info.eps ? setSvcPath(info.svc, info.ck) : setService(info.svc));
+  card.addEventListener('mouseenter', () => alignNeighbors(sup));
+  card.addEventListener('mouseleave', () => clearAlign());
+  cardEls.set(sup, card);
+  return card;
 }
 
 // =========================================================================
