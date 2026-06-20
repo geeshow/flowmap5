@@ -372,7 +372,7 @@
         row.dataset.search = [t.id, t.summary, t.service, t.platform, t.createdBy, ...(t.prs || []).map((p) => p.title)]
           .filter(Boolean).join(' ').toLowerCase();
         const svc = t.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(t.service)}</span>` : (t.repo ? `<span class="dep-svc-tag no">미매핑</span>` : '');
-        const tWarn = (t.prs || []).some((p) => !p.merged_at) ? '<span class="dep-di-warn" title="Has un-merged PR(s)">⚠️</span>' : '';
+        const tWarn = (t.prs || []).some(isUnmergedPr) ? '<span class="dep-di-warn" title="Has un-merged PR(s)">⚠️</span>' : '';
         row.innerHTML =
           `<div class="dep-di-top"><span class="dep-di-id">#${FM.esc(String(t.id || ''))}</span><span class="dep-di-pr">${tWarn}🔀${t.prs.length}</span></div>` +
           `<div class="dep-di-summary">${FM.esc(t.summary)}</div>` +
@@ -456,19 +456,13 @@
       (peopleHtml ? `<div class="dep-mh-people">${peopleHtml}</div>` : '');
     main.appendChild(head);
 
-    // PR 목록
+    // PR 목록 — deploy_list 의 prs 가 number 만 있어도, pulls 인덱스에서 title/author/mergedAt/url 보강.
     const prSec = el('div', 'dep-section');
-    const unmergedCount = (tk.prs || []).filter((p) => !p.merged_at).length;
-    prSec.appendChild(el('div', 'dep-sec-head', `PR 목록 (${tk.prs.length})` +
-      (unmergedCount ? ` <span class="dep-sec-warn" title="${unmergedCount} un-merged PR(s)">⚠️ Unmerged ${unmergedCount}</span>` : '')));
-    if (!tk.prs.length) prSec.appendChild(el('div', 'dep-hint', '연결된 PR이 없습니다.'));
-    else {
-      const list = el('div', 'dep-pr-grid');
-      const ctx = { y, d, t: eff.ticketId, sel: eff.prNumber };
-      for (const p of tk.prs) list.appendChild(prCard(p, ctx));
-      prSec.appendChild(list);
-    }
+    const prHead = el('div', 'dep-sec-head', `PR 목록 (${tk.prs.length})`);
+    const prHost = el('div', 'dep-pr-grid');
+    prSec.append(prHead, prHost);
     main.appendChild(prSec);
+    renderPrList(prHead, prHost, tk, { y, d, t: eff.ticketId, sel: eff.prNumber }, seq);
 
     // 서비스 영향도 (풀폭) — 서비스 단위 연관관계
     const impSec = el('div', 'dep-section');
@@ -609,18 +603,59 @@
     sync();
   }
 
+  // PR 표시 메타데이터 보강용 — pulls 인덱스(<per-root>.pulls.json) 의 pulls[] 에는
+  //   number 별 title/author/mergedAt/url 이 모두 있으므로, deploy_list 의 prs 가 number 만
+  //   있어도 여기서 채운다. 인덱스는 ticket(repo)당 1회 로드 후 캐시.
+  const pullsMetaCache = new Map();
+  function pullsMeta(tk) {
+    const rel = pullsRelFor(tk);
+    if (!rel) return Promise.resolve(null);
+    if (pullsMetaCache.has(rel)) return pullsMetaCache.get(rel);
+    const p = FM.fetchData('data/' + rel).then((idx) => {
+      const m = new Map();
+      for (const e of (idx && idx.pulls) || []) m.set(String(e.number), e);
+      return m;
+    }).catch(() => null);
+    pullsMetaCache.set(rel, p);
+    return p;
+  }
+  // 보강 전(number 만) PR 은 "미머지"로 단정하지 않는다 — 메타가 하나라도 있는데 mergedAt 만 없을 때만.
+  function isUnmergedPr(p) { return !p.merged_at && !!(p.title || p.user || p.html_url); }
+  async function renderPrList(headEl, host, tk, ctx, seq) {
+    let prs = tk.prs || [];
+    // number 만 있고 표시 메타가 빠진 PR 이 하나라도 있으면 pulls 인덱스에서 보강
+    if (prs.some((p) => p.number != null && (!p.title || !p.user || !p.merged_at || !p.html_url))) {
+      const meta = await pullsMeta(tk);
+      if (renderSeq !== seq) return;
+      if (meta) prs = prs.map((p) => {
+        const m = meta.get(String(p.number));
+        return m ? { number: p.number,
+          title: p.title || m.title, user: p.user || m.author,
+          merged_at: p.merged_at || m.mergedAt, html_url: p.html_url || m.url } : p;
+      });
+    }
+    const unmergedCount = prs.filter(isUnmergedPr).length;
+    headEl.innerHTML = `PR 목록 (${prs.length})` +
+      (unmergedCount ? ` <span class="dep-sec-warn" title="${unmergedCount} un-merged PR(s)">⚠️ Unmerged ${unmergedCount}</span>` : '');
+    host.innerHTML = '';
+    if (!prs.length) { host.appendChild(el('div', 'dep-hint', '연결된 PR이 없습니다.')); return; }
+    for (const p of prs) host.appendChild(prCard(p, ctx));
+  }
+
   function prCard(p, ctx) {
     const on = ctx && String(p.number) === String(ctx.sel);
-    const merged = !!p.merged_at;   // 머지 시각이 없으면 아직 머지되지 않은 PR
-    const card = el('div', 'dep-prc' + (on ? ' sel' : '') + (merged ? '' : ' warn'));
+    const merged = !!p.merged_at;       // 머지 시각이 있으면 머지된 PR
+    const unmerged = isUnmergedPr(p);   // 메타가 있는데 mergedAt 만 없을 때만 "미머지"로 확정(number-only 는 미확정)
+    const card = el('div', 'dep-prc' + (on ? ' sel' : '') + (unmerged ? ' warn' : ''));
     const num = p.number != null ? '#' + p.number : '';
-    const warnBadge = merged ? '' : '<span class="dep-prc-warn" title="Not merged — verify it is actually included in this deploy">⚠️ Unmerged</span>';
+    const warnBadge = unmerged ? '<span class="dep-prc-warn" title="Not merged — verify it is actually included in this deploy">⚠️ Unmerged</span>' : '';
+    const byLine = merged ? FM.esc(fmtTime(p.merged_at)) : (unmerged ? '<span class="dep-prc-unmerged">Unmerged</span>' : '');
     card.innerHTML =
       (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '') +
       `<div class="dep-prc-top"><span class="dep-prc-numwrap"><span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}</span>` +
       `<span class="dep-prc-detail" data-act="detail">${on ? '▾ 영향도' : '영향도 보기 ↓'}</span></div>` +
       `<div class="dep-prc-title">${FM.esc(p.title || '')}</div>` +
-      `<div class="dep-prc-by">${FM.esc(p.user || '')} · ${merged ? FM.esc(fmtTime(p.merged_at)) : '<span class="dep-prc-unmerged">Unmerged</span>'}</div>`;
+      `<div class="dep-prc-by">${p.user ? FM.esc(p.user) + (byLine ? ' · ' : '') : ''}${byLine}</div>`;
     // PR 클릭 → 배포 영향도 안에서 pr= 선택 (커밋 영향도 뷰로 이동하지 않음). GitHub 링크는 통과.
     const go = (ev) => { if (ev.target.closest('.dep-prc-gh')) return; if (p.number != null) nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) }); };
     card.onclick = go;

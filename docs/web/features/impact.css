@@ -124,6 +124,19 @@
   color: var(--text-dim);
   margin-top: 2px;
 }
+/* PR 상태 뱃지 (커밋 영향도 레일) — merged/open/closed/draft 색 구분 */
+.imp-prstatus {
+  flex-shrink: 0;
+  font-size: 9px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--prs, #64748b) 16%, #fff);
+  color: color-mix(in srgb, var(--prs, #475569) 80%, #14213a);
+  border: 1px solid color-mix(in srgb, var(--prs, #64748b) 38%, transparent);
+}
+.imp-prstatus.st-merged { --prs: #8957e5; }
+.imp-prstatus.st-open   { --prs: #1a7f37; }
+.imp-prstatus.st-closed { --prs: #cf222e; }
+.imp-prstatus.st-draft  { --prs: #6e7781; }
 .imp-time {
   margin-left: auto;
   flex-shrink: 0;
