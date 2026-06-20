@@ -8,6 +8,17 @@
   const MAX_HOP = 3;       // 경계 투영 최대 표시 단계 (1/2/3차 버튼 상한)
   let hopDepth = 1;        // 현재 표시 단계 — 기본 1차(직접 변경 엔드포인트 + 1차 연결 포인트만)
 
+  // PR 상태 뱃지 — PR 분석기가 채운 status(merged/open/closed/draft…) 를 색 뱃지로.
+  const PR_STATUS = {
+    merged: 'Merged', open: 'Open', closed: 'Closed', draft: 'Draft',
+  };
+  function prStatusBadge(status) {
+    if (!status) return '';
+    const key = String(status).toLowerCase();
+    const label = PR_STATUS[key] || status;
+    return `<span class="imp-prstatus st-${FM.esc(key)}">${FM.esc(label)}</span>`;
+  }
+
   // 커밋 링크 — impact.json이 커밋마다 제공하는 commitUrl(저장소의 해당 커밋 페이지)을 그대로 쓴다.
   // 없으면 top-level repoUrl + '/commit/<sha>' 로 폴백, 그것도 없으면 링크 버튼을 숨긴다.
   function commitUrl(c) {
@@ -198,6 +209,8 @@
         author: p.author,
         date: p.mergedAt,
         subject: p.title,
+        // PR 상태(merged/open/closed/draft…) — PR 분석기가 채운다. 없으면 mergedAt 유무로 폴백.
+        _prStatus: p.status || (p.mergedAt ? 'merged' : null),
         commitUrl: repo ? repo + '/pull/' + p.number : null,
         changedNodeCount: p.changedNodeCount != null ? p.changedNodeCount
           : (Array.isArray(p.changedNodes) ? p.changedNodes.length : 0),
@@ -476,6 +489,7 @@
       `<span class="imp-dot" style="background:hsl(${h} 60% 62%)"></span>` +
       `<div class="imp-cbody">` +
         `<div class="imp-crow1">${projChip}<span class="imp-csha">${FM.esc(c._pull != null ? '#' + c._pull : c.shortSha)}</span>` +
+          (c._pull != null ? prStatusBadge(c._prStatus) : '') +
           `<span class="imp-time">${FM.esc(fmtTime(c.date))}</span></div>` +
         `<div class="imp-csubj" title="${FM.escAttr(c.subject)}">${FM.esc(c.subject)}</div>` +
         (c.author ? `<div class="imp-cauthor">👤 ${FM.esc(c.author)}</div>` : '') +
