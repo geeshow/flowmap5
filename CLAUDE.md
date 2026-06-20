@@ -32,7 +32,14 @@
 - **위치**: `docs/web/data/` (**`.gitignore` 대상 — git 추적 안 됨, 파이프라인 재생성 산출물**).
   `data/manifest.json` 을 로드(프로젝트별 독립 그래프 병합),
   없으면 `data/graph.json` 폴백(현재 없음). `.gz` 있으면 우선 사용(DecompressionStream).
-- 프로젝트별: `<svc>.json`(그래프), `<svc>.openapi.json`(API 문서), 각 `.gz`.
+- **레이아웃(중요)**: 산출물은 실제 git namespace/repo 를 따라 중첩됨 —
+  `data/projects/<git-namespace>/<git-repo>/<per-root>/<per-root>.{json,openapi.json,impact.json,pulls.json,gateway.json,join.json,screens.json}`.
+  세 분석기 모두 동일 트리(스테이징도 각 `json/projects/<ns>/<repo>/<per-root>/`)에 출력.
+  - namespace/repo 도출: 소스가 자체 git repo면 origin remote 의 owner/repo. 분석기 자신의 repo 에
+    묻어온 번들 샘플은 `samples/<dir>`. nexcore(remote 없는 단일 work-tree)는 `nexcore/<bizunit>`.
+  - manifest 각 엔트리에 **`namespace`**(owner)·**`repo`**(repo명) 필드. `repo` 는 모노레포 그룹핑
+    (app.js `monorepoOf`/`repoOf`)·deploy 조인(`git_repository`)에 사용, 경로 필드는 `data/` 상대.
+- 웹앱은 manifest 의 경로 문자열을 그대로 따라가 파일을 로드하고 프로젝트를 `name`(=per-root, 전역 유일)로 식별.
 - **배포 영향도 데이터**: `data/deploy/` — `index.json`·`pr_index.json`(년/일 인덱스) +
   `<년도>/<날짜>/deploy_list.json`·`pr_list.json`. `features/deploy.js` 가 로드(지연). PR→`view=commits` 딥링크.
 - **생성 파이프라인**: `sh/` 스크립트 — `sh/run-all.sh` 가 단계 01~14 오케스트레이션
