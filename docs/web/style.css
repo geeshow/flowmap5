@@ -423,6 +423,15 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
   outline-offset: 3px; border-radius: 8px;
   box-shadow: 0 0 0 5px hsl(var(--repo-hue, 210) 70% 50% / .12);
 }
+/* repo 포커스 — 선택 저장소를 가운데(컴포넌트 단위 분해), 호출(좌)·피호출(우) 로 좌우 팬아웃 */
+#columns.overview.repo-focus { align-items: center; gap: 130px; }
+#columns.overview.repo-focus .column.repo-center { align-items: center; }
+.node-card.ov-comp .ov-comp-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; letter-spacing: .2px; }
+.ov-tag.t-cmp { --tc: #0891b2; }
+.repo-center-head { display: flex; justify-content: center; padding-bottom: 4px; }
+#columns.overview.repo-focus .column.repo-callers { align-items: flex-end; }
+#columns.overview.repo-focus .column.repo-callers .column-head { text-align: right; }
+#columns.overview.repo-focus .column.repo-callees .column-head { text-align: left; }
 /* 카드 타입 뱃지 (화면/서비스/배치/외부/인프라) — 이름 행 우측 정렬 */
 .ov-tag {
   margin-left: auto; flex: none; font-size: 9px; font-weight: 800; letter-spacing: .3px;
