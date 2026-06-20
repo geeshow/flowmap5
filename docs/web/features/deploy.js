@@ -63,7 +63,9 @@
     const [idx, pidx] = await Promise.all([FM.fetchData(BASE + 'index.json'), FM.fetchData(BASE + 'pr_index.json')]);
     if (!idx && !pidx) { indexData = null; return null; }
     const byDate = new Map();
-    for (const q of (idx && idx.queries) || []) byDate.set(q.date, { date: q.date, deployCount: q.deployCount || 0, deployStatus: q.status, deployFile: q.file, prCount: 0, ticketCount: 0 });
+    // 신포맷: deploy_list 가 PR 까지 포함 → index.json 에 prCount/ticketCount 가 함께 올 수 있다.
+    //   구포맷: pr_index.json(entries) 이 별도로 카운트/파일을 제공(아래 루프에서 덮어씀).
+    for (const q of (idx && idx.queries) || []) byDate.set(q.date, { date: q.date, deployCount: q.deployCount || 0, deployStatus: q.status, deployFile: q.file, prCount: q.prCount || 0, ticketCount: q.ticketCount || 0 });
     for (const e of (pidx && pidx.entries) || []) {
       const r = byDate.get(e.date) || { date: e.date, deployCount: 0 };
       r.prCount = e.prCount || 0; r.ticketCount = e.ticketCount || 0; r.prStatus = e.status; r.prFile = e.file;
@@ -137,9 +139,10 @@
     const tickets = []; const seen = new Set();
     const model = (t, dep) => {
       const cat = (dep && dep.catalog_project) || {};
-      const org = (t && t.git_organization) || cat.git_organization || '';
-      const repo = (t && t.git_repository) || cat.git_repository || '';
-      const projectName = cat.project_name || '';
+      // git/PR 정보는 신포맷(deploy_list 항목에 직접 포함) → 구포맷(pr_list by_ticket / catalog_project) 순으로 읽는다.
+      const org = (t && t.git_organization) || (dep && dep.git_organization) || cat.git_organization || '';
+      const repo = (t && t.git_repository) || (dep && dep.git_repository) || cat.git_repository || '';
+      const projectName = (dep && dep.project_name) || cat.project_name || '';
       return {
         id: (t && t.release_ticket_id) || (dep && dep.release_ticket_id),
         summary: (t && t.summary) || (dep && dep.summary) || '(제목 없음)',
@@ -153,7 +156,7 @@
         businessMonitorBy: (dep && dep.business_monitor_by) || '',
         org, repo, projectName,
         status: normStatus((dep && dep.ticket_step) || (t && t.ticket_step)),
-        prs: (t && t.prs) || [],
+        prs: (t && t.prs) || (dep && dep.prs) || [],
         service: mapRepoToService(repo, projectName, projs),
       };
     };
@@ -305,8 +308,8 @@
     const box = el('div', 'browse-empty dep-empty',
       '<div class="be-ico">🚀</div>' +
       '<div class="be-msg">배포 영향도 데이터가 없습니다<br>' +
-      '<span class="hint"><code>docs/web/data/deploy/</code> 에 <code>index.json</code> · <code>pr_index.json</code> ·' +
-      ' <code>&lt;년도&gt;/&lt;날짜&gt;/deploy_list.json</code> · <code>pr_list.json</code> 을 넣은 뒤 새로고침하세요.</span></div>' +
+      '<span class="hint"><code>docs/web/data/deploy/</code> 에 <code>index.json</code> ·' +
+      ' <code>&lt;년도&gt;/&lt;날짜&gt;/deploy_list.json</code>(PR·git 정보 포함) 을 넣은 뒤 새로고침하세요.</span></div>' +
       '<div class="be-actions"><button class="btn" data-dep-home>🗺️ 전체보기로</button></div>');
     box.querySelector('[data-dep-home]').onclick = () => FM.setOverview(true);
     cols.appendChild(box);

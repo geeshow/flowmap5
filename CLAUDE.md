@@ -18,7 +18,7 @@
 정적 자산은 버전 쿼리로 캐시 관리. 안 올리면 브라우저가 옛 파일을 씀.
 - `docs/web/index.html`: `style.css?v=NN`, `app.js?v=NN`
 - `docs/web/app.js`: `const FEATURE_VER = 'NN'` — `features/*.js`·`features/*.css` 모듈 캐시키
-- **현재 값**: style.css `v=75`, app.js `v=169`, FEATURE_VER `61`
+- **현재 값**: style.css `v=75`, app.js `v=170`, FEATURE_VER `62`
 
 ## 핵심 파일
 
@@ -40,8 +40,10 @@
   - manifest 각 엔트리에 **`namespace`**(owner)·**`repo`**(repo명) 필드. `repo` 는 모노레포 그룹핑
     (app.js `monorepoOf`/`repoOf`)·deploy 조인(`git_repository`)에 사용, 경로 필드는 `data/` 상대.
 - 웹앱은 manifest 의 경로 문자열을 그대로 따라가 파일을 로드하고 프로젝트를 `name`(=per-root, 전역 유일)로 식별.
-- **배포 영향도 데이터**: `data/deploy/` — `index.json`·`pr_index.json`(년/일 인덱스) +
-  `<년도>/<날짜>/deploy_list.json`·`pr_list.json`. `features/deploy.js` 가 로드(지연). PR→`view=commits` 딥링크.
+- **배포 영향도 데이터**: `data/deploy/` — `index.json`(년/일 인덱스) +
+  `<년도>/<날짜>/deploy_list.json`(배포 항목에 **PR 목록·git repo 정보 인라인 포함** — 별도 `pr_list.json`
+  없음). `features/deploy.js` 가 로드(지연). PR→`view=commits` 딥링크. (구포맷 `pr_index.json`·`pr_list.json`
+  by_ticket 도 있으면 읽는 하위호환 유지.)
 - **생성 파이프라인**: `sh/` 스크립트 — `sh/run-all.sh` 가 단계 01~14 오케스트레이션
   (backend pull→analyze→merge→~~openapi~~→impact → **nexcore refresh** → frontend refresh→analyze→screens→join→**impact** → sync → **deploy-sync** → verify).
   - **04 openapi 는 비활성** — `sh/04-backend-openapi.sh.disabled` 로 이름 변경되어 글롭 제외(되돌리려면 `.disabled` 제거).
