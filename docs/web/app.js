@@ -2012,14 +2012,31 @@ function renderRepoFocus(repo, repoOwn, stats, infraMembers, colsEl) {
   }
   const centerSet = new Set(compStat.keys());
 
+  // join 엣지의 프론트 source(=ext 호출 노드)는 module 이 없어 컴포넌트를 못 정한다(예 $axios).
+  //   → 그 ext 노드를 "내부에서 호출하는" 가운데 노드(store 등)의 컴포넌트로 귀속시킨다.
+  //   이게 없으면 ss 가 svc:<front>(서비스 단위)로 떨어져 comp: 가운데 노드와 안 닿아 엣지가 통째로 드롭되고,
+  //   프론트→백엔드 호출 서비스가 오른쪽 컬럼에서 사라진다.
+  const extComp = new Map();   // ext 호출 노드 id → 그 노드를 호출하는 가운데 컴포넌트 키
+  for (const e of EDGES) {
+    const tn = nodeById.get(e.target);
+    if (!tn || !isExtCallNode(e.target, tn) || !centerSvcs.has(tn.project)) continue;
+    const sn = nodeById.get(e.source);
+    if (!sn || !centerSvcs.has(sn.project)) continue;
+    const ck = compKeyOfNode(sn);
+    if (ck && !extComp.has(e.target)) extComp.set(e.target, ck);
+  }
+
   // 컴포넌트 단위 엣지 집계 — 가운데에 닿는 엣지만(내부 호출은 컴포넌트↔컴포넌트만).
   const agg = new Map();
   for (const e of EDGES) {
     if (e.kind !== 's2s' && e.kind !== 'resource' && e.kind !== 'external' && e.kind !== 'join' && e.kind !== 'internal') continue;
     let ss = csuper(e.source); const st = csuper(e.target);
-    if (e.kind === 'join') {                          // 프론트 외부호출 source 를 그 프론트 서비스로 귀속
+    if (e.kind === 'join') {                          // 프론트 외부호출 source 를 그 프론트 컴포넌트(없으면 서비스)로 귀속
       const sn = nodeById.get(e.source);
-      if (sn && sn.project && isExtCallNode(e.source, sn)) ss = 'svc:' + sn.project;
+      if (sn && sn.project && isExtCallNode(e.source, sn)) {
+        const ck = centerSvcs.has(sn.project) ? (compKeyOfNode(sn) || extComp.get(e.source)) : null;
+        ss = ck ? 'comp:' + sn.project + ':' + ck : 'svc:' + sn.project;
+      }
     }
     if (ss === st || ss.startsWith('batch:')) continue;
     const sC = ss.startsWith('comp:'), tC = st.startsWith('comp:');
@@ -3577,7 +3594,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '97';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '98';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }

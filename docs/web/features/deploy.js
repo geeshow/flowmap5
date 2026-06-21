@@ -37,6 +37,7 @@
   let renderSeq = 0;
   let railFilter = '';           // 레일 텍스트 필터(담당자/요약/서비스/#ID) — 재렌더 간 유지
   let bottomTab = 'impact';      // 하단 탭 선택 기억 — PR 전환(재렌더) 후에도 같은 탭을 유지
+  let scrollMemo = null;         // 같은 컨텍스트(년/월/상태) 안 재렌더 시 복원할 {rail, main} 스크롤 위치
   const siExpanded = new Set();  // 서비스 영향도: 펼친 이웃 서비스 키('lo:'/'ro:' + svc) — 기본 접힘
   let depMain = null;            // 우측 메인 패널(.dep-main) — PR 타임라인↔목록 커넥터 앵커
   window.addEventListener('resize', () => { if (depMain) requestAnimationFrame(drawPrConnector); });
@@ -263,9 +264,19 @@
     return months[0] || tm;
   }
   // 일반 이동은 현재 상태(st)를 유지. 상태 탭/하위메뉴는 st 를 명시(전체='')해 덮어쓴다.
+  // 같은 레일 목록을 보여주는 컨텍스트 키 — 년/월/상태가 같으면 배포 선택만 바뀐 것(레일 내용 동일).
+  function ctxKey() { return curYear() + '|' + curMonth() + '|' + (curStatus() || ''); }
+
   function nav(params) {
     if (!('st' in params)) { const st = curStatus(); if (st) params = Object.assign({ st }, params); }
-    FM.pushViewUrl('deploy', params); render();
+    // 배포 클릭(=같은 컨텍스트 내 선택 변경)이면 재렌더로 레일/메인이 새로 그려지며 스크롤이 0으로
+    //   리셋돼 화면이 상단으로 튄다. 컨텍스트가 그대로면 직전 스크롤 위치를 기억해 복원한다.
+    const prevKey = ctxKey();
+    const rail = document.querySelector('.dep-rail'), main = document.querySelector('.dep-main');
+    FM.pushViewUrl('deploy', params);
+    scrollMemo = (rail && ctxKey() === prevKey)
+      ? { rail: rail.scrollTop, main: main ? main.scrollTop : 0 } : null;
+    render();
   }
 
   // URL 파라미터(d/t/pr)가 있으면 그대로, 없으면 기본값(첫 배포일·첫 배포·첫 PR)을 채운 "유효 선택".
@@ -359,6 +370,11 @@
       drawBreadcrumb(eff);
       renderRail(rail, shownByDate, eff, counts);
       renderMain(main, shownByDate, eff, seq);
+      // 같은 컨텍스트 재렌더면 직전 스크롤 위치 복원(콘텐츠 높이가 짧으면 브라우저가 자동 clamp).
+      if (scrollMemo) {
+        const memo = scrollMemo; scrollMemo = null;
+        requestAnimationFrame(() => { rail.scrollTop = memo.rail; main.scrollTop = memo.main; });
+      }
     });
   }
 
