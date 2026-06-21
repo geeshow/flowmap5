@@ -3068,20 +3068,30 @@ function alignNeighbors(id) {
   // 이번 hover와 무관한 잔상 복귀
   resetMovers();
   const hCenter = baseCenterOf(hc);
+  const hr = hc.getBoundingClientRect();
+  const hHalf = hr.height / 2;
 
-  // 같은 컬럼에 이웃이 여럿이면 hover 행 주변으로 카드 한 장 높이씩 분산 (겹침 방지)
+  // 이웃을 hover 행에 맞춰 띄우되, hover(선택) 노드와 "가로로 겹치는" 컬럼은 노드를 덮어 가리므로
+  //   노드 바로 아래에 한 장씩 쌓아 정렬한다(임팩트 그래프처럼 컬럼이 가로로 겹칠 때, 떠오른 카드가
+  //   커서를 가로채 노드가 위아래로 진동하던 문제 방지). 가로로 안 겹치면 기존처럼 hover 행 중심 정렬.
   for (const [col, cards] of byCol) {
     cards.sort((a, b) => baseCenterOf(a) - baseCenterOf(b));
     const n = cards.length;
-    const row = cards[0].getBoundingClientRect().height + 10;   // 카드 행 간격 (박스 높이가 아니라 카드 높이 기준)
-    const plan = cards.map((el, i) => ({ el, anchor: baseCenterOf(el), center: hCenter + (i - (n - 1) / 2) * row }));
-    // hover 노드가 상단이면 목표가 컬럼 헤더 위로 벗어남 → 헤더 아래로 전체 보정
+    const cr = cards[0].getBoundingClientRect();
+    const overlapsX = cr.left < hr.right && cr.right > hr.left;   // 이 컬럼이 hover 노드와 가로로 겹치나?
+    const row = cards[0].getBoundingClientRect().height + 10;     // 카드 행 간격 (카드 높이 기준)
+    const belowStart = hCenter + hHalf + 10 + row / 2;            // 겹칠 때: 노드 바로 아래에서 시작
+    const plan = cards.map((el, i) => ({
+      el, anchor: baseCenterOf(el),
+      center: overlapsX ? belowStart + i * row : hCenter + (i - (n - 1) / 2) * row,
+    }));
+    // 목표가 컬럼 헤더 위로 벗어나면 헤더 아래로 전체 보정(아래로만)
     const head = col.querySelector('.column-head');
     const minY = (head ? head.getBoundingClientRect().bottom : col.getBoundingClientRect().top) + 6 * z;
     let push = 0;
     for (const p of plan) push = Math.max(push, minY - (p.center - row / 2));
     for (const p of plan) {
-      const delta = (p.center + push - p.anchor) / z;          // 카드를 hover 행에 맞춰 띄움
+      const delta = (p.center + push - p.anchor) / z;          // 카드를 목표 위치로 띄움
       p.el.classList.add('aligning', 'card-lift');
       p.el.style.transform = `translateY(${delta.toFixed(1)}px)`;
     }
@@ -3428,6 +3438,14 @@ function attachHandlers() {
   });
   document.addEventListener('keydown', onKeydown);
 
+  // 프로세스 흐름 독이 열린 상태에서 메인 배경(노드/브레드크럼/분석바/독 외 빈 영역) 클릭 → 독 닫기.
+  document.getElementById('flow-canvas').addEventListener('click', (e) => {
+    const dock = document.getElementById('process-dock');
+    if (!dock || dock.classList.contains('hidden')) return;                  // 독이 닫혀 있으면 무시
+    if (e.target.closest('.node-card, #breadcrumb, #analysis-bar, #process-dock')) return;  // 인터랙티브 요소 제외
+    if (state.service) setServicePick(state.svcPick); else setSel(null);     // 독 ✕ 와 동일한 닫기 동작
+  });
+
   // 트랙패드 핀치(ctrlKey wheel) → 확대/축소. 일반 휠/투핑거 스크롤은 패닝(기본 동작 유지)
   const flow = document.getElementById('flow');
   flow.addEventListener('wheel', e => {
@@ -3559,7 +3577,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '82';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '86';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }

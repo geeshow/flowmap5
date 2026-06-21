@@ -534,8 +534,10 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 .node-card.picked { box-shadow: 0 0 0 2px #38bdf8, 0 0 14px rgba(56, 189, 248, .45); }
 /* hover 시 연결 노드(또는 그룹 박스)를 같은 행으로 부드럽게 이동 */
 .node-card.aligning { transition: transform .2s cubic-bezier(.4, 0, .2, 1), box-shadow .12s, opacity .12s; z-index: 6; }
-/* hover 행으로 떠오른 이웃 카드 — 박스 안 다른 카드 위로 떠 보이게 */
-.node-card.card-lift { z-index: 40; box-shadow: 0 8px 24px rgba(0,0,0,.7), 0 0 0 1px #475569; }
+/* hover 행으로 떠오른 이웃 카드 — 박스 안 다른 카드 위로 떠 보이게.
+   pointer-events:none: 떠오른 카드가 hover 중인 노드(=커서 위치) 위로 이동해도 포인터를 가로채지 않게 한다.
+   (가로채면 mouseenter→정렬 리셋→원노드 hover 복귀가 반복돼 노드가 위아래로 진동했음) */
+.node-card.card-lift { z-index: 40; box-shadow: 0 8px 24px rgba(0,0,0,.7), 0 0 0 1px #475569; pointer-events: none; }
 .path-group.aligning-box { transition: transform .2s cubic-bezier(.4, 0, .2, 1); position: relative; z-index: 6; }
 /* 미선택 박스 전체를 투명하게 (박스 단위 dim) */
 .path-group { transition: opacity .15s; }
