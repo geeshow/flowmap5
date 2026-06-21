@@ -163,7 +163,7 @@
     let tasks;
     if (rawTasks) {
       tasks = rawTasks.map((rt) => {
-        const gr = (rt.catalog_component && rt.catalog_component.git_repo) || {};
+        const gr = (rt.git_repo && rt.catalog_component.git_repo) || {};
         let org = gr.org || '', repo = gr.repo || '';
         // PR 객체 전체 필드(html_url 등)를 유지 — pulls/impact 임팩트가 없어도 PR 기능을 표시하기 위함.
         const prs = (rt.prs || []).map((p) => ({ ...p, _org: org, _repo: repo }));
@@ -775,17 +775,14 @@
     for (const t of (tk.tasks || [])) if (t.repo && !repoTasks.some((x) => x.repo === t.repo)) repoTasks.push({ org: t.org, repo: t.repo });
     const perRepo = repoTasks.map(({ org, repo }) => {
       const meta = metaByRepo.get(RK(org, repo));
-      const indexList = (meta && meta.list) || [];                      // pulls 인덱스(신청 전 컨텍스트용)
-      const idxByNum = new Map(indexList.map((e) => [String(e.number), e]));
-      // 후보 PR = pulls 인덱스 전체 ∪ 이 repo 의 deploy PR(number-only면 인덱스로 보강, full이면 merged_at 그대로).
-      //   → 인덱스가 없어도 deploy PR 에 시각이 있으면 타임라인에 표시된다.
+      const indexList = (meta && meta.list) || [];                      // <repo>.pulls.json 의 pulls[]
+      // 후보 PR = 이 repo 의 pulls 인덱스 전체. deploy_list 의 prs 는 사용하지 않는다.
+      //   PR 타임라인 시각: status=merged → mergedAt, status=open → updatedAt(그 외는 mergedAt→updatedAt 폴백).
       const cand = new Map();
-      for (const e of indexList) { const at = tms(e.mergedAt); if (at != null) cand.set(String(e.number), { number: e.number, title: e.title, at }); }
-      for (const t of (tk.tasks || [])) if (t.repo === repo) for (const p of t.prs) {
-        const k = String(p.number), m = idxByNum.get(k), prev = cand.get(k);
-        const at = tms(p.merged_at) || (m ? tms(m.mergedAt) : null) || (prev ? prev.at : null);
+      for (const e of indexList) {
+        const at = tms(e.status === 'open' ? e.updatedAt : (e.mergedAt || e.updatedAt));
         if (at == null) continue;
-        cand.set(k, { number: p.number, title: p.title || (m && m.title) || (prev && prev.title) || '', at });
+        cand.set(String(e.number), { number: e.number, title: e.title, at });
       }
       const prs = [...cand.values()].sort((a, b) => a.at - b.at);
       let shown;
