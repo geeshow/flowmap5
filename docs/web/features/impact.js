@@ -995,9 +995,34 @@
   /* ───────── 공개 API: 다른 기능 뷰(배포 영향도)에서 커밋 영향도 콘텐츠 재사용 ─────────
    * 배포 영향도(deploy.js)가 PR 을 선택하면 커밋 영향도로 이동하지 않고, 이 API 로
    * 동일한 "분석 바 + 경계 투영 그래프"를 자기 하단 컨테이너에 임베드한다. */
+  const loadedSources = new Set();
+  // 매니페스트에 없는 추가 impact 파일(예: 배포가 가리키는 repo)을 on-demand 로 병합한다.
+  //   배포 영향도에서 deploy repo 의 <repo>.impact.json 을 직접 불러와 PR 커밋영향도를 그릴 수 있게.
+  async function ensureSource(impactRel) {
+    await ensureData();
+    if (!impactRel || loadedSources.has(impactRel)) return;
+    loadedSources.add(impactRel);
+    const part = normalizePart(await FM.fetchData('data/' + impactRel));
+    if (!part || !Array.isArray(part.commits)) return;
+    const proj = part.repoUrl ? part.repoUrl.replace(/\/+$/, '').split('/').pop()
+      : impactRel.split('/').pop().replace(/\.impact\.json$/, '');
+    const shardBase = impactRel.replace(/\.json$/, '');
+    for (const c of part.commits) {
+      if (part.repoUrl && !c._repoUrl) c._repoUrl = part.repoUrl;
+      if (!c._project) c._project = proj;
+      if (!c._shardBase) c._shardBase = shardBase;
+      if (c._pull != null) c.shortSha = 'PR' + c._pull + '@' + (c._project || proj);
+    }
+    if (!data || !Array.isArray(data.commits)) data = { commits: [], branch: '', commitCount: 0 };
+    for (const c of part.commits) if (!commitBySha.has(c.shortSha)) { data.commits.push(c); commitBySha.set(c.shortSha, c); }
+    data._endpointImpact = null;   // 집계 캐시 무효화
+  }
+
   FM.impact = {
     // impact 데이터 로드(+commitBySha 채움). null=데이터 없음.
     ensure: ensureData,
+    // 추가 impact 파일 병합(deploy repo 등 매니페스트 외 소스).
+    ensureSource,
     // PR 번호(+repo) → 로드된 데이터의 커밋 키. repo 를 주면 그 repo(프로젝트) 의 PR 만 매칭한다
     //   — 다른 repo 의 동일 PR 번호를 잘못 가져오지 않도록. repo 지정 후 매칭 실패 시 null(오매칭 방지).
     prKey(number, repo) {

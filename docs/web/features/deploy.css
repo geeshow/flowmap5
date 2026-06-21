@@ -102,7 +102,7 @@
 .dep-svc-tag.no { color: var(--text-dim); background: var(--bg-input); }
 
 /* ── 우측 메인 (풀폭) ── */
-.dep-main { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 16px 22px 30px; position: relative; }
+.dep-main { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 12px 14px 26px; position: relative; }
 
 /* 임베드 영향 그래프의 가로 스크롤바를 메인 패널 하단에 항상 고정(sticky proxy). 그래프
    자체 가로 스크롤바는 숨기고(아래) 이 바 하나로만 좌우 이동한다 → 세로 위치 무관 항상 노출. */
@@ -124,30 +124,28 @@
 .dme-ico { font-size: 34px; opacity: .5; }
 .dme-msg { font-size: 13px; }
 
-.dep-main-head { border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 14px; }
+.dep-main-head { border-bottom: 1px solid var(--border); padding-bottom: 9px; margin-bottom: 11px; }
 .dep-mh-top { display: flex; align-items: baseline; gap: 10px; }
 .dep-mh-id { font-size: 14px; font-weight: 700; color: var(--c-controller); font-variant-numeric: tabular-nums; }
 .dep-mh-time { font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.dep-mh-summary { font-size: 15px; font-weight: 600; color: var(--text); margin: 5px 0 8px; line-height: 1.4; }
+.dep-mh-summary { font-size: 14.5px; font-weight: 600; color: var(--text); margin: 4px 0 6px; line-height: 1.35; }
 .dep-mh-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .dep-repo { font-size: 11px; color: var(--text-dim); font-family: ui-monospace, monospace; }
 
-.dep-section { margin-bottom: 22px; }
-.dep-sec-head { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; }
+.dep-section { margin-bottom: 16px; }
+.dep-sec-head { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 7px; }
 
-/* PR 목록 — 넓은 그리드 카드 */
-.dep-pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
-.dep-prc { position: relative; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-panel); padding: 9px 11px; cursor: pointer; transition: border-color .12s; }
+/* PR 목록 — 얇은 1줄 행(번호·이름·시간), 한 줄에 여러 개 배치 */
+.dep-pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 5px 8px; }
+.dep-prc { position: relative; display: flex; align-items: baseline; gap: 9px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--bg-panel);
+  padding: 5px 11px; cursor: pointer; transition: border-color .12s; }
 .dep-prc:hover { border-color: #4f46e5; box-shadow: 0 1px 6px rgba(79,70,229,.10); }
 .dep-prc.sel { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5 inset; background: var(--bg-input); }
-.dep-prc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-right: 28px; }
-.dep-prc-numwrap { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
-.dep-prc-num { font-size: 12px; font-weight: 700; color: #4f46e5; font-variant-numeric: tabular-nums; }
-.dep-prc-detail { font-size: 11px; color: var(--c-controller); white-space: nowrap; }
-.dep-prc:hover .dep-prc-detail { text-decoration: underline; }
-.dep-prc-title { font-size: 12.5px; color: var(--text); margin: 4px 0; line-height: 1.4;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.dep-prc-by { font-size: 10.5px; color: var(--text-dim); }
+.dep-prc-num { flex: none; font-size: 12px; font-weight: 700; color: #4f46e5; font-variant-numeric: tabular-nums; }
+.dep-prc-title { flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dep-prc-by { flex: none; font-size: 10.5px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* 미머지 PR 경고 — merged_at 없는 PR(아직 머지 안 됨)을 배포 영향도에서 눈에 띄게 표시 */
 .dep-prc.warn { border-color: var(--c-warn, #d97706); background: rgba(217,119,6,.06); }
@@ -158,14 +156,25 @@
 .dep-sec-warn { font-size: 11px; font-weight: 700; color: var(--c-warn, #d97706);
   background: rgba(217,119,6,.12); border-radius: 5px; padding: 1px 6px; margin-left: 6px; }
 .dep-di-warn { color: var(--c-warn, #d97706); margin-right: 3px; }
-/* GitHub 링크 — 카드 우상단 코너 버튼(커밋 영향도 .imp-clink 와 동일 형식) */
+/* GitHub 링크 — 행 끝 버튼(커밋 영향도 .imp-clink 와 동일 형식) */
 .dep-prc-gh {
-  position: absolute; top: 8px; right: 9px; z-index: 1;
-  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
-  color: var(--text-dim); text-decoration: none; font-size: 13px; line-height: 1;
-  border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card);
+  flex: none; align-self: center;
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+  color: var(--text-dim); text-decoration: none; font-size: 12px; line-height: 1;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--bg-card);
 }
 .dep-prc-gh:hover { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+
+/* ── 하단 탭 (서비스 영향도·연관관계 / PR 커밋 영향도 / 변경 파일) ── */
+.dep-tabbar { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.dep-tab { appearance: none; background: none; border: none; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  padding: 7px 13px; margin-bottom: -1px; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; }
+.dep-tab:hover:not(.disabled) { color: var(--text); background: var(--bg-input); }
+.dep-tab.on { color: var(--c-controller); border-bottom-color: var(--c-controller); }
+.dep-tab.disabled { opacity: .4; cursor: default; }
+.dep-tabpanel { display: none; }
+.dep-tabpanel.show { display: block; }
 
 /* 영향도 그래프 (풀폭) */
 .dep-imp-note { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; background: var(--bg-input); border-radius: 8px; padding: 11px 13px; }
@@ -190,12 +199,10 @@
 .dep-svc-badge { font-size: 9px; font-weight: 700; color: var(--c-service); background: rgba(22,163,74,.12); border-radius: 4px; padding: 0 5px; }
 .dep-svc-sub { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
 
-/* PR 커밋 영향도 (하단 임베드) — impact.js 의 콘텐츠(.imp-bar/.imp-gwrap/.imp-graph)를 그대로 품는다 */
-.dep-impact { border-top: 1px solid var(--border); padding-top: 16px; }
+/* PR 커밋 영향도 (탭 패널) — impact.js 의 콘텐츠(.imp-bar/.imp-gwrap/.imp-graph)를 그대로 품는다 */
 .dep-impact-host { position: relative; min-height: 60px; }
 
 /* 변경 파일 + 변경 전후 코드(diff) */
-.dep-files { border-top: 1px solid var(--border); padding-top: 16px; }
 .dep-files-host { display: flex; flex-direction: column; gap: 6px; }
 .dep-files-sub { font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
 .dep-file { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg-panel); }
@@ -220,3 +227,45 @@
 .dep-dl.del { background: rgba(220,38,38,.12); color: #991b1b; }
 .dep-dl.hunk { background: var(--bg-input); color: var(--text-dim); }
 .dep-dl.ctx { color: var(--text); }
+
+/* ───────── 타임라인 (배포 진행 + PR) ───────── */
+.dep-timeline-host { padding: 10px 6px 4px; }
+.dep-tl-row { display: flex; align-items: center; gap: 10px; }
+.dep-tl-row + .dep-tl-row { margin-top: 16px; }
+.dep-tl-deploy { padding: 30px 0; }   /* 캡션 위/아래 번갈이 공간 확보(겹침 방지) */
+.dep-tl-rowlabel { flex: none; width: 108px; text-align: right; font-size: 11px; font-weight: 800;
+  color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dep-tl-axis { position: relative; flex: 1; height: 24px; }
+.dep-tl-empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 10px; color: var(--text-dim); }
+.dep-tl-line { position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: var(--border); border-radius: 2px; }
+.dep-tl-node { position: absolute; top: 50%; transform: translate(-50%, -50%); }
+.dep-tl-dot { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--c, #64748b);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, #64748b) 22%, #fff); }
+.dep-tl-node.st-created  { --c: #2563eb; }
+.dep-tl-node.st-approved { --c: #1a7f37; }
+.dep-tl-node.st-deployed { --c: #8957e5; }
+.dep-tl-node.st-progress { --c: #d97706; }
+.dep-tl-node.st-modified { --c: #64748b; }
+.dep-tl-cap { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  font-size: 10px; color: var(--text); text-align: center; line-height: 1.35; }
+.dep-tl-cap.down { top: 14px; }    /* 점 아래쪽 캡션 */
+.dep-tl-cap.up { bottom: 14px; }   /* 점 위쪽 캡션 (인접 노드와 번갈이 → 겹침 방지) */
+.dep-tl-cap b { font-weight: 800; }
+.dep-tl-t { display: block; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.dep-tl-bound { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 1.5px dashed; transform: translateX(-50%); }
+.dep-tl-bound.req { border-color: #1a7f37; }
+.dep-tl-bound.dep { border-color: #8957e5; }
+.dep-tl-pr-dot { position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%;
+  transform: translate(-50%, -50%); cursor: pointer; border: 2px solid #fff; transition: transform .1s; }
+.dep-tl-pr-dot.before { background: #94a3b8; }
+.dep-tl-pr-dot.within { background: #2563eb; }
+.dep-tl-pr-dot.sel { outline: 2px solid #f59e0b; outline-offset: 1px; }
+.dep-tl-pr-dot:hover { transform: translate(-50%, -50%) scale(1.35); z-index: 2; }
+.dep-tl-legend { margin-top: 16px; font-size: 11px; color: var(--text-dim); }
+.dep-tl-lg { font-size: 13px; vertical-align: middle; }
+.dep-tl-lg.before { color: #94a3b8; }
+.dep-tl-lg.within { color: #2563eb; }
+
+/* PR 타임라인 점 ↔ 하단 PR 목록 카드 연결선 (선택된 PR) */
+svg.dep-conn { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3; overflow: visible; }
+.dep-tl-bound.req { border-color: #1a7f37; border-left-width: 2px; }   /* 신청 경계(정가운데) 강조 */
