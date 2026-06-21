@@ -163,7 +163,7 @@
     let tasks;
     if (rawTasks) {
       tasks = rawTasks.map((rt) => {
-        const gr = (rt.git_repo && rt.catalog_component.git_repo) || {};
+        const gr = (rt.catalog_component && rt.catalog_component.git_repo) || {};
         let org = gr.org || '', repo = gr.repo || '';
         // PR 객체 전체 필드(html_url 등)를 유지 — pulls/impact 임팩트가 없어도 PR 기능을 표시하기 위함.
         const prs = (rt.prs || []).map((p) => ({ ...p, _org: org, _repo: repo }));
