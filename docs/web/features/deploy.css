@@ -142,6 +142,8 @@
   padding: 5px 11px; cursor: pointer; transition: border-color .12s; }
 .dep-prc:hover { border-color: #4f46e5; box-shadow: 0 1px 6px rgba(79,70,229,.10); }
 .dep-prc.sel { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5 inset; background: var(--bg-input); }
+.dep-prc.deployed { box-shadow: inset 2px 0 0 #16a34a; }
+.dep-prc-dep { margin-left: 2px; }
 .dep-prc-num { flex: none; font-size: 12px; font-weight: 700; color: #4f46e5; font-variant-numeric: tabular-nums; }
 .dep-prc-title { flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -259,12 +261,16 @@
   transform: translate(-50%, -50%); cursor: pointer; border: 2px solid #fff; transition: transform .1s; }
 .dep-tl-pr-dot.before { background: #94a3b8; }
 .dep-tl-pr-dot.within { background: #2563eb; }
+/* 배포된 이미지의 커밋과 매칭된 PR — 초록 + 펄스 링으로 강조 */
+.dep-tl-pr-dot.deployed { background: #16a34a; border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22,163,74,.35); width: 15px; height: 15px; }
 .dep-tl-pr-dot.sel { outline: 2px solid #f59e0b; outline-offset: 1px; }
 .dep-tl-pr-dot:hover { transform: translate(-50%, -50%) scale(1.35); z-index: 2; }
 .dep-tl-legend { margin-top: 16px; font-size: 11px; color: var(--text-dim); }
 .dep-tl-lg { font-size: 13px; vertical-align: middle; }
 .dep-tl-lg.before { color: #94a3b8; }
 .dep-tl-lg.within { color: #2563eb; }
+.dep-tl-lg.deployed { color: #16a34a; }
 
 /* PR 타임라인 점 ↔ 하단 PR 목록 카드 연결선 (선택된 PR) */
 svg.dep-conn { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 3; overflow: visible; }
