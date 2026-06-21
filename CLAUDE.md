@@ -18,7 +18,7 @@
 정적 자산은 버전 쿼리로 캐시 관리. 안 올리면 브라우저가 옛 파일을 씀.
 - `docs/web/index.html`: `style.css?v=NN`, `app.js?v=NN`
 - `docs/web/app.js`: `const FEATURE_VER = 'NN'` — `features/*.js`·`features/*.css` 모듈 캐시키
-- **현재 값**: style.css `v=77`, app.js `v=185`, FEATURE_VER `75`
+- **현재 값**: style.css `v=77`, app.js `v=185`, FEATURE_VER `76`
 
 ## 핵심 파일
 
