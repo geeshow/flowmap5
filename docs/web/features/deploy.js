@@ -141,6 +141,15 @@
       .filter((p) => p && p.graph && p.repo === repo && p.name !== repo)
       .map((p) => p.name);
   }
+  // per-root(bizunit)/projectName → 실제 git repo·namespace 해석. nexcore_job 등 catalog_project·
+  //   catalog_component 가 모두 null 이라 repo 를 직접 못 얻을 때 사용 — 매니페스트의 동일 name 엔트리에서
+  //   repo/namespace 를 가져온다(예: projectName "expired-account-open-clear-job" → repo "niffler", ns "kreature").
+  //   그래야 {repo}.pulls.json 을 로드해 release_version 의 commit sha ↔ mergeCommit 매칭으로 PR url 을 찾는다.
+  function repoFromProjectName(name) {
+    if (!name) return null;
+    const hit = ((FM.MANIFEST && FM.MANIFEST.projects) || []).find((p) => p && p.name === name);
+    return hit ? { org: hit.namespace || '', repo: hit.repo || hit.name } : null;
+  }
   // 배포가 건드린(touched) 서비스 집합 — 모노레포면 모듈 서비스 전체, 아니면 대표 서비스 하나.
   //   서비스 영향도 연관관계 그래프는 이 집합을 기준으로 그린다(그래프 없는 repo 엔트리는 제외돼야
   //   빈 카드/연결 0 문제가 안 생긴다). pulls/impact 조회는 별도로 tk.service(대표=repo 엔트리)를 쓴다.
@@ -153,6 +162,38 @@
       else { const s = mapRepoToService(task.repo, '', idx); if (s) out.add(s); }
     }
     return out;
+  }
+  // touchedServicesFor 의 비동기판 — 모노레포는 "실제 변경된 모듈"만 배포 서비스로 좁힌다.
+  //   PR impact 의 변경 노드가 속한 모듈만 남기고, 못 구하면 전체 모듈(touchedServicesFor 와 동일)로 폴백.
+  async function resolveTouchedServices(tk) {
+    const out = new Set();
+    const idx = serviceIndex();
+    for (const task of (tk.tasks && tk.tasks.length ? tk.tasks : [{ repo: tk.repo, org: tk.org, prs: tk.prs }])) {
+      const mods = modulesOfRepo(task.repo);
+      if (mods.length) {
+        const changed = await changedModulesOf(task, mods, tk);
+        (changed && changed.size ? [...changed] : mods).forEach((m) => out.add(m));
+      } else { const s = mapRepoToService(task.repo, '', idx); if (s) out.add(s); }
+    }
+    return out;
+  }
+  // 모노레포 task 의 실제 변경 모듈 서비스 집합. PR impact 변경노드.project ∩ 그래프 모듈. 못 구하면 null(→전체 폴백).
+  async function changedModulesOf(task, mods, tk) {
+    const prs = (task.prs || []).filter((p) => p && p.number != null);
+    if (!prs.length) return null;
+    try {
+      await FM.loadFeature('impact');
+      if (!FM.impact || !FM.impact.changedNodeIds) return null;
+      await FM.impact.ensure();
+      await FM.impact.ensureSource(impactRelByRepo(task.org || (tk && tk.org), task.repo, tk));
+      const modSet = new Set(mods);
+      const hit = new Set();
+      for (const p of prs) {
+        const ids = await FM.impact.changedNodeIds(p.number, task.repo);
+        for (const id of ids) { const n = FM.nodeById.get(id); const proj = n && n.project; if (proj && modSet.has(proj)) hit.add(proj); }
+      }
+      return hit.size ? hit : null;
+    } catch (e) { return null; }
   }
   function buildTickets(deploy, pr, projs) {
     const deployList = (deploy && deploy.deploy_list) || [];
@@ -176,10 +217,19 @@
     if (rawTasks) {
       tasks = rawTasks.map((rt) => {
         const gr = (rt.catalog_component && rt.catalog_component.git_repo) || {};   // 로컬/구 포맷(task별 git_repo)
-        const opt = rt.release_strategy_option || {};                               // nexcore_job 등은 여기 projectName 에 repo
-        // repo 우선순위: task.git_repo → 티켓 catalog_project → strategy_option.projectName → component_name
+        const opt = rt.release_strategy_option || {};                               // nexcore_job 등은 여기 projectName 에 per-root
+        // repo 우선순위: task.git_repo → 티켓 catalog_project(=tRepo) → projectName/component_name(=per-root) 매니페스트 해석
         let org = gr.org || tOrg || '';
-        let repo = gr.repo || tRepo || opt.projectName || rt.component_name || '';
+        let repo = gr.repo || tRepo || '';
+        if (!repo) {
+          // catalog_project·catalog_component 가 모두 null(release_version 에 commit sha 만 있는 nexcore_job 등):
+          //   projectName(=per-root/bizunit)을 매니페스트에서 실제 git repo·namespace 로 해석 →
+          //   {repo}.pulls.json 의 mergeCommit ↔ commit sha 매칭으로 배포 PR·url({host}/{ns}/{repo}/pull/{n}) 을 찾는다.
+          const pn = opt.projectName || rt.component_name || '';
+          const resolved = repoFromProjectName(pn);
+          if (resolved) { org = org || resolved.org; repo = resolved.repo; }
+          else { repo = pn; org = org || opt.namespace || ''; }
+        }
         // PR 객체 전체 필드(html_url 등)를 유지 — pulls/impact 임팩트가 없어도 PR 기능을 표시하기 위함.
         const prs = (rt.prs || []).map((p) => ({ ...p, _org: org, _repo: repo }));
         // 그래도 repo 가 없으면 PR html_url(.../<org>/<repo>/pull/<n>)에서 org/repo 를 보충.
@@ -291,9 +341,13 @@
     ticketId = ticket ? String(ticket.id) : null;
     if (ticket) {
       const prs = ticket.prs || [];
-      let pr = (prNumber != null) && prs.find((p) => String(p.number) === String(prNumber));
-      if (!pr && prs.length) pr = prs[0];
-      prNumber = pr ? String(pr.number) : null;
+      // URL 에 PR 이 명시되면(사용자 클릭) ticket.prs(배포 명시 PR)에 없어도 존중한다 —
+      //   PR 목록은 pulls 인덱스 기반(타임라인 구간 PR 포함)이라 배포 명시 PR 보다 넓다.
+      //   명시값이 없을 때만 첫 PR 로 기본 선택.
+      if (prNumber != null && prNumber !== '') {
+        const pr = prs.find((p) => String(p.number) === String(prNumber));
+        prNumber = pr ? String(pr.number) : String(prNumber);
+      } else prNumber = prs.length ? String(prs[0].number) : null;
     } else prNumber = null;
     return { date, ticketId, prNumber, ticket };
   }
@@ -554,7 +608,12 @@
       { key: 'svc', label: '서비스 영향도 · 연관관계', build: (host) => {
           if (!tk.service) host.appendChild(el('div', 'dep-imp-note',
             `이 배포(<code>${FM.esc(repo)}</code>)는 분석 그래프에 매칭되는 서비스가 없습니다. 메서드 단위 영향은 “PR 커밋 영향도” 탭에서 확인하세요.`));
-          else { const wrap = el('div', 'dep-svc-graph'); host.appendChild(wrap); renderServiceGraph(wrap, touchedServicesFor(tk)); }
+          else {
+            const wrap = el('div', 'dep-svc-graph'); host.appendChild(wrap);
+            wrap.innerHTML = '<div class="dep-loading">서비스 영향도 계산 중…</div>';
+            // 모노레포 배포는 실제 변경 모듈만 "배포"로 좁힌다(impact 기반·비동기). renderServiceGraph 가 wrap 을 비우고 그린다.
+            resolveTouchedServices(tk).then((touched) => { if (renderSeq === seq) renderServiceGraph(wrap, touched); });
+          }
         } },
       { key: 'impact', label: 'PR 커밋 영향도', disabled: !hasPr, build: (host) => renderPrImpact(host, eff, seq) },
       { key: 'files', label: '변경 파일', disabled: !hasPr, build: (host) => renderPrFiles(host, eff, seq) },
@@ -767,7 +826,9 @@
     host.innerHTML = '';
     if (!prs.length) { host.appendChild(el('div', 'dep-hint', '연결된 PR이 없습니다.')); return; }
     for (const p of prs) host.appendChild(prCard(p, ctx));
-    requestAnimationFrame(() => drawPrConnector());   // PR 카드 ↔ 타임라인 점 연결선 갱신
+    // PR 목록이 비동기로 채워지며 dep-main 높이가 늘어 서비스 영향도 카드가 아래로 밀린다.
+    // 최초 1회만 그려둔 서비스 커넥터가 옛 위치로 어긋나므로, 확정된 레이아웃으로 다시 그린다.
+    requestAnimationFrame(() => { FM.drawConnectors(); drawPrConnector(); });
   }
 
   // ───────── 타임라인 (배포 진행 + PR) ─────────
@@ -896,7 +957,8 @@
     host.appendChild(el('div', 'dep-tl-legend',
       `<span class="dep-tl-lg before">●</span> 신청 전(1주·최대 5) &nbsp; <span class="dep-tl-lg within">●</span> 신청~배포 구간` +
       (anyDeployed ? ` &nbsp; <span class="dep-tl-lg deployed">●</span> 🚀 배포된 이미지(commit)` : '')));
-    requestAnimationFrame(() => drawPrConnector());   // 타임라인 점 ↔ PR 목록 카드 연결선
+    // 타임라인이 비동기로 채워지며 레이아웃이 밀리면 서비스 영향도 커넥터도 어긋난다 → 확정 후 함께 재그리기.
+    requestAnimationFrame(() => { FM.drawConnectors(); drawPrConnector(); });   // 타임라인 점 ↔ PR 목록 카드 연결선
   }
 
   // 선택된 PR 의 타임라인 점과 하단 PR 목록 카드를 곡선으로 잇는다(같은 data-pr). dep-main 스크롤/리사이즈 시 재계산.
@@ -949,12 +1011,18 @@
   //   영향받으므로, 영향은 target→source(역방향)로 전파된다. 그래서 callee→callers(역인접)만 따라간다.
   //   (양방향 확장은 무관한 다운스트림 의존까지 끌어와 서비스가 과다 출력되던 원인 → 영향 방향으로 한정)
   function expandSvcHops(touched, allEdges, hops) {
-    const radj = new Map();   // callee(target) → 그를 호출하는 서비스들(sources)
+    const radj = new Map();   // callee(target) → 그를 호출하는 서비스들(sources) = 상류(영향 전파 방향)
+    const fadj = new Map();   // caller(source) → 그가 호출하는 서비스들(targets) = 하류(직접 의존)
     for (const e of allEdges) {
       if (!radj.has(e.tp)) radj.set(e.tp, new Set());
       radj.get(e.tp).add(e.sp);
+      if (!fadj.has(e.sp)) fadj.set(e.sp, new Set());
+      fadj.get(e.sp).add(e.tp);
     }
     const display = new Set(touched);
+    // 1차: 배포 서비스가 "직접 호출하는" 하류 이웃도 함께 표시(직접 관련 대상) — 깊이 확장은 안 함.
+    for (const s of touched) for (const nb of (fadj.get(s) || [])) display.add(nb);
+    // 상류(호출측)는 영향 전파 방향 — hops 단계까지 확장.
     let frontier = [...touched];
     for (let h = 0; h < hops && frontier.length; h++) {
       const next = [];

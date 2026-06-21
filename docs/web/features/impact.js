@@ -1038,6 +1038,28 @@
       }
       return repo ? null : any;
     },
+    // PR(number, repo)이 실제로 바꾼 그래프 노드 id 목록 — 샤드(상세)까지 로드. 모듈 좁히기(배포 영향도)용.
+    //   index 에는 카운트만 있고 changedNodes/changedApiMethods 는 PR별 샤드에 있어 ensureShards 가 필요하다.
+    async changedNodeIds(number, repo) {
+      await ensureData();
+      if (!data) return [];
+      const want = String(number);
+      const matchRepo = (c) => !repo || c._project === repo
+        || (c._repoUrl && c._repoUrl.replace(/\/+$/, '').endsWith('/' + repo));
+      const keys = [];
+      for (const [k, c] of commitBySha)
+        if (c._pull != null && String(c._pull) === want && matchRepo(c)) keys.push(k);
+      if (!keys.length) return [];
+      await ensureShards(keys);
+      const out = [];
+      for (const k of keys) {
+        const det = commitDetail(commitBySha.get(k));
+        const ids = (det.changedApiMethods && det.changedApiMethods.length) ? det.changedApiMethods
+          : (det.changedNodes || []).map((n) => (typeof n === 'string' ? n : (n && n.id))).filter(Boolean);
+        for (const id of ids) if (FM.nodeById.has(id)) out.push(id);
+      }
+      return out;
+    },
     // [container] 에 주어진 커밋/PR(shas)의 영향도 콘텐츠를 임베드 렌더. 커밋 영향도 URL 은 건드리지 않는다.
     async renderInto(container, shas, options) {
       options = options || {};
