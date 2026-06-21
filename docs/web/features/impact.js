@@ -714,8 +714,21 @@
     const inboundSeeds = bases.filter(id => changedSha.has(id));
     expand(inboundSeeds.length ? inboundSeeds : bases, FM.inEdges, -1, hopDepth);   // 유입: 직접 수정 노드에 닿는 화면/s2s 호출원 (현재 표시 단계까지)
 
+    // 연결(엣지) 없는 노드 숨김 — 직접 변경됐지만 호출 관계가 없는 엔드포인트(예: 자기 서비스 안에서만 도는
+    //   CRUD)는 관계 그래프를 어지럽힌다. 변경 사실은 상단 "변경 코드 N건" 목록에 이미 있다.
+    //   단, 연결된 노드가 하나도 없으면(=관계가 아예 없는 PR) 그대로 두고, ep 딥링크 대상은 항상 유지.
+    const connectedIds = new Set();
+    edges.forEach((e) => { connectedIds.add(e.source); connectedIds.add(e.target); });
+    let hiddenOrphans = 0;
+    if (connectedIds.size) {
+      for (const id of [...level.keys()]) {
+        if (connectedIds.has(id) || id === ep) continue;
+        level.delete(id); hiddenOrphans++;
+      }
+    }
+
     // 상단 분석 바
-    main.appendChild(buildBar(selected, changedSha, epIds, truncated, outOfGraph, opts.embedded));
+    main.appendChild(buildBar(selected, changedSha, epIds, truncated, outOfGraph, hiddenOrphans, opts.embedded));
 
     if (!bases.length) {
       // 코드 영향 없음(예: nginx.conf 변경) — 상세 패널·프로세스 독을 닫고 changedFiles만 보여줌
@@ -910,7 +923,7 @@
   }
 
   // embedded=true 면 배포 영향도 하단 임베드용 — 커밋 영향도 URL 을 바꾸는 컨트롤(칩 ✕ · 전체 해제)을 숨긴다.
-  function buildBar(selected, changedSha, epIds, truncated, outOfGraph, embedded) {
+  function buildBar(selected, changedSha, epIds, truncated, outOfGraph, hiddenOrphans, embedded) {
     const bar = el('div', 'imp-bar');
 
     selected.forEach(sha => {
@@ -925,6 +938,8 @@
 
     bar.appendChild(el('span', 'imp-cc', `변경 ${changedSha.size}`));
     bar.appendChild(el('span', 'imp-cc', `영향 ${nounOf(epIds)} ${epIds.size}`));
+    if (hiddenOrphans) bar.appendChild(el('span', 'imp-cc',
+      `<span title="다른 서비스·화면·인프라와의 호출 관계가 없는 변경 엔드포인트 — 아래 '변경 코드' 목록에서 확인">연결 없는 변경 ${hiddenOrphans} 숨김</span>`));
     if (truncated) bar.appendChild(el('span', 'imp-cc warn', `(일부만 표시 — ${MAX_NODES}노드 상한)`));
 
     // 변경 노드는 endpoint 로 롤업해 그래프에서 카드로 그리지 않으므로, 무엇이 바뀌었는지는 접이식 목록으로 유지

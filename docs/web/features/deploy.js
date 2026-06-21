@@ -565,20 +565,29 @@
     const peopleHtml = roles.filter(([, v]) => v)
       .map(([role, v]) => `<span class="dep-person"><span class="dep-person-role">${role}</span>${FM.esc(String(v).replace(/,/g, ', '))}</span>`)
       .join('');
-    head.innerHTML =
-      `<div class="dep-mh-top"><span class="dep-mh-id">#${FM.esc(String(tk.id))}</span>` +
-      `<span class="dep-mh-time">${FM.esc(d)} · ${FM.esc(fmtTime(tk.releaseAt))}</span></div>` +
-      `<div class="dep-mh-summary">${FM.esc(tk.summary)}</div>` +
-      `<div class="dep-mh-meta">${tk.platform ? `<span class="dep-chip">${FM.esc(tk.platform)}</span>` : ''}` +
+    const metaHtml = `${tk.platform ? `<span class="dep-chip">${FM.esc(tk.platform)}</span>` : ''}` +
       `${tk.phase ? `<span class="dep-chip">${FM.esc(tk.phase)}</span>` : ''}` +
       `${repo ? `<span class="dep-repo">${FM.esc(repo)}</span>` : ''}` +
-      `${tk.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(tk.service)}</span>` : (tk.repo ? `<span class="dep-svc-tag no">그래프 미매핑</span>` : '')}</div>` +
-      (peopleHtml ? `<div class="dep-mh-people">${peopleHtml}</div>` : '');
+      `${tk.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(tk.service)}</span>` : (tk.repo ? `<span class="dep-svc-tag no">그래프 미매핑</span>` : '')}`;
+    // 좌우 공간을 활용한 2줄 헤더: (1) #번호·제목 ───── 날짜·시간, (2) 메타칩 ───── 담당자
+    head.innerHTML =
+      `<div class="dep-mh-r1">` +
+        `<span class="dep-mh-id">#${FM.esc(String(tk.id))}</span>` +
+        `<span class="dep-mh-summary" title="${FM.escAttr(tk.summary)}">${FM.esc(tk.summary)}</span>` +
+        `<span class="dep-mh-time">${FM.esc(d)} · ${FM.esc(fmtTime(tk.releaseAt))}</span>` +
+      `</div>` +
+      `<div class="dep-mh-r2">` +
+        `<span class="dep-mh-meta">${metaHtml}</span>` +
+        (peopleHtml ? `<span class="dep-mh-people">${peopleHtml}</span>` : '') +
+      `</div>`;
     main.appendChild(head);
 
     // 타임라인 — 배포 진행(신청/승인/배포/진행/수정) + PR(신청 전 최대 5개 + 신청~배포 구간 전체)
     const tlSec = el('div', 'dep-section dep-timeline-sec');
-    tlSec.appendChild(el('div', 'dep-sec-head', '타임라인'));
+    // 제목 우측 끝에 범례 슬롯(renderTimelines 가 채움)
+    const tlHead = el('div', 'dep-sec-head dep-tl-head');
+    tlHead.innerHTML = '<span>타임라인</span><span class="dep-tl-legend"></span>';
+    tlSec.appendChild(tlHead);
     const tlHost = el('div', 'dep-timeline-host');
     tlHost.innerHTML = '<div class="dep-loading">타임라인 불러오는 중…</div>';
     tlSec.appendChild(tlHost);
@@ -835,6 +844,28 @@
   function tms(iso) { if (!iso) return null; const t = new Date(iso).getTime(); return isNaN(t) ? null : t; }
   function fmtMs(ms) { return fmtTime(new Date(ms).toISOString()); }
   const TL_WEEK = 7 * 24 * 3600 * 1000;
+  const DAY_MS = 24 * 3600 * 1000;
+  // 시간축 도메인[t0,t1]을 자정 경계로 나눈 "일별 구간" 띠 레이어. 각 띠는 pos()% 로 배치, 교대 배경 + 날짜 라벨.
+  //   레이어 가로 위치(axis 정렬)는 렌더 후 rAF 에서 첫 axis 의 offset 으로 보정한다.
+  function buildDayBands(pos, t0, t1) {
+    if (t0 == null || t1 == null || !(t1 > t0)) return null;
+    if ((t1 - t0) / DAY_MS > 45) return null;   // 범위가 너무 넓으면(데이터 sparse 등) 일별 띠 생략(과도한 DOM 방지)
+    const layer = el('div', 'dep-tl-days');
+    const midnight = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    let day = midnight(t0), i = 0;
+    while (day <= t1) {
+      const l = pos(Math.max(day, t0)), r = pos(Math.min(day + DAY_MS, t1));
+      if (r > l + 0.01) {
+        const band = el('div', 'dep-tl-day' + (i % 2 ? ' alt' : '') + (i ? '' : ' first'));
+        band.style.left = l + '%'; band.style.width = (r - l) + '%';
+        const dt = new Date(day);
+        band.innerHTML = `<span class="dep-tl-day-label">${dt.getMonth() + 1}/${dt.getDate()} (${DOW[dt.getDay()]})</span>`;
+        layer.appendChild(band); i++;
+      }
+      day += DAY_MS;
+    }
+    return i ? layer : null;
+  }
   // 타임라인·PR목록 공통 선택: 각 repo 의 pulls 인덱스(<repo>.pulls.json 의 pulls[])에서 표시할 PR 을 고른다.
   //   deploy_list 의 prs 는 사용하지 않는다. 후보 시각: status=merged → mergedAt, status=open → updatedAt
   //   (status 없는 구포맷은 mergedAt→updatedAt 폴백).
@@ -896,12 +927,13 @@
 
     // 시간축 — 배포 신청(reqAt)을 정가운데(50%)에 고정.
     //   왼쪽 [신청-1주, 신청] → [0,50] (1주 이내 PR), 오른쪽 [신청, 우측끝] → [50,100] (승인/배포/수정 + 구간 PR)
-    let pos;
+    let pos, domainMin, domainMax;
     if (reqAt != null) {
       const rightAts = [depAt, ...dnodes.map((n) => n.at), ...perRepo.flatMap((r) => r.shown.map((p) => p.at))]
         .filter((v) => v != null && v > reqAt);
       const rightMax = Math.max(reqAt + 3600e3, ...rightAts);
       const L0 = (reqAt - TL_WEEK) - TL_WEEK * 0.05, R1 = rightMax + (rightMax - reqAt) * 0.06;
+      domainMin = L0; domainMax = R1;
       pos = (t) => t <= reqAt
         ? Math.max(0, Math.min(50, 50 * (t - L0) / (reqAt - L0)))
         : Math.max(50, Math.min(100, 50 + 50 * (t - reqAt) / (R1 - reqAt)));
@@ -911,10 +943,14 @@
       if (!stamps.length) { host.innerHTML = '<div class="dep-hint">타임라인 데이터가 없습니다.</div>'; return; }
       let t0 = Math.min(...stamps), t1 = Math.max(...stamps); if (t1 === t0) t1 = t0 + 1;
       const pad = (t1 - t0) * 0.05; t0 -= pad; t1 += pad;
+      domainMin = t0; domainMax = t1;
       pos = (t) => Math.max(0, Math.min(100, ((t - t0) / (t1 - t0)) * 100));
     }
 
     host.innerHTML = '';
+    // 일별 구간 배경 — 자정 경계로 나눈 날짜 띠 + 날짜 라벨(겹치는 시간축에서 어느 날인지 식별). 행 뒤(z-index:0)에 깔린다.
+    const daysLayer = buildDayBands(pos, domainMin, domainMax);
+    if (daysLayer) host.appendChild(daysLayer);
     // 배포 진행 타임라인 — 캡션을 위/아래 번갈아 배치(텍스트 겹침 방지)
     const dRow = el('div', 'dep-tl-row dep-tl-deploy');
     dRow.appendChild(el('div', 'dep-tl-rowlabel', '배포'));
@@ -946,19 +982,30 @@
           (p.deployed ? ' deployed' : '') + (String(p.number) === String(ctx.sel) ? ' sel' : ''));
         dot.style.left = pos(p.at) + '%';
         dot.dataset.pr = p.number;   // 하단 PR 목록 카드(data-pr)와 연결용
-        dot.title = `#${p.number} ${p.title || ''}\n${repo} · ${fmtMs(p.at)}` + (p.deployed ? '\n🚀 이 이미지가 배포됨' : '');
+        // hover 시 박스로 표시 — 점이 겹쳐도 내용이 위에 또렷이 뜬다(native title 대신 스타일 박스).
+        dot.innerHTML = `<span class="dep-tl-pr-cap"><b>#${p.number}</b> ${FM.esc(p.title || '')}` +
+          `<span class="dep-tl-t">${FM.esc(repo)} · ${FM.esc(fmtMs(p.at))}${p.deployed ? ' · 🚀 배포됨' : ''}</span></span>`;
         dot.onclick = () => nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) });
         pAxis.appendChild(dot);
       }
       pRow.appendChild(pAxis);
       host.appendChild(pRow);
     }
+    // 범례는 섹션 제목 우측 끝 슬롯(dep-tl-legend)에 채운다.
     const anyDeployed = perRepo.some((r) => r.shown.some((p) => p.deployed));
-    host.appendChild(el('div', 'dep-tl-legend',
+    const sec = host.closest('.dep-timeline-sec');
+    const legendEl = sec && sec.querySelector('.dep-tl-legend');
+    if (legendEl) legendEl.innerHTML =
       `<span class="dep-tl-lg before">●</span> 신청 전(1주·최대 5) &nbsp; <span class="dep-tl-lg within">●</span> 신청~배포 구간` +
-      (anyDeployed ? ` &nbsp; <span class="dep-tl-lg deployed">●</span> 🚀 배포된 이미지(commit)` : '')));
+      (anyDeployed ? ` &nbsp; <span class="dep-tl-lg deployed">●</span> 🚀 배포된 이미지(commit)` : '');
     // 타임라인이 비동기로 채워지며 레이아웃이 밀리면 서비스 영향도 커넥터도 어긋난다 → 확정 후 함께 재그리기.
-    requestAnimationFrame(() => { FM.drawConnectors(); drawPrConnector(); });   // 타임라인 점 ↔ PR 목록 카드 연결선
+    //   + 일별 구간 띠를 시간축(axis) 영역에 맞춰 가로 정렬.
+    requestAnimationFrame(() => {
+      const axis = host.querySelector('.dep-tl-axis'), dl = host.querySelector('.dep-tl-days');
+      if (axis && dl) { const hr = host.getBoundingClientRect(), ar = axis.getBoundingClientRect();
+        dl.style.left = (ar.left - hr.left) + 'px'; dl.style.width = ar.width + 'px'; }
+      FM.drawConnectors(); drawPrConnector();
+    });
   }
 
   // 선택된 PR 의 타임라인 점과 하단 PR 목록 카드를 곡선으로 잇는다(같은 data-pr). dep-main 스크롤/리사이즈 시 재계산.
@@ -992,11 +1039,15 @@
     const num = p.number != null ? '#' + p.number : '';
     const warnBadge = unmerged ? '<span class="dep-prc-warn" title="Not merged — verify it is actually included in this deploy">⚠️</span>' : '';
     const deployBadge = p.deployed ? '<span class="dep-prc-dep" title="이 PR의 커밋이 배포된 이미지입니다">🚀</span>' : '';
+    // PR 상태 배지(merged/open/closed/draft) — pulls 인덱스의 status. 없으면(번호만) 미표시.
+    const ST = { merged: 'Merged', open: 'Open', closed: 'Closed', draft: 'Draft' };
+    const stKey = String(p.status || '').toLowerCase();
+    const stBadge = ST[stKey] ? `<span class="dep-prc-st st-${stKey}">${ST[stKey]}</span>` : '';
     const time = merged ? FM.esc(fmtTime(p.merged_at)) : '';
     const meta = [p.user ? FM.esc(p.user) : '', time].filter(Boolean).join(' · ');
-    // 얇은 1줄: PR번호 · 이름(제목) · 작성자·시간 · GitHub
+    // 얇은 1줄: PR번호 · 상태 · 이름(제목) · 작성자·시간 · GitHub
     card.innerHTML =
-      `<span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}${deployBadge}` +
+      `<span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}${deployBadge}${stBadge}` +
       `<span class="dep-prc-title">${FM.esc(p.title || '')}</span>` +
       `<span class="dep-prc-by">${meta}</span>` +
       (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '');
