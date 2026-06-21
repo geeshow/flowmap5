@@ -53,6 +53,11 @@
     for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 16777619); }
     return (h >>> 0) % 360;
   }
+  // GitHub PR URL(.../<org>/<repo>/pull/<n>)에서 org/repo 추출 — enterprise 호스트 포함.
+  function parsePrUrl(url) {
+    const m = String(url || '').match(/\/([^/]+)\/([^/]+)\/pull\/\d+/);
+    return m ? { org: m[1], repo: m[2] } : {};
+  }
   function dow(date) { const d = new Date(date + 'T00:00:00'); return isNaN(d) ? '' : DOW[d.getDay()]; }
   function fmtTime(iso) {
     if (!iso) return '';
@@ -159,11 +164,17 @@
     if (rawTasks) {
       tasks = rawTasks.map((rt) => {
         const gr = (rt.catalog_component && rt.catalog_component.git_repo) || {};
-        const org = gr.org || '', repo = gr.repo || '';
+        let org = gr.org || '', repo = gr.repo || '';
+        // PR 객체 전체 필드(html_url 등)를 유지 — pulls/impact 임팩트가 없어도 PR 기능을 표시하기 위함.
+        const prs = (rt.prs || []).map((p) => ({ ...p, _org: org, _repo: repo }));
+        // catalog_component.git_repo 가 비어 있으면 PR html_url(.../<org>/<repo>/pull/<n>)에서 org/repo 를 보충.
+        if (!repo) {
+          for (const p of prs) { const u = parsePrUrl(p.html_url); if (u.repo) { org = org || u.org; repo = u.repo; break; } }
+          prs.forEach((p) => { p._org = org; p._repo = repo; });
+        }
         return {
           component: rt.component_name || repo, order: rt.release_order || 0,
-          strategy: rt.release_strategy || '', step: normStatus(rt.task_step), org, repo,
-          prs: (rt.prs || []).map((p) => ({ number: p.number, _org: org, _repo: repo })),
+          strategy: rt.release_strategy || '', step: normStatus(rt.task_step), org, repo, prs,
         };
       }).sort((a, b) => a.order - b.order);
     } else {
@@ -173,6 +184,13 @@
       tasks = [{ component: cat.project_name || repo, order: 1, strategy: '', step: normStatus((dep && dep.ticket_step) || (t && t.ticket_step)), org, repo, prs }];
     }
     const primary = tasks[0] || { org: '', repo: '' };
+    // PR 목록: 여러 release_task 가 같은 PR(같은 org/repo + number)을 가질 수 있으므로 중복 제거(첫 등장 유지).
+    const seenPr = new Set();
+    const prs = tasks.flatMap((x) => x.prs).filter((p) => {
+      const k = (p._org || '') + '/' + (p._repo || '') + '#' + p.number;
+      if (seenPr.has(k)) return false;
+      seenPr.add(k); return true;
+    });
     // 타임라인: 신청(created)·승인(approved)·배포(deployed)·진행(progress, 없을 수 있음)·수정(modified)
     const timeline = {
       created:  { key: 'created',  label: '신청', at: (dep && dep.created_at) || null,  by: (dep && dep.created_by) || (t && t.created_by) || '' },
@@ -192,7 +210,7 @@
       businessMonitorBy: (dep && dep.business_monitor_by) || '',
       org: primary.org, repo: primary.repo, projectName: cat.project_name || '',
       status: normStatus((dep && dep.ticket_step) || (t && t.ticket_step)),
-      prs: tasks.flatMap((x) => x.prs), tasks, timeline,
+      prs, tasks, timeline,
       service: mapRepoToService(primary.repo, cat.project_name || '', projs),
     };
   }

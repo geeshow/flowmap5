@@ -198,6 +198,7 @@ function reconcileS2S() {
   const frontProjects = new Set(MANIFEST.projects.filter(p => p.type === 'frontend').map(p => p.name));
   const ctrlByPath = new Map();
   const ctrlByAlias = new Map();   // alias(예: nexcore .jmd 트랜잭션 Tid) → 노드. alias 없는 백엔드는 비어 무영향
+  const ctrlAll = [];              // suffix(trailing-segment) 매칭용 전체 CONTROLLER 후보
   const nodeIndex = new Map();
   for (const n of NODES) {
     nodeIndex.set(n.id, n);
@@ -205,6 +206,7 @@ function reconcileS2S() {
       const k = normPath(n.endpoint);
       if (!ctrlByPath.has(k)) ctrlByPath.set(k, []);
       ctrlByPath.get(k).push(n);
+      ctrlAll.push(n);
     }
     if (Array.isArray(n.aliases)) {
       for (const a of n.aliases) {
@@ -221,21 +223,48 @@ function reconcileS2S() {
     if (src && frontProjects.has(src.project)) continue;   // 프론트 외부호출은 join 으로 처리
     const ext = nodeIndex.get(e.target);
     if (!ext || !ext.endpoint) continue;        // endpoint 없는 서드파티(외부 URL만)는 external 유지
-    const diffSvc = c => c.project !== ext.project || c.module !== ext.module;  // 서비스 단위(프로젝트/모듈)가 달라야 S2S
-    const cands = (ctrlByPath.get(normPath(ext.endpoint)) || [])
+    const callerProject = src && src.project;
+    const callerModule = src && src.module;
+    const diffSvc = c => (c.project !== callerProject || c.module !== callerModule);  // 호출자와 다른 서비스여야 S2S
+    const np = normPath(ext.endpoint);
+    const hints = hintTokens(ext);
+    const s2s = ext.s2sService || null;
+    // Tier 1: 정확한 경로 완전일치.
+    const exact = (ctrlByPath.get(np) || [])
       .filter(c => verbCompatible(ext.httpMethod, c.httpMethod) && diffSvc(c));
-    let targetId = null;
-    if (cands.length === 1) {
-      targetId = cands[0].id;                    // ① 직접 경로 매칭
-    } else if (cands.length === 0) {
-      // ② alias 폴백: nexcore 트랜잭션을 /std·/lng 프리픽스(+.jmd)로 호출한 s2s — 토큰 세그먼트로 매칭.
-      //    (spring Feign/RestTemplate 등 백엔드 간 호출이 nexcore .jmd 트랜잭션을 부르는 경우)
+    let pick = pickByHint(exact, s2s, hints, callerProject);
+    // Tier 2: trailing-segment suffix 매칭 (base-path/context-path/gateway prefix 흡수).
+    if (!pick) {
+      const cands = ctrlAll.filter(c => verbCompatible(ext.httpMethod, c.httpMethod) && diffSvc(c));
+      const sfx = [];
+      for (const c of cands) {
+        const drop = suffixDrop(np, normPath(c.endpoint));
+        if (drop != null) sfx.push({ node: c, drop });
+      }
+      if (sfx.length) {
+        const bestDrop = sfx.reduce((m, x) => x.drop < m ? x.drop : m, Infinity);
+        const tied = sfx.filter(x => x.drop === bestDrop).map(x => x.node);
+        const signal = tied.filter(c => c.project === s2s ||
+          projectMatchesHint(c.project, hints) || moduleMatchesHint(c.module, hints));
+        if (signal.length) {
+          pick = pickByHint(signal, s2s, hints, callerProject);
+        } else if (sfx.length === 1) {
+          // 유일 + concrete verb 면 host 정보 없이도 흡수.
+          const only = sfx[0].node;
+          const verb = (ext.httpMethod || 'ANY').toUpperCase();
+          const ov = (only.httpMethod || 'ANY').toUpperCase();
+          if (verb !== 'ANY' && ov !== 'ANY') pick = only;
+        }
+      }
+    }
+    // Tier 3: alias 매칭 (nexcore .jmd 트랜잭션을 /std·/lng 프리픽스로 호출하는 경우).
+    if (!pick) {
       const aliasId = aliasMatch(ext.endpoint, ext.httpMethod, ctrlByAlias);
       const t = aliasId && nodeIndex.get(aliasId);
-      if (t && diffSvc(t)) targetId = aliasId;
+      if (t && diffSvc(t)) pick = t;
     }
-    if (!targetId) continue;                      // 미매칭/ambiguous(2+)는 보수적으로 external 유지
-    e.kind = 's2s'; e.relation = 'call'; e.target = targetId;
+    if (!pick) continue;                          // 매칭 실패 — external 유지
+    e.kind = 's2s'; e.relation = 'call'; e.target = pick.id;
     absorbed.add(ext.id);
   }
   if (absorbed.size) {
@@ -243,6 +272,51 @@ function reconcileS2S() {
     for (const e of EDGES) { refed.add(e.source); refed.add(e.target); }
     NODES = NODES.filter(n => !(absorbed.has(n.id) && !refed.has(n.id)));
   }
+}
+
+// 충돌 시 picking: s2s-host 해석값 > Feign이름/placeholder hint > cross-project > 첫 후보.
+function pickByHint(cands, s2s, hints, callerProject) {
+  if (!cands || !cands.length) return null;
+  if (s2s) { const a = cands.find(c => c.project === s2s); if (a) return a; }
+  const b = cands.find(c => projectMatchesHint(c.project, hints) || moduleMatchesHint(c.module, hints));
+  if (b) return b;
+  const c = cands.find(x => x.project !== callerProject);
+  return c || cands[0];
+}
+// 충돌 hint 토큰: externalService(Feign 이름) + ${...} placeholder leaf — 우선 후보 가늠용 추출.
+function hintTokens(ext) {
+  const out = [];
+  if (ext.externalService) out.push(ext.externalService);
+  for (const raw of [ext.externalUrl, ext.urlPlaceholder]) {
+    if (!raw) continue;
+    const re = /\$\{([^}]*)\}/g; let m;
+    while ((m = re.exec(raw))) {
+      const leaf = m[1].split('.').pop();
+      if (leaf) out.push(leaf);
+    }
+  }
+  return out.map(t => String(t).toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean);
+}
+function projectMatchesHint(project, tokens) {
+  if (!project || !tokens.length) return false;
+  const p = project.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return tokens.some(t => t === p || p.includes(t) || t.includes(p));
+}
+function moduleMatchesHint(module, tokens) {
+  if (!module || !tokens.length) return false;
+  const m = module.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return tokens.some(t => t === m || m.includes(t) || t.includes(m));
+}
+// 짧은 path 가 긴 path 의 trailing-segment suffix (둘 다 2 세그 이상) 일 때, 긴 쪽에서 떨어진 leading segment 개수.
+// null 이면 suffix 관계 아님. 원본일치는 호출자가 Tier 1 에서 처리.
+function suffixDrop(a, b) {
+  const sa = (a || '').split('/').filter(Boolean);
+  const sb = (b || '').split('/').filter(Boolean);
+  const [short, long] = sa.length <= sb.length ? [sa, sb] : [sb, sa];
+  if (short.length < 2 || short.length === long.length) return null;
+  const tail = long.slice(long.length - short.length);
+  for (let i = 0; i < short.length; i++) if (tail[i] !== short[i]) return null;
+  return long.length - short.length;
 }
 
 // 게이트웨이를 경유한 프론트→백엔드 매칭.
@@ -3485,7 +3559,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '75';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '76';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }
