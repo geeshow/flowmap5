@@ -58,6 +58,13 @@
     const m = String(url || '').match(/\/([^/]+)\/([^/]+)\/pull\/\d+/);
     return m ? { org: m[1], repo: m[2] } : {};
   }
+  // release_version(배포 이미지)에서 커밋 SHA 추출 — 예: "...:master-b6d529b" → "b6d529b".
+  //   'latest'(미지정)거나 끝 토큰이 hex SHA 가 아니면 null. pulls 의 mergeCommit 매칭에 사용.
+  function commitFromVersion(v) {
+    if (!v || v === 'latest') return null;
+    const tail = String(v).split(/[-:/]/).pop() || '';   // master-b6d529b → b6d529b
+    return /^[0-9a-f]{7,40}$/i.test(tail) ? tail.toLowerCase() : null;
+  }
   function dow(date) { const d = new Date(date + 'T00:00:00'); return isNaN(d) ? '' : DOW[d.getDay()]; }
   function fmtTime(iso) {
     if (!iso) return '';
@@ -155,19 +162,27 @@
     for (const d of deployList) { if (!seen.has(d.release_ticket_id)) tickets.push(modelTicket(null, d, projs)); }
     return tickets;
   }
-  // 배포 티켓 모델. 신스키마(release_tasks[] — 컴포넌트별 git_repo + number-only prs + 타임라인 타임스탬프)와
+  // 배포 티켓 모델. 신스키마(release_tasks[] + 티켓 catalog_project.git_organization/git_repository,
+  //   catalog_project 가 null 이면 task.release_strategy_option.projectName/component_name 으로 repo 도출)와
   //   구스키마(top-level git_repository/prs)를 모두 수용. PR 은 소속 repo(_org/_repo)를 달고 다닌다.
   function modelTicket(t, dep, projs) {
-    const cat = (dep && dep.catalog_project) || {};
+    const cat = (dep && dep.catalog_project) || {};   // catalog_project 는 null 일 수 있음
     const rawTasks = (dep && Array.isArray(dep.release_tasks)) ? dep.release_tasks : null;
+    // 티켓 단위 git 좌표 — 신스키마는 catalog_project(.git_organization/.git_repository),
+    //   구스키마/로컬은 top-level 또는 task.catalog_component.git_repo 에 있다.
+    const tOrg = cat.git_organization || (t && t.git_organization) || (dep && dep.git_organization) || '';
+    const tRepo = cat.git_repository || (t && t.git_repository) || (dep && dep.git_repository) || '';
     let tasks;
     if (rawTasks) {
       tasks = rawTasks.map((rt) => {
-        const gr = (rt.catalog_component && rt.catalog_component.git_repo) || {};
-        let org = gr.org || '', repo = gr.repo || '';
+        const gr = (rt.catalog_component && rt.catalog_component.git_repo) || {};   // 로컬/구 포맷(task별 git_repo)
+        const opt = rt.release_strategy_option || {};                               // nexcore_job 등은 여기 projectName 에 repo
+        // repo 우선순위: task.git_repo → 티켓 catalog_project → strategy_option.projectName → component_name
+        let org = gr.org || tOrg || '';
+        let repo = gr.repo || tRepo || opt.projectName || rt.component_name || '';
         // PR 객체 전체 필드(html_url 등)를 유지 — pulls/impact 임팩트가 없어도 PR 기능을 표시하기 위함.
         const prs = (rt.prs || []).map((p) => ({ ...p, _org: org, _repo: repo }));
-        // catalog_component.git_repo 가 비어 있으면 PR html_url(.../<org>/<repo>/pull/<n>)에서 org/repo 를 보충.
+        // 그래도 repo 가 없으면 PR html_url(.../<org>/<repo>/pull/<n>)에서 org/repo 를 보충.
         if (!repo) {
           for (const p of prs) { const u = parsePrUrl(p.html_url); if (u.repo) { org = org || u.org; repo = u.repo; break; } }
           prs.forEach((p) => { p._org = org; p._repo = repo; });
@@ -175,11 +190,11 @@
         return {
           component: rt.component_name || repo, order: rt.release_order || 0,
           strategy: rt.release_strategy || '', step: normStatus(rt.task_step), org, repo, prs,
+          deployedCommit: commitFromVersion(rt.release_version),   // 배포 이미지 커밋 SHA(latest 면 null)
         };
       }).sort((a, b) => a.order - b.order);
     } else {
-      const org = (t && t.git_organization) || (dep && dep.git_organization) || cat.git_organization || '';
-      const repo = (t && t.git_repository) || (dep && dep.git_repository) || cat.git_repository || '';
+      const org = tOrg, repo = tRepo;
       const prs = ((t && t.prs) || (dep && dep.prs) || []).map((p) => ({ ...p, _org: org, _repo: repo }));
       tasks = [{ component: cat.project_name || repo, order: 1, strategy: '', step: normStatus((dep && dep.ticket_step) || (t && t.ticket_step)), org, repo, prs }];
     }
@@ -578,19 +593,25 @@
     return pullsRelByRepo(tk && tk.org, tk && tk.repo, tk);
   }
   // PR pulls 인덱스 경로. 분석 매니페스트에 있으면 그 경로, 없으면 git namespace/repo 규약
-  //   `projects/<org>/<repo>/<repo>/<repo>.pulls.json` (배포가 가리키는 repo 가 그래프 분석 대상이 아닐 수 있음).
-  function pullsRelByRepo(org, repo, tk) {
-    const cands = [tk && tk.service, repo, tk && tk.projectName].filter(Boolean);
-    for (const p of (FM.MANIFEST && FM.MANIFEST.projects) || [])
-      if (p && p.pulls && cands.includes(p.name)) return p.pulls;
-    return (org && repo) ? `projects/${org}/${repo}/${repo}/${repo}.pulls.json` : null;
+  //   `projects/<namespace>/<repo>/<repo>/<repo>.pulls.json` (배포가 가리키는 repo 가 그래프 분석 대상이 아닐 수 있음).
+  //   매칭: per-root name 정확일치 우선 → git_repository ↔ manifest.repo. 규약 namespace 는 manifest.namespace 우선
+  //   (배포의 git_organization 은 데이터 경로 namespace 와 다를 수 있어 — 예: 실제 org=moneyball, namespace=nexcore).
+  function manifestRelByRepo(field, org, repo, tk) {
+    const projects = (FM.MANIFEST && FM.MANIFEST.projects) || [];
+    const nameCands = [tk && tk.service, repo, tk && tk.projectName].filter(Boolean);
+    let byRepo = null;
+    for (const p of projects) {
+      if (!p || !p[field]) continue;
+      if (nameCands.includes(p.name)) return p[field];
+      if (repo && p.repo === repo && !byRepo) byRepo = p;
+    }
+    if (byRepo) return byRepo[field];
+    const ns = (projects.find((p) => p && p.repo === repo && p.namespace) || {}).namespace || org;
+    return (ns && repo) ? `projects/${ns}/${repo}/${repo}/${repo}.${field}.json` : null;
   }
-  // impact 인덱스 경로 — 매니페스트에 있으면 그 경로, 없으면 규약 경로.
-  function impactRelByRepo(org, repo) {
-    for (const p of (FM.MANIFEST && FM.MANIFEST.projects) || [])
-      if (p && p.impact && (p.name === repo)) return p.impact;
-    return (org && repo) ? `projects/${org}/${repo}/${repo}/${repo}.impact.json` : null;
-  }
+  function pullsRelByRepo(org, repo, tk) { return manifestRelByRepo('pulls', org, repo, tk); }
+  // impact 인덱스 경로 — 동일 매칭 규약.
+  function impactRelByRepo(org, repo, tk) { return manifestRelByRepo('impact', org, repo, tk); }
   // 선택된 PR 의 소속 repo(멀티 task — PR 마다 repo 다를 수 있음). 못 찾으면 티켓 대표 repo.
   function prRepoOf(tk, number) {
     const p = ((tk && tk.prs) || []).find((x) => String(x.number) === String(number));
@@ -660,7 +681,7 @@
     const { org, repo } = prRepoOf(eff.ticket, eff.prNumber);   // 선택 PR 소속 repo — impact _project 와 매칭
     FM.loadFeature('impact')
       .then(() => FM.impact && FM.impact.ensure())   // 커밋 인덱스 로드(commitBySha 채움) — prKey 조회 전 필수
-      .then(() => FM.impact && FM.impact.ensureSource(impactRelByRepo(org, repo)))   // deploy repo impact 추가 병합
+      .then(() => FM.impact && FM.impact.ensureSource(impactRelByRepo(org, repo, eff.ticket)))   // deploy repo impact 추가 병합
       .then(() => {
         if (renderSeq !== seq) return;                  // 그 사이 다른 배포/PR로 재렌더됨
         const key = FM.impact && FM.impact.prKey(eff.prNumber, repo);
@@ -755,8 +776,10 @@
   const TL_WEEK = 7 * 24 * 3600 * 1000;
   // 타임라인·PR목록 공통 선택: 각 repo 의 pulls 인덱스(<repo>.pulls.json 의 pulls[])에서 표시할 PR 을 고른다.
   //   deploy_list 의 prs 는 사용하지 않는다. 후보 시각: status=merged → mergedAt, status=open → updatedAt
-  //   (status 없는 구포맷은 mergedAt→updatedAt 폴백). 선택: 신청 전 1주 이내·최대 5건 + 신청~배포 구간 전체
-  //   (신청/배포 시각 부족 시 최근 8건). repo 목록은 배포 task 에서 도출(같은 repo task 는 합쳐 1개, order 순).
+  //   (status 없는 구포맷은 mergedAt→updatedAt 폴백).
+  //   선택 규칙: release_version 에 배포 커밋 SHA 가 있고 그 PR(mergeCommit)을 찾으면 → 그 배포 PR + 직전 2개 = 총 3개.
+  //     그 외(latest/미매칭): 신청 전 1주 이내·최대 5건 + 신청~배포 구간 전체(신청/배포 시각 부족 시 최근 8건).
+  //   repo 목록은 배포 task 에서 도출(같은 repo task 는 합쳐 1개, order 순).
   async function selectTimelinePulls(tk, seq) {
     const tl = tk.timeline || {};
     const reqAt = tms(tl.created && tl.created.at);     // 신청 시간
@@ -764,26 +787,38 @@
     const metaByRepo = await loadPullsForTicket(tk);
     if (renderSeq !== seq) return null;
     const repoTasks = [];
-    for (const t of (tk.tasks || [])) if (t.repo && !repoTasks.some((x) => x.repo === t.repo)) repoTasks.push({ org: t.org, repo: t.repo });
-    const perRepo = repoTasks.map(({ org, repo }) => {
+    for (const t of (tk.tasks || [])) {
+      const ex = repoTasks.find((x) => x.repo === t.repo);
+      if (!t.repo) continue;
+      if (ex) { if (!ex.deployedCommit && t.deployedCommit) ex.deployedCommit = t.deployedCommit; }
+      else repoTasks.push({ org: t.org, repo: t.repo, deployedCommit: t.deployedCommit || null });
+    }
+    const perRepo = repoTasks.map(({ org, repo, deployedCommit }) => {
       const meta = metaByRepo.get(RK(org, repo));
       const indexList = (meta && meta.list) || [];                      // <repo>.pulls.json 의 pulls[]
       const cand = new Map();
       for (const e of indexList) {
         const at = tms(e.status === 'open' ? e.updatedAt : (e.mergedAt || e.updatedAt));
         if (at == null) continue;
-        // prCard 가 쓰는 필드명(merged_at/user/html_url)으로 매핑 + 타임라인용 at 동봉.
+        // prCard 가 쓰는 필드명(merged_at/user/html_url)으로 매핑 + 타임라인용 at·mergeCommit 동봉.
         cand.set(String(e.number), { number: e.number, title: e.title, at,
-          user: e.author, merged_at: e.mergedAt, html_url: e.url, status: e.status, _org: org, _repo: repo });
+          user: e.author, merged_at: e.mergedAt, html_url: e.url, status: e.status,
+          mergeCommit: e.mergeCommit || '', _org: org, _repo: repo });
       }
       const prs = [...cand.values()].sort((a, b) => a.at - b.at);
+      // 배포된 이미지 커밋(release_version 의 SHA)과 mergeCommit prefix 매칭 → 해당 PR 에 배포 표시.
+      const di = deployedCommit ? prs.findIndex((p) => p.mergeCommit && p.mergeCommit.toLowerCase().startsWith(deployedCommit)) : -1;
+      if (di >= 0) prs[di].deployed = true;
       let shown;
-      if (reqAt != null && depAt != null) {
+      if (di >= 0) {
+        // release_version 이 가리키는 배포 커밋 PR + 직전 2개 = 총 3개만 표시.
+        shown = prs.slice(Math.max(0, di - 2), di + 1);
+      } else if (reqAt != null && depAt != null) {
         const before = prs.filter((p) => p.at < reqAt && p.at >= reqAt - TL_WEEK).slice(-5);  // 신청 전 1주 이내 · 최대 5건
         const within = prs.filter((p) => p.at >= reqAt && p.at <= depAt);                     // 신청~배포 구간 전체
         shown = [...before, ...within];
       } else shown = prs.slice(-8);   // 타임라인 시각(신청/배포) 부족 시 최근 8개
-      return { org, repo, shown };
+      return { org, repo, deployedCommit, shown };
     });
     return { reqAt, depAt, perRepo };
   }
@@ -846,18 +881,21 @@
       if (!shown.length) pAxis.appendChild(el('div', 'dep-tl-empty', 'PR 없음'));
       for (const p of shown) {
         const isBefore = reqAt != null && p.at < reqAt;
-        const dot = el('div', 'dep-tl-pr-dot' + (isBefore ? ' before' : ' within') + (String(p.number) === String(ctx.sel) ? ' sel' : ''));
+        const dot = el('div', 'dep-tl-pr-dot' + (isBefore ? ' before' : ' within') +
+          (p.deployed ? ' deployed' : '') + (String(p.number) === String(ctx.sel) ? ' sel' : ''));
         dot.style.left = pos(p.at) + '%';
         dot.dataset.pr = p.number;   // 하단 PR 목록 카드(data-pr)와 연결용
-        dot.title = `#${p.number} ${p.title || ''}\n${repo} · ${fmtMs(p.at)}`;
+        dot.title = `#${p.number} ${p.title || ''}\n${repo} · ${fmtMs(p.at)}` + (p.deployed ? '\n🚀 이 이미지가 배포됨' : '');
         dot.onclick = () => nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) });
         pAxis.appendChild(dot);
       }
       pRow.appendChild(pAxis);
       host.appendChild(pRow);
     }
+    const anyDeployed = perRepo.some((r) => r.shown.some((p) => p.deployed));
     host.appendChild(el('div', 'dep-tl-legend',
-      `<span class="dep-tl-lg before">●</span> 신청 전(1주·최대 5) &nbsp; <span class="dep-tl-lg within">●</span> 신청~배포 구간`));
+      `<span class="dep-tl-lg before">●</span> 신청 전(1주·최대 5) &nbsp; <span class="dep-tl-lg within">●</span> 신청~배포 구간` +
+      (anyDeployed ? ` &nbsp; <span class="dep-tl-lg deployed">●</span> 🚀 배포된 이미지(commit)` : '')));
     requestAnimationFrame(() => drawPrConnector());   // 타임라인 점 ↔ PR 목록 카드 연결선
   }
 
@@ -887,15 +925,16 @@
     const on = ctx && String(p.number) === String(ctx.sel);
     const merged = !!p.merged_at;       // 머지 시각이 있으면 머지된 PR
     const unmerged = isUnmergedPr(p);   // 메타가 있는데 mergedAt 만 없을 때만 "미머지"로 확정(number-only 는 미확정)
-    const card = el('div', 'dep-prc' + (on ? ' sel' : '') + (unmerged ? ' warn' : ''));
+    const card = el('div', 'dep-prc' + (on ? ' sel' : '') + (unmerged ? ' warn' : '') + (p.deployed ? ' deployed' : ''));
     card.dataset.pr = p.number;   // 타임라인 점(data-pr)과 연결용
     const num = p.number != null ? '#' + p.number : '';
     const warnBadge = unmerged ? '<span class="dep-prc-warn" title="Not merged — verify it is actually included in this deploy">⚠️</span>' : '';
+    const deployBadge = p.deployed ? '<span class="dep-prc-dep" title="이 PR의 커밋이 배포된 이미지입니다">🚀</span>' : '';
     const time = merged ? FM.esc(fmtTime(p.merged_at)) : '';
     const meta = [p.user ? FM.esc(p.user) : '', time].filter(Boolean).join(' · ');
     // 얇은 1줄: PR번호 · 이름(제목) · 작성자·시간 · GitHub
     card.innerHTML =
-      `<span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}` +
+      `<span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}${deployBadge}` +
       `<span class="dep-prc-title">${FM.esc(p.title || '')}</span>` +
       `<span class="dep-prc-by">${meta}</span>` +
       (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '');
