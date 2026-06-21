@@ -207,7 +207,7 @@
         sha: p.mergeCommit,
         shortSha: 'PR' + p.number,
         author: p.author,
-        date: p.mergedAt,
+        date: p.mergedAt || p.updatedAt,   // open PR 은 머지 전 → 최종수정(updatedAt) 으로 표시·정렬
         subject: p.title,
         // PR 상태(merged/open/closed/draft…) — PR 분석기가 채운다. 없으면 mergedAt 유무로 폴백.
         _prStatus: p.status || (p.mergedAt ? 'merged' : null),
