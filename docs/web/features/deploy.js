@@ -36,8 +36,8 @@
   const yearCache = new Map();   // year → Promise<Map<date,{date,rec,tickets}>>
   let renderSeq = 0;
   let railFilter = '';           // 레일 텍스트 필터(담당자/요약/서비스/#ID) — 재렌더 간 유지
-  let svcHop = 1;                // 서비스 영향도 연관관계 표시 단계 — 기본 1차(배포 서비스에 직접 연결된 서비스만)
-  let bottomTab = 'svc';         // 하단 탭 선택 기억 — PR 전환(재렌더) 후에도 같은 탭을 유지
+  let bottomTab = 'impact';      // 하단 탭 선택 기억 — PR 전환(재렌더) 후에도 같은 탭을 유지
+  const siExpanded = new Set();  // 서비스 영향도: 펼친 이웃 서비스 키('lo:'/'ro:' + svc) — 기본 접힘
   let depMain = null;            // 우측 메인 패널(.dep-main) — PR 타임라인↔목록 커넥터 앵커
   window.addEventListener('resize', () => { if (depMain) requestAnimationFrame(drawPrConnector); });
   window.addEventListener('fm:zoom', () => { if (depMain) requestAnimationFrame(drawPrConnector); });  // 줌 변경 시 커넥터 좌표 재계산
@@ -150,51 +150,6 @@
     const hit = ((FM.MANIFEST && FM.MANIFEST.projects) || []).find((p) => p && p.name === name);
     return hit ? { org: hit.namespace || '', repo: hit.repo || hit.name } : null;
   }
-  // 배포가 건드린(touched) 서비스 집합 — 모노레포면 모듈 서비스 전체, 아니면 대표 서비스 하나.
-  //   서비스 영향도 연관관계 그래프는 이 집합을 기준으로 그린다(그래프 없는 repo 엔트리는 제외돼야
-  //   빈 카드/연결 0 문제가 안 생긴다). pulls/impact 조회는 별도로 tk.service(대표=repo 엔트리)를 쓴다.
-  function touchedServicesFor(tk) {
-    const out = new Set();
-    const idx = serviceIndex();
-    for (const task of (tk.tasks && tk.tasks.length ? tk.tasks : [{ repo: tk.repo }])) {
-      const mods = modulesOfRepo(task.repo);
-      if (mods.length) mods.forEach((m) => out.add(m));
-      else { const s = mapRepoToService(task.repo, '', idx); if (s) out.add(s); }
-    }
-    return out;
-  }
-  // touchedServicesFor 의 비동기판 — 모노레포는 "실제 변경된 모듈"만 배포 서비스로 좁힌다.
-  //   PR impact 의 변경 노드가 속한 모듈만 남기고, 못 구하면 전체 모듈(touchedServicesFor 와 동일)로 폴백.
-  async function resolveTouchedServices(tk) {
-    const out = new Set();
-    const idx = serviceIndex();
-    for (const task of (tk.tasks && tk.tasks.length ? tk.tasks : [{ repo: tk.repo, org: tk.org, prs: tk.prs }])) {
-      const mods = modulesOfRepo(task.repo);
-      if (mods.length) {
-        const changed = await changedModulesOf(task, mods, tk);
-        (changed && changed.size ? [...changed] : mods).forEach((m) => out.add(m));
-      } else { const s = mapRepoToService(task.repo, '', idx); if (s) out.add(s); }
-    }
-    return out;
-  }
-  // 모노레포 task 의 실제 변경 모듈 서비스 집합. PR impact 변경노드.project ∩ 그래프 모듈. 못 구하면 null(→전체 폴백).
-  async function changedModulesOf(task, mods, tk) {
-    const prs = (task.prs || []).filter((p) => p && p.number != null);
-    if (!prs.length) return null;
-    try {
-      await FM.loadFeature('impact');
-      if (!FM.impact || !FM.impact.changedNodeIds) return null;
-      await FM.impact.ensure();
-      await FM.impact.ensureSource(impactRelByRepo(task.org || (tk && tk.org), task.repo, tk));
-      const modSet = new Set(mods);
-      const hit = new Set();
-      for (const p of prs) {
-        const ids = await FM.impact.changedNodeIds(p.number, task.repo);
-        for (const id of ids) { const n = FM.nodeById.get(id); const proj = n && n.project; if (proj && modSet.has(proj)) hit.add(proj); }
-      }
-      return hit.size ? hit : null;
-    } catch (e) { return null; }
-  }
   function buildTickets(deploy, pr, projs) {
     const deployList = (deploy && deploy.deploy_list) || [];
     const depByTicket = new Map(deployList.map((d) => [d.release_ticket_id, d]));
@@ -278,22 +233,6 @@
       prs, tasks, timeline,
       service: mapRepoToService(primary.repo, cat.project_name || '', projs),
     };
-  }
-  function serviceEdges() {
-    const agg = new Map();
-    for (const e of FM.EDGES) {
-      if (e.kind !== 's2s' && e.kind !== 'join') continue;
-      const sn = FM.nodeById.get(e.source), tn = FM.nodeById.get(e.target);
-      if (!sn || !tn) continue;
-      const sp = sn.project, tp = tn.project;
-      if (!sp || !tp || sp === tp) continue;
-      const kc = e.kind === 's2s' ? 's2s' : 'join';
-      const key = sp + '|' + tp + '|' + kc;
-      let a = agg.get(key);
-      if (!a) { a = { source: 'svc:' + sp, target: 'svc:' + tp, sp, tp, kc, count: 0, async: false }; agg.set(key, a); }
-      a.count++; if (e.mode === 'async') a.async = true;
-    }
-    return [...agg.values()];
   }
 
   /* ───────── 뷰 ───────── */
@@ -614,17 +553,7 @@
     const body = el('div', 'dep-tab-body');
     const hasPr = eff && eff.prNumber != null;
     const tabs = [
-      { key: 'svc', label: '서비스 영향도 · 연관관계', build: (host) => {
-          if (!tk.service) host.appendChild(el('div', 'dep-imp-note',
-            `이 배포(<code>${FM.esc(repo)}</code>)는 분석 그래프에 매칭되는 서비스가 없습니다. 메서드 단위 영향은 “PR 커밋 영향도” 탭에서 확인하세요.`));
-          else {
-            const wrap = el('div', 'dep-svc-graph'); host.appendChild(wrap);
-            wrap.innerHTML = '<div class="dep-loading">서비스 영향도 계산 중…</div>';
-            // 모노레포 배포는 실제 변경 모듈만 "배포"로 좁힌다(impact 기반·비동기). renderServiceGraph 가 wrap 을 비우고 그린다.
-            resolveTouchedServices(tk).then((touched) => { if (renderSeq === seq) renderServiceGraph(wrap, touched); });
-          }
-        } },
-      { key: 'impact', label: 'PR 커밋 영향도', disabled: !hasPr, build: (host) => renderPrImpact(host, eff, seq) },
+      { key: 'impact', label: '서비스 영향도', disabled: !hasPr, build: (host) => renderServiceImpact(host, eff, seq) },
       { key: 'files', label: '변경 파일', disabled: !hasPr, build: (host) => renderPrFiles(host, eff, seq) },
     ];
     const btns = {}, panels = {};
@@ -651,7 +580,7 @@
     }
     sec.append(bar, body); main.appendChild(sec);
     // 직전에 보던 탭 복원 — 단, 이 배포에서 비활성(PR 없음)인 탭이면 기본 'svc' 로 폴백(선호는 유지).
-    const want = tabs.find((t) => t.key === bottomTab && !t.disabled) ? bottomTab : 'svc';
+    const want = tabs.find((t) => t.key === bottomTab && !t.disabled) ? bottomTab : 'impact';
     activate(want, false);
   }
 
@@ -740,22 +669,177 @@
 
   // 선택된 PR 의 커밋 영향도(분석 바 + 경계 투영 그래프)를 하단에 임베드한다.
   // impact.js 의 공개 API(FM.impact.renderInto)를 재사용 — 커밋 영향도 뷰와 동일한 컴포넌트.
-  function renderPrImpact(panel, eff, seq) {
+  // ───────── 서비스 영향도 — 선택 PR 의 변경 노드를 호출/피호출 "서비스 단위"로 묶어 표시 ─────────
+  //   가운데=변경 서비스, 왼쪽=피호출 서비스(변경이 호출), 오른쪽=호출 서비스(변경을 호출).
+  //   이웃 서비스 카드 클릭 → 그 방향으로 연결된 endpoint 노드를 펼친다(1단계).
+  function renderServiceImpact(panel, eff, seq) {
     if (!eff || eff.prNumber == null) { panel.innerHTML = '<div class="dep-hint">선택된 PR이 없습니다.</div>'; return; }
     panel.innerHTML = '';
-    const host = el('div', 'dep-impact-host');
-    host.innerHTML = '<div class="dep-loading">커밋 영향도 불러오는 중…</div>';
+    const host = el('div', 'dep-si-host');
+    host.innerHTML = '<div class="dep-loading">서비스 영향도 계산 중…</div>';
     panel.appendChild(host);
     const { org, repo } = prRepoOf(eff.ticket, eff.prNumber);   // 선택 PR 소속 repo — impact _project 와 매칭
     FM.loadFeature('impact')
-      .then(() => FM.impact && FM.impact.ensure())   // 커밋 인덱스 로드(commitBySha 채움) — prKey 조회 전 필수
-      .then(() => FM.impact && FM.impact.ensureSource(impactRelByRepo(org, repo, eff.ticket)))   // deploy repo impact 추가 병합
-      .then(() => {
-        if (renderSeq !== seq) return;                  // 그 사이 다른 배포/PR로 재렌더됨
-        const key = FM.impact && FM.impact.prKey(eff.prNumber, repo);
-        if (!key) { host.innerHTML = '<div class="dep-hint">이 PR의 커밋 영향도 데이터가 없습니다 (impact 미수집).</div>'; return; }
-        FM.impact.renderInto(host, [key]);
-      }).catch(() => { host.innerHTML = '<div class="dep-hint">커밋 영향도 모듈 로드 실패.</div>'; });
+      .then(() => FM.impact && FM.impact.ensure())
+      .then(() => FM.impact && FM.impact.ensureSource(impactRelByRepo(org, repo, eff.ticket)))
+      .then(async () => {
+        if (renderSeq !== seq) return;
+        const detail = (FM.impact && FM.impact.changedDetail)
+          ? (await FM.impact.changedDetail(eff.prNumber, repo))
+          : { changedIds: [], endpoints: [], children: {} };
+        if (renderSeq !== seq) return;
+        let first = true;
+        const redraw = () => { buildServiceImpact(host, detail, redraw, seq, first); first = false; };
+        redraw();
+      }).catch(() => { host.innerHTML = '<div class="dep-hint">서비스 영향도 로드 실패.</div>'; });
+  }
+
+  function buildServiceImpact(host, detail, redraw, seq, resetSel) {
+    if (renderSeq !== seq) return;
+    const changedIds = detail.changedIds || [];
+    const endpoints = detail.endpoints || [];
+    const epChildren = detail.children || {};
+    const svcOf = (id) => { const n = FM.nodeById.get(id); return n && n.project; };
+    const addSet = (m, k, v) => (m.get(k) || m.set(k, new Set()).get(k)).add(v);
+    // ── "수정노드를 가진 endpoint(앵커)" 중심 + 실제 endpoint↔endpoint 연결 ──
+    const changedSet = new Set(changedIds);
+    // 앵커 = 수정 노드를 가진(자식 보유) 또는 그 자체가 변경된 영향 엔드포인트. 수정과 무관한 영향 엔드포인트는 제외.
+    const isAnchor = (id) => (epChildren[id] && epChildren[id].length) || changedSet.has(id);
+    const anchorBySvc = new Map();   // svc → Set(anchor endpoint id)
+    const anchorSet = new Set();
+    for (const id of endpoints) {
+      if (!isAnchor(id)) continue;
+      const s = svcOf(id); if (!s) continue;
+      addSet(anchorBySvc, s, id); anchorSet.add(id);
+    }
+    // 폴백: 앵커를 못 가리면(엔드포인트로 롤업 안 되는 내부 변경) 변경 노드 자체를 중심에 둔다.
+    let fallback = false;
+    if (!anchorSet.size) {
+      fallback = true;
+      for (const id of changedIds) { const s = svcOf(id); if (s) { addSet(anchorBySvc, s, id); anchorSet.add(id); } }
+    }
+    if (!anchorBySvc.size) {
+      host.innerHTML = '<div class="dep-hint">이 PR 의 변경이 호출 그래프에 닿지 않습니다.</div>';
+      FM.cardEls.clear(); FM.setCanvasEdges([]); requestAnimationFrame(() => FM.drawConnectors()); return;
+    }
+    // 앵커 endpoint 에서 내부(같은 서비스) 체인을 통과해 닿는 "다른 서비스"의 개별 경계 endpoint
+    const cross = (startId, edgeMap, nbOf, srcSvc) => {
+      const res = [], seen = new Set([startId]), stack = [startId];
+      while (stack.length) {
+        const cur = stack.pop();
+        for (const e of (edgeMap.get(cur) || [])) {
+          const nb = nbOf(e); if (!FM.nodeById.has(nb) || seen.has(nb)) continue; seen.add(nb);
+          const s = svcOf(nb);
+          if (s && s !== srcSvc) res.push({ svc: s, id: nb }); else stack.push(nb);
+        }
+      }
+      return res;
+    };
+    // 실제 노드 id 쌍 엣지 + 사이드(이웃) 개별 endpoint 카드 — 앵커에 직접 연결된 노드만 남긴다.
+    const edgeList = [];                                       // {s, t}  실제 endpoint id 쌍
+    const calleeBySvc = new Map(), callerBySvc = new Map();    // svc → Set(이웃 endpoint id)
+    const nbLoc = new Map();                                   // 이웃 endpoint id → { prefix:'lo'|'ro', svc } (접힘 시 그룹 카드로 엣지 리다이렉트)
+    const pushNb = (map, prefix, id, svc) => { if (anchorSet.has(id) || nbLoc.has(id)) return; nbLoc.set(id, { prefix, svc }); addSet(map, svc, id); };
+    anchorSet.forEach((aid) => {
+      const sv = svcOf(aid); if (!sv) return;
+      for (const { svc, id } of cross(aid, FM.outEdges, (e) => e.target, sv)) { edgeList.push({ s: aid, t: id }); pushNb(calleeBySvc, 'lo', id, svc); }
+      for (const { svc, id } of cross(aid, FM.inEdges, (e) => e.source, sv)) { edgeList.push({ s: id, t: aid }); pushNb(callerBySvc, 'ro', id, svc); }
+    });
+
+    // ── DOM ──
+    host.innerHTML = '';
+    FM.cardEls.clear();
+    if (resetSel) { FM.state.sel = null; FM.setProcessDockEnabled(false); siExpanded.clear(); }   // 새 PR 진입 시 이전 선택·독·펼침 해제
+    // 변경 노드 클릭 → 상세 + 프로세스 흐름 독 (커밋 영향도와 동일). state.sel 직접 제어로 URL 오염 방지.
+    FM.setDockChangedNodes(new Set(changedIds));
+    const setSelection = (id) => {
+      FM.state.sel = (id && FM.nodeById.has(id)) ? id : null;
+      FM.renderDetail();
+      FM.setProcessDockEnabled(true);   // 선택 노드 기준 프로세스 흐름 독 표시
+      FM.applyHighlight();
+    };
+    const nodeCard = (id) => {
+      const card = FM.makeCard(id, { noCenter: true, onPick: setSelection });   // 개별 노드 — cardEls[id] 등록
+      // 노드 자체가 실제 변경된 메서드면 카드에 "수정" 뱃지(+주황 링) — 영향만 받은 노드와 구분.
+      if (changedSet.has(id)) { card.classList.add('imp-changed'); card.insertAdjacentHTML('beforeend', '<span class="dep-si-modtag">수정</span>'); }
+      return card;
+    };
+    // 영향 엔드포인트 카드 아래로 "수정된 서비스/컴포넌트" 자식 행을 매단다 (커밋 영향도와 동일한 표현).
+    const KID_MAX = 8;
+    const appendKids = (card, epId) => {
+      const kids = epChildren[epId] || [];
+      if (!kids.length) return;
+      const wrap = el('div', 'imp-kids');
+      kids.slice(0, KID_MAX).forEach((kid) => {
+        const kn = FM.nodeById.get(kid); if (!kn) return;
+        const row = el('div', 'imp-kid',
+          `<span class="imp-kid-layer">${FM.esc(kn.layer || 'CODE')}</span>` +
+          `<span class="imp-kid-name">${FM.esc(kn.method || kid)}</span>` +
+          `<span class="imp-kid-tag">수정</span>`);
+        row.title = [kn.fqcn, kn.file ? kn.file + (kn.line ? ':' + kn.line : '') : null, kn.description].filter(Boolean).join('\n');
+        row.addEventListener('click', (e) => { e.stopPropagation(); setSelection(kid); });
+        wrap.appendChild(row);
+      });
+      if (kids.length > KID_MAX) wrap.appendChild(el('div', 'imp-kid more', `+${kids.length - KID_MAX} 수정`));
+      card.appendChild(wrap);
+    };
+    const graph = el('div', 'dep-si');
+    const colL = el('div', 'dep-si-col left',  '<div class="dep-si-coltitle">◀ 피호출 서비스</div>');
+    const colC = el('div', 'dep-si-col center', '<div class="dep-si-coltitle">수정된 서비스</div>');
+    const colR = el('div', 'dep-si-col right', '<div class="dep-si-coltitle">호출 서비스 ▶</div>');
+
+    const svcCard = (key, svc, sub, cls, onClick) => {
+      const hue = serviceHue(svc);
+      const card = el('div', 'node-card dep-si-card ' + cls + (onClick ? ' clickable' : ''));
+      card.dataset.node = key;
+      card.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
+      card.innerHTML = `<div class="dep-si-name"><span class="dep-si-dot" style="background:hsl(${hue} 60% 50%)"></span>${FM.esc(svc)}</div>` +
+        `<div class="dep-si-sub">${sub}</div>`;
+      if (onClick) card.addEventListener('click', onClick);
+      FM.cardEls.set(key, card);
+      return card;
+    };
+
+    // 가운데: "수정노드를 가진 endpoint(앵커)" 박스 — 서비스별 헤더(라벨) + 앵커 endpoint 카드(+수정 자식). 클릭 시 프로세스 흐름.
+    const labelOf = (id) => { const n = FM.nodeById.get(id); return (n && (n.endpoint || n.method)) || id; };
+    for (const svc of [...anchorBySvc.keys()].sort()) {
+      const eps = [...anchorBySvc.get(svc)].sort((a, b) => String(labelOf(a)).localeCompare(String(labelOf(b))));
+      const box = el('div', 'dep-si-cbox');
+      box.appendChild(svcCard('si:c:' + svc, svc, `${fallback ? '변경' : '수정 endpoint'} ${eps.length}`, 'changed cbox-head'));
+      const body = el('div', 'dep-si-cbody');
+      eps.forEach((id) => { const card = nodeCard(id); if (!fallback) appendKids(card, id); body.appendChild(card); });
+      box.appendChild(body);
+      colC.appendChild(box);
+    }
+    // 왼쪽=피호출(앵커가 호출) / 오른쪽=호출(앵커를 호출) — 기본은 서비스 그룹 카드로 접고, 누르면 개별 endpoint 로 펼친다.
+    const renderNeighbors = (col, map, prefix) => {
+      if (!map.size) { col.appendChild(el('div', 'dep-si-empty', '없음')); return; }
+      for (const svc of [...map.keys()].sort()) {
+        const key = prefix + ':' + svc, ids = [...map.get(svc)].sort((a, b) => String(labelOf(a)).localeCompare(String(labelOf(b))));
+        if (siExpanded.has(key)) {
+          const box = el('div', 'dep-si-cbox nb');
+          box.appendChild(svcCard('si:' + prefix + ':' + svc, svc, `endpoint ${ids.length} · 접기 ▲`, 'nb expanded', () => { siExpanded.delete(key); redraw(); }));
+          const body = el('div', 'dep-si-cbody');
+          ids.forEach((id) => body.appendChild(nodeCard(id)));
+          box.appendChild(body);
+          col.appendChild(box);
+        } else {
+          col.appendChild(svcCard('si:' + prefix + ':' + svc, svc, `endpoint ${ids.length} · 펼치기 ▼`, 'nb', () => { siExpanded.add(key); redraw(); }));
+        }
+      }
+    };
+    renderNeighbors(colL, calleeBySvc, 'lo');
+    renderNeighbors(colR, callerBySvc, 'ro');
+    graph.append(colL, colC, colR);
+    host.appendChild(graph);
+
+    // ── 엣지: 펼친 이웃은 실제 endpoint ↔ endpoint, 접힌 이웃은 endpoint ↔ 서비스 그룹 카드 ──
+    const edges = [], eseen = new Set();
+    const addEdge = (s, t, kc) => { const k = s + '>' + t; if (s === t || eseen.has(k)) return; eseen.add(k); edges.push({ source: s, target: t, kc: kc || 's2s' }); };
+    const sideAnchor = (id) => { const li = nbLoc.get(id); return (li && !siExpanded.has(li.prefix + ':' + li.svc)) ? 'si:' + li.prefix + ':' + li.svc : id; };
+    edgeList.forEach(({ s, t }) => { const S = sideAnchor(s), T = sideAnchor(t); if (FM.cardEls.has(S) && FM.cardEls.has(T)) addEdge(S, T); });
+    FM.setCanvasEdges(edges);
+    requestAnimationFrame(() => FM.drawConnectors());
   }
 
   // 임베드 영향 그래프(.imp-gwrap)의 가로 스크롤바를 dep-main 하단에 sticky 로 고정한다.
@@ -1057,72 +1141,4 @@
     return card;
   }
 
-  // 배포 서비스(touched)에서 "영향받는 쪽"(업스트림=호출측)으로만 hops 단계까지 확장한 서비스 집합.
-  //   엣지 source→target = source 가 target 을 호출/의존. touched 가 바뀌면 그것을 호출하는 source 가
-  //   영향받으므로, 영향은 target→source(역방향)로 전파된다. 그래서 callee→callers(역인접)만 따라간다.
-  //   (양방향 확장은 무관한 다운스트림 의존까지 끌어와 서비스가 과다 출력되던 원인 → 영향 방향으로 한정)
-  function expandSvcHops(touched, allEdges, hops) {
-    const radj = new Map();   // callee(target) → 그를 호출하는 서비스들(sources) = 상류(영향 전파 방향)
-    const fadj = new Map();   // caller(source) → 그가 호출하는 서비스들(targets) = 하류(직접 의존)
-    for (const e of allEdges) {
-      if (!radj.has(e.tp)) radj.set(e.tp, new Set());
-      radj.get(e.tp).add(e.sp);
-      if (!fadj.has(e.sp)) fadj.set(e.sp, new Set());
-      fadj.get(e.sp).add(e.tp);
-    }
-    const display = new Set(touched);
-    // 1차: 배포 서비스가 "직접 호출하는" 하류 이웃도 함께 표시(직접 관련 대상) — 깊이 확장은 안 함.
-    for (const s of touched) for (const nb of (fadj.get(s) || [])) display.add(nb);
-    // 상류(호출측)는 영향 전파 방향 — hops 단계까지 확장.
-    let frontier = [...touched];
-    for (let h = 0; h < hops && frontier.length; h++) {
-      const next = [];
-      for (const s of frontier) for (const nb of (radj.get(s) || [])) if (!display.has(nb)) { display.add(nb); next.push(nb); }
-      frontier = next;
-    }
-    return display;
-  }
-
-  // 표시 단계(1/2/3차) 버튼 — 누르면 svcHop 을 바꿔 서비스 그래프를 다시 그린다.
-  function buildSvcDepthCtl(wrap, touched) {
-    const box = el('div', 'dep-depthctl', '<span class="dep-depthctl-label">표시 단계</span>');
-    for (let d = 1; d <= 3; d++) {
-      const btn = el('button', 'dep-depthbtn' + (d === svcHop ? ' on' : ''), d + '차');
-      btn.title = `배포 서비스를 호출/의존하는 ${d}차 영향 서비스까지 표시`;
-      btn.onclick = () => { if (svcHop !== d) { svcHop = d; renderServiceGraph(wrap, touched); } };
-      box.appendChild(btn);
-    }
-    return box;
-  }
-
-  function renderServiceGraph(wrap, touched) {
-    wrap.innerHTML = '';                 // 단계 전환 재호출 시 비우고 다시 그림
-    const allEdges = serviceEdges();
-    const display = expandSvcHops(touched, allEdges, svcHop);
-    const nodeCount = new Map();
-    for (const n of FM.NODES) if (n.project) nodeCount.set(n.project, (nodeCount.get(n.project) || 0) + 1);
-
-    wrap.appendChild(buildSvcDepthCtl(wrap, touched));
-    const grid = el('div', 'dep-svc-nodes');
-    for (const svc of [...display].sort((a, b) => (touched.has(b) - touched.has(a)) || a.localeCompare(b))) grid.appendChild(serviceCard(svc, touched.has(svc), nodeCount.get(svc) || 0));
-    wrap.appendChild(grid);
-    if (display.size <= 1) wrap.appendChild(el('div', 'dep-svc-note', '이 배포 서비스를 호출(의존)하는 영향 서비스가 없습니다.'));
-    const edges = allEdges.filter((e) => display.has(e.sp) && display.has(e.tp));
-    FM.setCanvasEdges(edges);
-    requestAnimationFrame(() => { FM.drawConnectors(); });
-  }
-
-  function serviceCard(svc, isTouched, nodes) {
-    const hue = serviceHue(svc);
-    const card = el('div', 'node-card dep-svc' + (isTouched ? ' touched' : ''));
-    card.dataset.node = 'svc:' + svc;
-    card.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
-    card.innerHTML =
-      `<div class="dep-svc-name"><span class="dep-svc-dot" style="background:hsl(${hue} 60% 50%)"></span>${FM.esc(svc)}` +
-      (isTouched ? '<span class="dep-svc-badge">배포</span>' : '') + '</div>' +
-      `<div class="dep-svc-sub">${nodes} nodes</div>`;
-    card.addEventListener('click', () => FM.setService(svc));
-    FM.cardEls.set('svc:' + svc, card);
-    return card;
-  }
 })();
