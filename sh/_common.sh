@@ -32,6 +32,7 @@ STUDY="$FM"                                             # analyzers live INSIDE 
 SK="$STUDY/flowmap-spring"          # backend analyzer (Kotlin)
 NX="$STUDY/flowmap-nexcore"         # nexcore analyzer (Java / NEXCORE BizUnit)
 RA="$STUDY/flowmap-react"           # frontend analyzer (ts)
+DEPLOY="$STUDY/flowmap-deploy"      # deploy 영향도 분석 (techplatform-mcp + GHE)
 
 # Optional root run-config (machine-specific; gitignored, template = flowmap.config.example):
 # overrides the auto-derived analyzer locations (SK/NX/RA) and/or FRONTEND_DIR. The
