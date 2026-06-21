@@ -1075,6 +1075,53 @@
       }
       return out;
     },
+    // PR(number, repo)의 변경 상세 — 커밋 영향도와 같은 "영향 엔드포인트 + 수정 자식" 표현용(배포 서비스 영향도).
+    //   changedIds: 변경 노드(엔드포인트 위주) — callee/caller 추적·독 강조. endpoints: 영향 엔드포인트(경계).
+    //   children[endpointId] = 그 엔드포인트에서 내부(비경계) 체인으로 닿는 실제 수정 노드들(자식 카드).
+    async changedDetail(number, repo) {
+      await ensureData();
+      const empty = { changedIds: [], endpoints: [], children: {} };
+      if (!data) return empty;
+      const want = String(number);
+      const matchRepo = (c) => !repo || c._project === repo
+        || (c._repoUrl && c._repoUrl.replace(/\/+$/, '').endsWith('/' + repo));
+      const keys = [];
+      for (const [k, c] of commitBySha)
+        if (c._pull != null && String(c._pull) === want && matchRepo(c)) keys.push(k);
+      if (!keys.length) return empty;
+      await ensureShards(keys);
+      const changedIds = [], cset = new Set(), epSet = new Set();
+      for (const k of keys) {
+        const c = commitBySha.get(k), det = commitDetail(c);
+        const ids = (det.changedApiMethods && det.changedApiMethods.length) ? det.changedApiMethods
+          : (det.changedNodes || []).map((n) => (typeof n === 'string' ? n : (n && n.id))).filter(Boolean);
+        for (const id of ids) if (FM.nodeById.has(id)) changedIds.push(id);
+        // 자식(수정) 후보 = 샤드의 모든 변경 노드(내부 포함, inGraph)
+        (det.changedNodes || []).forEach((n) => {
+          const id = typeof n === 'string' ? n : (n && n.id);
+          if (id && (typeof n === 'string' || n.inGraph) && FM.nodeById.has(id)) cset.add(id);
+        });
+        commitImpactedEndpoints(c).forEach((e) => { if (e && FM.nodeById.has(e.id)) epSet.add(e.id); });
+      }
+      // 엔드포인트 → 내부 체인으로 닿는 수정 노드(경계는 넘지 않음)
+      const children = {};
+      epSet.forEach((epId) => {
+        const out = [], seen = new Set([epId]), stack = [epId];
+        while (stack.length) {
+          const cur = stack.pop();
+          for (const e of (FM.outEdges.get(cur) || [])) {
+            const t = e.target;
+            if (seen.has(t) || !FM.nodeById.has(t)) continue;
+            seen.add(t);
+            if (isBoundary(t)) continue;
+            if (cset.has(t)) out.push(t);
+            stack.push(t);
+          }
+        }
+        if (out.length) children[epId] = out;
+      });
+      return { changedIds, endpoints: [...epSet], children };
+    },
     // [container] 에 주어진 커밋/PR(shas)의 영향도 콘텐츠를 임베드 렌더. 커밋 영향도 URL 은 건드리지 않는다.
     async renderInto(container, shas, options) {
       options = options || {};

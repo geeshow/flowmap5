@@ -192,28 +192,45 @@
 /* 영향도 그래프 (풀폭) */
 .dep-imp-note { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; background: var(--bg-input); border-radius: 8px; padding: 11px 13px; }
 .dep-imp-note code { font-family: ui-monospace, monospace; }
-.dep-svc-graph { position: relative; }
-/* 서비스 영향도 표시 단계(1/2/3차) 컨트롤 — 커밋 영향도와 동일 룩(--imp-changed) */
-.dep-depthctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
-.dep-depthctl-label { font-size: 11px; color: var(--text-dim); margin-right: 2px; }
-.dep-depthbtn {
-  font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 14px;
-  border: 1px solid var(--border); background: var(--bg-input); color: var(--text-dim); cursor: pointer;
+/* 서비스 영향도 — 변경 서비스(가운데) ↔ 피호출(왼쪽)/호출(오른쪽) 서비스 3열, 그 위에 연결선 */
+.dep-si-host { position: relative; min-height: 60px; padding: 6px 4px; }
+.dep-si { display: flex; align-items: flex-start; position: relative; z-index: 1; min-height: 60px; }
+.dep-si-col { display: flex; flex-direction: column; gap: 9px; }
+.dep-si-col.left  { flex: 1; align-items: flex-end;   padding-right: 76px; }
+.dep-si-col.center { flex: none; align-items: center;  padding: 0 6px; }
+.dep-si-col.right { flex: 1; align-items: flex-start;  padding-left: 76px; }
+.dep-si-coltitle { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 3px; }
+.dep-si-empty { font-size: 11px; color: var(--text-dim); }
+.dep-si-card { border-left-width: 3px; border-left-style: solid; min-width: 150px; max-width: 240px; padding: 8px 11px; }
+.dep-si-card.clickable { cursor: pointer; }
+.dep-si-card.clickable:hover { border-color: #4f46e5; box-shadow: 0 1px 6px rgba(79,70,229,.12); }
+.dep-si-card.changed { box-shadow: inset 3px 0 0 #16a34a; }   /* 변경 서비스 강조 */
+.dep-si-name { font-size: 12.5px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.dep-si-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.dep-si-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+/* 변경 서비스 박스 — 헤더(엣지 앵커) + 개별 변경 노드 카드 */
+.dep-si-cbox { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.dep-si-card.cbox-head { min-width: 160px; }
+.dep-si-cbody { display: flex; flex-direction: column; gap: 5px; }
+.dep-si-cbody .node-card, .dep-si-eps .node-card { min-width: 170px; max-width: 280px; }
+/* 노드 자체가 변경된 메서드(changedSet)면 카드 우상단에 "수정" 뱃지 */
+.dep-si-cbody .node-card { position: relative; }
+.dep-si-modtag {
+  position: absolute; top: 6px; right: 8px; z-index: 1;
+  font-size: 9px; font-weight: 700; line-height: 1.5; letter-spacing: .2px;
+  color: var(--imp-changed); border: 1px solid var(--imp-changed); border-radius: 4px;
+  padding: 0 4px; background: var(--bg-card); pointer-events: none;
 }
-.dep-depthbtn:hover { border-color: var(--imp-changed); color: var(--text); }
-.dep-depthbtn.on { background: var(--imp-changed); border-color: var(--imp-changed); color: #fff; }
-.dep-svc-note { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
-/* 서비스 카드 간격을 넓혀 그 위에 그려지는 연관관계(s2s/join) 선이 보이도록 한다 */
-.dep-svc-nodes { display: flex; flex-wrap: wrap; gap: 40px 72px; position: relative; z-index: 1; }
-.dep-svc { border-left-width: 3px; border-left-style: solid; min-width: 150px; padding: 8px 11px; opacity: .58; }
-.dep-svc.touched { opacity: 1; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
-.dep-svc-name { font-size: 12.5px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }
-.dep-svc-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
-.dep-svc-badge { font-size: 9px; font-weight: 700; color: var(--c-service); background: rgba(22,163,74,.12); border-radius: 4px; padding: 0 5px; }
-.dep-svc-sub { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
-
-/* PR 커밋 영향도 (탭 패널) — impact.js 의 콘텐츠(.imp-bar/.imp-gwrap/.imp-graph)를 그대로 품는다 */
-.dep-impact-host { position: relative; min-height: 60px; }
+.dep-si-col.left .dep-si-eps .node-card { align-self: flex-end; }
+/* 펼친 이웃 서비스 — 헤더 아래로 endpoint 카드들 */
+.dep-si-expbox { display: flex; flex-direction: column; gap: 6px; }
+.dep-si-col.left .dep-si-expbox { align-items: flex-end; }
+.dep-si-eps { display: flex; flex-direction: column; gap: 5px; }
+.dep-si-ep { border-left-width: 3px; border-left-style: solid; min-width: 150px; max-width: 260px; padding: 5px 9px;
+  display: flex; align-items: baseline; gap: 7px; }
+.dep-si-ep-layer { flex: none; font-size: 8.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--text-dim); }
+.dep-si-ep-name { font-size: 11.5px; color: var(--text); font-family: ui-monospace, monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 변경 파일 + 변경 전후 코드(diff) */
 .dep-files-host { display: flex; flex-direction: column; gap: 6px; }
