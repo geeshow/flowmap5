@@ -736,53 +736,45 @@
   // 보강 전(number 만) PR 은 "미머지"로 단정하지 않는다 — 메타가 하나라도 있는데 mergedAt 만 없을 때만.
   function isUnmergedPr(p) { return !p.merged_at && !!(p.title || p.user || p.html_url); }
   async function renderPrList(headEl, host, tk, ctx, seq) {
-    let prs = tk.prs || [];
-    // number 만 있고 표시 메타가 빠진 PR 이 하나라도 있으면 각 PR 소속 repo 의 pulls 인덱스에서 보강
-    if (prs.some((p) => p.number != null && (!p.title || !p.user || !p.merged_at || !p.html_url))) {
-      const metaByRepo = await loadPullsForTicket(tk);
-      if (renderSeq !== seq) return;
-      prs = prs.map((p) => {
-        const meta = metaByRepo.get(RK(p._org, p._repo));
-        const m = meta && meta.byNum.get(String(p.number));
-        return m ? { number: p.number, _org: p._org, _repo: p._repo,
-          title: p.title || m.title, user: p.user || m.author,
-          merged_at: p.merged_at || m.mergedAt, html_url: p.html_url || m.url, status: p.status || m.status } : p;
-      });
-    }
+    // PR 목록도 타임라인과 동일하게 pulls.json 기반 선택셋을 쓴다(타임라인 점 ↔ 목록 카드 1:1 정합).
+    const sel = await selectTimelinePulls(tk, seq);
+    if (!sel || renderSeq !== seq) return;
+    const prs = sel.perRepo.flatMap((r) => r.shown);
     const unmergedCount = prs.filter(isUnmergedPr).length;
     headEl.innerHTML = `PR 목록 (${prs.length})` +
       (unmergedCount ? ` <span class="dep-sec-warn" title="${unmergedCount} un-merged PR(s)">⚠️ Unmerged ${unmergedCount}</span>` : '');
     host.innerHTML = '';
     if (!prs.length) { host.appendChild(el('div', 'dep-hint', '연결된 PR이 없습니다.')); return; }
     for (const p of prs) host.appendChild(prCard(p, ctx));
-    requestAnimationFrame(() => drawPrConnector());   // 보강 후 PR 카드 ↔ 타임라인 점 연결선 갱신
+    requestAnimationFrame(() => drawPrConnector());   // PR 카드 ↔ 타임라인 점 연결선 갱신
   }
 
   // ───────── 타임라인 (배포 진행 + PR) ─────────
   function tms(iso) { if (!iso) return null; const t = new Date(iso).getTime(); return isNaN(t) ? null : t; }
   function fmtMs(ms) { return fmtTime(new Date(ms).toISOString()); }
   const TL_WEEK = 7 * 24 * 3600 * 1000;
-  async function renderTimelines(host, tk, ctx, seq) {
+  // 타임라인·PR목록 공통 선택: 각 repo 의 pulls 인덱스(<repo>.pulls.json 의 pulls[])에서 표시할 PR 을 고른다.
+  //   deploy_list 의 prs 는 사용하지 않는다. 후보 시각: status=merged → mergedAt, status=open → updatedAt
+  //   (status 없는 구포맷은 mergedAt→updatedAt 폴백). 선택: 신청 전 1주 이내·최대 5건 + 신청~배포 구간 전체
+  //   (신청/배포 시각 부족 시 최근 8건). repo 목록은 배포 task 에서 도출(같은 repo task 는 합쳐 1개, order 순).
+  async function selectTimelinePulls(tk, seq) {
     const tl = tk.timeline || {};
     const reqAt = tms(tl.created && tl.created.at);     // 신청 시간
     const depAt = tms(tl.deployed && tl.deployed.at);   // 배포 시간
     const metaByRepo = await loadPullsForTicket(tk);
-    if (renderSeq !== seq) return;
-
-    // PR 타임라인은 release_task 건별 — 단, 같은 repo 인 task 는 합쳐 1개로 본다(task order 순).
-    //   pulls 인덱스 조회는 PR 목록과 동일하게 metaByRepo.get(RK(org,repo)) 로 통일(접근 불일치 방지).
+    if (renderSeq !== seq) return null;
     const repoTasks = [];
     for (const t of (tk.tasks || [])) if (t.repo && !repoTasks.some((x) => x.repo === t.repo)) repoTasks.push({ org: t.org, repo: t.repo });
     const perRepo = repoTasks.map(({ org, repo }) => {
       const meta = metaByRepo.get(RK(org, repo));
       const indexList = (meta && meta.list) || [];                      // <repo>.pulls.json 의 pulls[]
-      // 후보 PR = 이 repo 의 pulls 인덱스 전체. deploy_list 의 prs 는 사용하지 않는다.
-      //   PR 타임라인 시각: status=merged → mergedAt, status=open → updatedAt(그 외는 mergedAt→updatedAt 폴백).
       const cand = new Map();
       for (const e of indexList) {
         const at = tms(e.status === 'open' ? e.updatedAt : (e.mergedAt || e.updatedAt));
         if (at == null) continue;
-        cand.set(String(e.number), { number: e.number, title: e.title, at });
+        // prCard 가 쓰는 필드명(merged_at/user/html_url)으로 매핑 + 타임라인용 at 동봉.
+        cand.set(String(e.number), { number: e.number, title: e.title, at,
+          user: e.author, merged_at: e.mergedAt, html_url: e.url, status: e.status, _org: org, _repo: repo });
       }
       const prs = [...cand.values()].sort((a, b) => a.at - b.at);
       let shown;
@@ -791,8 +783,15 @@
         const within = prs.filter((p) => p.at >= reqAt && p.at <= depAt);                     // 신청~배포 구간 전체
         shown = [...before, ...within];
       } else shown = prs.slice(-8);   // 타임라인 시각(신청/배포) 부족 시 최근 8개
-      return { repo, shown };
+      return { org, repo, shown };
     });
+    return { reqAt, depAt, perRepo };
+  }
+  async function renderTimelines(host, tk, ctx, seq) {
+    const tl = tk.timeline || {};
+    const sel = await selectTimelinePulls(tk, seq);
+    if (!sel || renderSeq !== seq) return;
+    const { reqAt, depAt, perRepo } = sel;
 
     // 배포 진행 노드
     const dnodes = ['created', 'approved', 'deployed', 'progress', 'modified']
