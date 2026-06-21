@@ -18,7 +18,7 @@
 정적 자산은 버전 쿼리로 캐시 관리. 안 올리면 브라우저가 옛 파일을 씀.
 - `docs/web/index.html`: `style.css?v=NN`, `app.js?v=NN`
 - `docs/web/app.js`: `const FEATURE_VER = 'NN'` — `features/*.js`·`features/*.css` 모듈 캐시키
-- **현재 값**: style.css `v=77`, app.js `v=184`, FEATURE_VER `73`
+- **현재 값**: style.css `v=77`, app.js `v=185`, FEATURE_VER `75`
 
 ## 핵심 파일
 
@@ -36,7 +36,10 @@
   `data/projects/<git-namespace>/<git-repo>/<per-root>/<per-root>.{json,openapi.json,impact.json,pulls.json,gateway.json,join.json,screens.json}`.
   세 분석기 모두 동일 트리(스테이징도 각 `json/projects/<ns>/<repo>/<per-root>/`)에 출력.
   - namespace/repo 도출: 소스가 자체 git repo면 origin remote 의 owner/repo. 분석기 자신의 repo 에
-    묻어온 번들 샘플은 `samples/<dir>`. nexcore(remote 없는 단일 work-tree)는 `nexcore/<bizunit>`.
+    묻어온 번들 샘플은 `samples/<dir>`. nexcore 는 한 git repo(work-tree)에 bizunit 모듈이 모인
+    모노레포라 `<namespace>/nexcore/<bizunit>` — repo 슬롯=실제 repo명(`nexcore`), per-root=bizunit.
+    origin remote 가 없으므로 namespace 는 `flowmap.config` 의 `NAMESPACE`(예: `kakaopay`)로 지정
+    (미지정 시 origin owner→repo명 폴백).
   - manifest 각 엔트리에 **`namespace`**(owner)·**`repo`**(repo명) 필드. `repo` 는 모노레포 그룹핑
     (app.js `monorepoOf`/`repoOf`)·deploy 조인(`git_repository`)에 사용, 경로 필드는 `data/` 상대.
 - 웹앱은 manifest 의 경로 문자열을 그대로 따라가 파일을 로드하고 프로젝트를 `name`(=per-root, 전역 유일)로 식별.
