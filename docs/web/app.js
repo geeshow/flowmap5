@@ -39,6 +39,8 @@ const cardEls = new Map();
 let currentEdges = [];
 const currentAdjOut = new Map();
 const currentAdjIn = new Map();
+// 서비스 보기 정적 세로 정렬: 카드 id → 적용한 translateY(로컬 px). hover 정렬이 끝나도 이 값으로 복원.
+let svcAlignBy = new Map();
 // 뷰 전용 합성(aggregate) 노드 — 프론트 화면을 {path1} 그룹 노드로 묶을 때 nodeById 에 임시 등록한다.
 // 다음 render 에서 정리(cleanSynthNodes)해 다른 뷰를 오염시키지 않는다.
 let synthNodeIds = [];
@@ -585,6 +587,7 @@ function applyZoom() {
   const pct = document.getElementById('zoom-pct');
   if (pct) pct.textContent = Math.round(state.zoom * 100) + '%';
   if (currentEdges.length) requestAnimationFrame(drawConnectors);
+  window.dispatchEvent(new Event('fm:zoom'));   // 기능 모듈(예: deploy PR 커넥터)이 줌 변경 시 좌표 재계산하도록 알림
 }
 // cx,cy: 화면 좌표 기준 확대 중심(없으면 뷰포트 중앙)
 function setZoom(z, cx, cy) {
@@ -1231,7 +1234,7 @@ function renderServiceView() {
       const client = (n && n.externalService) || ((id.split(':')[1] || '').split(/[ #/]/)[1]) || '외부';
       return { key: 'ext:' + client, label: '🌐 ' + client, rank: 4, svc: null };
     }
-    return { key: 'infra:' + t, label: INFRA_ICON[t] + ' ' + INFRA_LABEL[t], rank: ({ kafka: 1, redis: 2, db: 3, external: 4, other: 5 })[t] || 5, svc: null };
+    return { key: 'infra:' + t, label: INFRA_ICON[t] + ' ' + INFRA_LABEL[t], rank: ({ kafka: 1, redis: 2, db: 3, fep: 4, edw: 4, external: 4, other: 5 })[t] || 5, svc: null };
   };
   const orphan = new Set();          // 기준 컬럼에 보강할 호출부/내부 노드
   const derived = [];
@@ -1365,7 +1368,7 @@ function renderServiceView() {
   buildCurrentAdj();
   setupServiceFilter(baseGids.length);
   requestAnimationFrame(() => {
-    pruneOrphans(); applyPickFilter(); drawConnectors(); applyHighlight();
+    pruneOrphans(); applyPickFilter(); alignServiceColumns(); drawConnectors(); applyHighlight();
     // 어느 서비스를 눌러도 동일하게 — 선택한 서비스의 그룹(base) 컬럼을 먼저 보이도록 가로 스크롤 정렬
     // (백엔드는 왼쪽에 피호출 단계가 있어 base 가 가운데로 밀리므로, 클릭 직후 base 로 스크롤)
     if (!state.svcPick) {
@@ -1700,13 +1703,16 @@ function superId(id) {
     // 외부 API 호출 노드는 기본적으로 공유 '외부 API' 로 묶는다 (project 태그 무시).
     //   같은 외부 URL 을 여러 프론트가 호출하면 id 충돌로 한 프론트 소속이 되어 화면↔화면 가짜 연결이 생기기 때문.
     //   (단, buildServiceGraph 가 join 엣지의 ext source 만 예외로 그 프론트 svc 에 귀속시켜 front→backend 흐름은 유지)
-    if (isExtCallNode(id, n)) return 'infra:external';
+    if (isExtCallNode(id, n)) return 'infra:' + infraGroup(id);   // FEP·EDW 는 공유 인프라처럼 별도 그룹으로 분리 (infra:fep / infra:edw)
     if (n.project && !isInfra(id, n)) return 'svc:' + n.project;
   }
-  return 'infra:' + infraGroup(id);   // 인프라/외부는 타입(kafka/redis/db/external) 단위로 합침
+  return 'infra:' + infraGroup(id);   // 인프라/외부는 타입(kafka/redis/db/external/fep/edw) 단위로 합침
 }
-const INFRA_LABEL = { kafka: 'Kafka 토픽', redis: 'Redis', db: 'DB 테이블', external: '외부 API', other: '기타' };
-const INFRA_ICON = { kafka: '📨', redis: '🔴', db: '🗄️', external: '🌐', other: '⬡' };
+// 외부호출(externalService) 중 공유 인프라처럼 별도 노드 그룹으로 분리할 대상. 확장: 여기에 한 줄 추가하면 됨.
+const EXT_GROUP = { FEP: 'fep', EDW: 'edw' };               // externalService 값 → 전용 그룹 타입
+const EXT_TYPES = new Set(['external', ...Object.values(EXT_GROUP)]);   // ext 계열 타입(제공 서비스 컬럼에 배치)
+const INFRA_LABEL = { kafka: 'Kafka 토픽', redis: 'Redis', db: 'DB 테이블', external: '외부 API', fep: 'FEP', edw: 'EDW', other: '기타' };
+const INFRA_ICON = { kafka: '📨', redis: '🔴', db: '🗄️', external: '🌐', fep: '🏦', edw: '📊', other: '⬡' };
 
 function buildServiceGraph() {
   const agg = new Map();   // key → { source, target, kc, count, async }
@@ -1843,21 +1849,25 @@ function renderOverview() {
   const shown = sup => (!repoVisible || repoVisible.has(sup));
   const head0 = '진입 / 화면';
 
-  // 외부 API 는 "제공 서비스"(레벨 3) 컬럼에 함께 배치 — 제공 서비스가 비어 있어도 컬럼 생성
-  const externalCol = infraTypes.has('external') ? 3 : -1;
+  // 외부 API(+FEP·EDW) 는 "제공 서비스"(레벨 3) 컬럼에 함께 배치 — 제공 서비스가 비어 있어도 컬럼 생성
+  //   ext 계열은 FEP·EDW 를 먼저, 일반 외부 API 를 마지막에 둔다.
+  const extPresent = [...infraTypes].filter(t => EXT_TYPES.has(t))
+    .sort((a, b) => (a === 'external' ? 1 : 0) - (b === 'external' ? 1 : 0) || a.localeCompare(b));
+  const externalCol = extPresent.length ? 3 : -1;
   const lastCol = Math.max(maxLevel, externalCol);
   for (let lv = 0; lv <= lastCol; lv++) {
     const inLevel = svcs.filter(s => level.get(s) === lv && shown('svc:' + s)).sort((a, b) => stats[b].eps - stats[a].eps);
-    const withExternal = lv === externalCol && shown('infra:external');
-    if (!inLevel.length && !withExternal) continue;
+    const extHere = lv === externalCol ? extPresent.filter(t => shown('infra:' + t)) : [];
+    if (!inLevel.length && !extHere.length) continue;
     const col = document.createElement('div');
     col.className = 'column';
     const head = document.createElement('div');
     head.className = 'column-head';
     head.textContent = lv === 0 ? head0 : (HEAD[lv] || `의존 ${lv}`);
     col.appendChild(head);
-    for (const s of inLevel) { const mods = decomposeModulesOf(s); col.appendChild(mods ? makeServiceGroupCard(s, mods) : makeServiceCard(s, stats[s])); }
-    if (withExternal) col.appendChild(makeInfraTypeCard('external', (infraMembers['external'] || new Set()).size));
+    // 전체보기 지도에서 서비스 카드 클릭 → 그 서비스(저장소)의 repo-focus 지도("전체 서비스 지도 › svc")로 진입
+    for (const s of inLevel) { const mods = decomposeModulesOf(s); col.appendChild(mods ? makeServiceGroupCard(s, mods) : makeServiceCard(s, stats[s], () => setOverview(true, repoOf(s)))); }
+    for (const t of extHere) col.appendChild(makeInfraTypeCard(t, (infraMembers[t] || new Set()).size));
     colsEl.appendChild(col);
   }
   // 공유 인프라 (kafka/redis/db/기타) — 외부는 제공 서비스 단계로 분리됨
@@ -2245,7 +2255,7 @@ function renderStructFiles() {
 }
 
 // 파일 단위 노드 카드 (레이어색 보더 + 풀네임 뱃지 + 파일명 + 디렉터리·멤버수)
-const INFRA_CLS = { kafka: 'nc-r-kafka-topic', redis: 'nc-r-redis', db: 'nc-r-db-table', external: 'nc-l-external', other: 'nc-l-other' };
+const INFRA_CLS = { kafka: 'nc-r-kafka-topic', redis: 'nc-r-redis', db: 'nc-r-db-table', external: 'nc-l-external', fep: 'nc-l-fep', edw: 'nc-l-edw', other: 'nc-l-other' };
 function makeFileCard(fk, g, onClick) {
   const card = document.createElement('div');
   const layerCls = g.isInfra ? (INFRA_CLS[infraGroup(g.members[0])] || 'nc-l-other')
@@ -2438,7 +2448,7 @@ function makeServiceGroupCard(svc, mods) {
     c.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
     c.innerHTML = `<div class="ov-svc-name">${esc(md.module)}</div>`
       + `<div class="ov-svc-sub">${md.eps} endpoints · ${md.nodes} nodes</div>`;
-    c.addEventListener('click', () => setService(svc));
+    c.addEventListener('click', () => setOverview(true, repoOf(svc)));   // 전체보기 → repo-focus 지도
     c.addEventListener('mouseenter', () => alignNeighbors('svc:' + svc));
     c.addEventListener('mouseleave', () => clearAlign());
     wrap.appendChild(c);
@@ -2450,14 +2460,14 @@ function makeServiceGroupCard(svc, mods) {
 // 서비스 보기 단계 컬럼: 외부/인프라 버킷을 전체보기처럼 단일 카드로 축약 (id = 버킷 key, 엣지 타깃과 일치)
 function makeStepBucketCard(bkt) {
   const type = bkt.key.startsWith('ext:') ? 'external' : (bkt.key.split(':')[1] || 'other');
-  const clsMap = { external: 'nc-l-external', kafka: 'nc-r-kafka-topic', redis: 'nc-r-redis', db: 'nc-r-db-table', other: 'nc-l-other' };
   const card = document.createElement('div');
-  card.className = `node-card ov-infra ${clsMap[type] || 'nc-l-other'}` + (bkt.key === state.sel ? ' sel' : '');
+  card.className = `node-card ov-infra ${INFRA_CLS[type] || 'nc-l-other'}` + (bkt.key === state.sel ? ' sel' : '');
   card.dataset.node = bkt.key;
   const n = bkt.members.size;
-  const tag = type === 'external' ? ovTag('외부 API', 'ext') : ovTag('인프라', 'infra');
+  const isExt = EXT_TYPES.has(type);
+  const tag = isExt ? ovTag('외부 API', 'ext') : ovTag('인프라', 'infra');
   card.innerHTML = `<div class="ov-svc-name">${esc(bkt.label)}${tag}</div>`
-    + `<div class="ov-svc-sub">${n} ${type === 'external' ? 'endpoints' : 'nodes'}</div>`;
+    + `<div class="ov-svc-sub">${n} ${isExt ? 'endpoints' : 'nodes'}</div>`;
   card.addEventListener('mouseenter', () => alignNeighbors(bkt.key));
   card.addEventListener('mouseleave', () => clearAlign());
   cardEls.set(bkt.key, card);
@@ -2467,7 +2477,7 @@ function makeStepBucketCard(bkt) {
 function infraGroup(id) {
   const n = nodeById.get(id);
   if (n) {
-    if (isExtCallNode(id, n)) return 'external';   // 프론트(API 레이어) 외부호출 포함
+    if (isExtCallNode(id, n)) return EXT_GROUP[n.externalService] || 'external';   // FEP·EDW 는 전용 그룹, 그 외 외부호출은 external
     if (n.resourceType === 'kafka-topic') return 'kafka';
     if (n.resourceType === 'db-table') return 'db';
     if (n.resourceType === 'redis') return 'redis';
@@ -2475,20 +2485,20 @@ function infraGroup(id) {
   if (/^kafka:/.test(id)) return 'kafka';
   if (/^db:/.test(id)) return 'db';
   if (/redis/.test(id)) return 'redis';
-  if (/^ext:/.test(id)) return 'external';
+  if (/^ext:/.test(id)) return EXT_GROUP[(id.split(':')[1] || '').split(/[#/ ]/)[0]] || 'external';   // ext:FEP#... → fep
   return 'other';
 }
 
 // 전체보기: 인프라/외부 타입을 하나의 노드로 표현
 function makeInfraTypeCard(type, count) {
   const sup = 'infra:' + type;
-  const clsMap = { kafka: 'nc-r-kafka-topic', redis: 'nc-r-redis', db: 'nc-r-db-table', external: 'nc-l-external', other: 'nc-l-other' };
   const card = document.createElement('div');
-  card.className = `node-card ov-infra ${clsMap[type] || 'nc-l-other'}` + (sup === state.sel ? ' sel' : '');
+  card.className = `node-card ov-infra ${INFRA_CLS[type] || 'nc-l-other'}` + (sup === state.sel ? ' sel' : '');
   card.dataset.node = sup;
-  const tag = type === 'external' ? ovTag('외부 API', 'ext') : ovTag('인프라', 'infra');
+  const isExt = EXT_TYPES.has(type);
+  const tag = isExt ? ovTag('외부 API', 'ext') : ovTag('인프라', 'infra');
   card.innerHTML = `<div class="ov-svc-name"><span class="nc-icon">${INFRA_ICON[type]}</span> ${esc(INFRA_LABEL[type])}${tag}</div>`
-    + `<div class="ov-svc-sub">${count} ${type === 'external' ? 'endpoints' : 'nodes'}</div>`;
+    + `<div class="ov-svc-sub">${count} ${isExt ? 'endpoints' : 'nodes'}</div>`;
   card.addEventListener('click', () => setInfraType(type));
   card.addEventListener('mouseenter', () => alignNeighbors(sup));
   card.addEventListener('mouseleave', () => clearAlign());
@@ -2896,7 +2906,62 @@ function currentTy(el) {
 }
 function resetMovers() {
   document.querySelectorAll('#columns .path-group[style*="transform"]').forEach(b => { b.style.transform = ''; b.classList.remove('aligning-box'); });
-  for (const [, el] of cardEls) if (el.style.transform) { el.style.transform = ''; el.classList.remove('aligning', 'card-lift'); }
+  // 서비스 보기의 정적 세로 정렬(svcAlignBy)은 hover 해제 후에도 유지 — 0 으로 지우지 않고 그 값으로 복원.
+  const inSvc = document.getElementById('columns').classList.contains('svc-view');
+  for (const [id, el] of cardEls) {
+    const base = inSvc ? svcAlignBy.get(id) : 0;
+    if (base) { el.style.transform = `translateY(${base}px)`; el.classList.remove('aligning', 'card-lift'); }
+    else if (el.style.transform) { el.style.transform = ''; el.classList.remove('aligning', 'card-lift'); }
+  }
+}
+// 서비스 보기 정적 세로 정렬 — 각 호출/피호출 카드를 자신이 연결된 기준(인접 컬럼) 카드의 높이에 맞춰
+//   세로로 내려, 연결선이 수평에 가깝게 그려지도록 한다. base 컬럼은 자연 위치 유지, 바깥 링부터 차례로 정렬.
+//   (겹침은 desired 중심 정렬 후 아래로 패킹해 방지. 위로는 base top 아래로 못 올라가게 floor 고정 → margin 없이 transform 만.)
+function alignServiceColumns() {
+  svcAlignBy = new Map();
+  const colsEl = document.getElementById('columns');
+  if (!colsEl || !colsEl.classList.contains('svc-view')) return;
+  const cols = [...colsEl.querySelectorAll('.column')];
+  const baseIdx = cols.findIndex(c => c.classList.contains('svc-base'));
+  if (baseIdx < 0) return;
+  const z = state.zoom || 1, GAP = 12;
+  for (const c of cols) for (const el of c.querySelectorAll('.node-card')) el.style.transform = '';   // 재계산 전 초기화
+  const colCards = cols.map(c => [...c.querySelectorAll('.node-card')].filter(el => el.offsetParent));
+  // 무방향 인접 (현재 보이는 엣지 기준)
+  const nb = new Map();
+  const add = (a, b) => { if (!nb.has(a)) nb.set(a, new Set()); nb.get(a).add(b); };
+  for (const e of currentEdges) { add(e.source, e.target); add(e.target, e.source); }
+  // 자연(transform 0 가정) 스크린 좌표
+  const natTop = el => el.getBoundingClientRect().top;
+  const natCenter = el => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; };
+  const baseCards = colCards[baseIdx];
+  if (!baseCards.length) return;
+  const floor = natTop(baseCards[0]);
+  const targetCenter = new Map();   // el id → 정렬 후 스크린 center (다음 링의 anchor)
+  for (const el of baseCards) targetCenter.set(el.dataset.node, natCenter(el));
+  const place = (cards, anchorCards) => {
+    if (!cards.length) return;
+    const anchorIds = new Set(anchorCards.map(a => a.dataset.node));
+    const items = cards.map(el => {
+      const r = el.getBoundingClientRect();
+      const ns = [...(nb.get(el.dataset.node) || [])].filter(id => anchorIds.has(id) && targetCenter.has(id)).map(id => targetCenter.get(id));
+      const desired = ns.length ? ns.reduce((s, v) => s + v, 0) / ns.length : natCenter(el);
+      return { el, h: r.height, nat: r.top, desired };
+    });
+    items.sort((a, b) => a.desired - b.desired);
+    let prevBottom = -Infinity;
+    for (const it of items) {
+      let top = it.desired - it.h / 2;
+      if (top < floor) top = floor;
+      if (top < prevBottom + GAP * z) top = prevBottom + GAP * z;
+      const ty = (top - it.nat) / z;
+      if (ty > 0.5) { it.el.style.transform = `translateY(${ty.toFixed(1)}px)`; svcAlignBy.set(it.el.dataset.node, +ty.toFixed(1)); }
+      targetCenter.set(it.el.dataset.node, top + it.h / 2);
+      prevBottom = top + it.h;
+    }
+  };
+  for (let i = baseIdx + 1; i < cols.length; i++) place(colCards[i], colCards[i - 1]);   // 호출(오른쪽): 안쪽→바깥
+  for (let i = baseIdx - 1; i >= 0; i--) place(colCards[i], colCards[i + 1]);             // 피호출(왼쪽): 안쪽→바깥
 }
 // hover 시 연결된 이웃 "카드"를 hover 행으로 띄워 옆에 정렬한다.
 //   그룹 박스(.path-group)는 서비스 단위로 수백 개 카드를 담아 매우 클 수 있어,
@@ -3420,7 +3485,7 @@ function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 //   각 모듈은 IIFE 로 window.Flowmap.registerView()/registerDetailExtension() 호출.
 //   계약 문서: docs/FEATURE-API.md
 // =========================================================================
-const FEATURE_VER = '64';                      // 기능 모듈 캐시 버스팅
+const FEATURE_VER = '73';                      // 기능 모듈 캐시 버스팅
 const FEATURE_OF_VIEW = { commits: 'impact', topic: 'topic', api: 'apidoc', deploy: 'deploy' };
 const featureLoaded = new Map();               // 모듈명 → Promise (js+css 1회 로드)
 const featureViews = new Map();                // 뷰명 → { render(), escape()? }

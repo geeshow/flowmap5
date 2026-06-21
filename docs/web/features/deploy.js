@@ -37,6 +37,10 @@
   let renderSeq = 0;
   let railFilter = '';           // 레일 텍스트 필터(담당자/요약/서비스/#ID) — 재렌더 간 유지
   let svcHop = 1;                // 서비스 영향도 연관관계 표시 단계 — 기본 1차(배포 서비스에 직접 연결된 서비스만)
+  let bottomTab = 'svc';         // 하단 탭 선택 기억 — PR 전환(재렌더) 후에도 같은 탭을 유지
+  let depMain = null;            // 우측 메인 패널(.dep-main) — PR 타임라인↔목록 커넥터 앵커
+  window.addEventListener('resize', () => { if (depMain) requestAnimationFrame(drawPrConnector); });
+  window.addEventListener('fm:zoom', () => { if (depMain) requestAnimationFrame(drawPrConnector); });  // 줌 변경 시 커넥터 좌표 재계산
 
   function el(tag, cls, html) {
     const e = document.createElement(tag);
@@ -129,40 +133,68 @@
   //   서비스 영향도 연관관계 그래프는 이 집합을 기준으로 그린다(그래프 없는 repo 엔트리는 제외돼야
   //   빈 카드/연결 0 문제가 안 생긴다). pulls/impact 조회는 별도로 tk.service(대표=repo 엔트리)를 쓴다.
   function touchedServicesFor(tk) {
-    const mods = modulesOfRepo(tk.repo);
-    if (mods.length) return new Set(mods);
-    return tk.service ? new Set([tk.service]) : new Set();
+    const out = new Set();
+    const idx = serviceIndex();
+    for (const task of (tk.tasks && tk.tasks.length ? tk.tasks : [{ repo: tk.repo }])) {
+      const mods = modulesOfRepo(task.repo);
+      if (mods.length) mods.forEach((m) => out.add(m));
+      else { const s = mapRepoToService(task.repo, '', idx); if (s) out.add(s); }
+    }
+    return out;
   }
   function buildTickets(deploy, pr, projs) {
     const deployList = (deploy && deploy.deploy_list) || [];
     const depByTicket = new Map(deployList.map((d) => [d.release_ticket_id, d]));
     const tickets = []; const seen = new Set();
-    const model = (t, dep) => {
-      const cat = (dep && dep.catalog_project) || {};
-      // git/PR 정보는 신포맷(deploy_list 항목에 직접 포함) → 구포맷(pr_list by_ticket / catalog_project) 순으로 읽는다.
+    for (const t of (pr && pr.by_ticket) || []) { seen.add(t.release_ticket_id); tickets.push(modelTicket(t, depByTicket.get(t.release_ticket_id), projs)); }
+    for (const d of deployList) { if (!seen.has(d.release_ticket_id)) tickets.push(modelTicket(null, d, projs)); }
+    return tickets;
+  }
+  // 배포 티켓 모델. 신스키마(release_tasks[] — 컴포넌트별 git_repo + number-only prs + 타임라인 타임스탬프)와
+  //   구스키마(top-level git_repository/prs)를 모두 수용. PR 은 소속 repo(_org/_repo)를 달고 다닌다.
+  function modelTicket(t, dep, projs) {
+    const cat = (dep && dep.catalog_project) || {};
+    const rawTasks = (dep && Array.isArray(dep.release_tasks)) ? dep.release_tasks : null;
+    let tasks;
+    if (rawTasks) {
+      tasks = rawTasks.map((rt) => {
+        const gr = (rt.catalog_component && rt.catalog_component.git_repo) || {};
+        const org = gr.org || '', repo = gr.repo || '';
+        return {
+          component: rt.component_name || repo, order: rt.release_order || 0,
+          strategy: rt.release_strategy || '', step: normStatus(rt.task_step), org, repo,
+          prs: (rt.prs || []).map((p) => ({ number: p.number, _org: org, _repo: repo })),
+        };
+      }).sort((a, b) => a.order - b.order);
+    } else {
       const org = (t && t.git_organization) || (dep && dep.git_organization) || cat.git_organization || '';
       const repo = (t && t.git_repository) || (dep && dep.git_repository) || cat.git_repository || '';
-      const projectName = (dep && dep.project_name) || cat.project_name || '';
-      return {
-        id: (t && t.release_ticket_id) || (dep && dep.release_ticket_id),
-        summary: (t && t.summary) || (dep && dep.summary) || '(제목 없음)',
-        phase: (t && t.phase) || (dep && dep.phase) || '',
-        platform: (t && t.platform) || (dep && dep.platform) || '',
-        releaseAt: (t && t.release_at) || (dep && dep.release_at) || '',
-        createdBy: (dep && dep.created_by) || (t && t.created_by) || '',   // 배포 담당자(요청/생성자)
-        approvedBy: (dep && dep.approved_by) || '',
-        verifier: (dep && dep.verifier) || '',
-        monitorBy: (dep && dep.monitor_by) || '',
-        businessMonitorBy: (dep && dep.business_monitor_by) || '',
-        org, repo, projectName,
-        status: normStatus((dep && dep.ticket_step) || (t && t.ticket_step)),
-        prs: (t && t.prs) || (dep && dep.prs) || [],
-        service: mapRepoToService(repo, projectName, projs),
-      };
+      const prs = ((t && t.prs) || (dep && dep.prs) || []).map((p) => ({ ...p, _org: org, _repo: repo }));
+      tasks = [{ component: cat.project_name || repo, order: 1, strategy: '', step: normStatus((dep && dep.ticket_step) || (t && t.ticket_step)), org, repo, prs }];
+    }
+    const primary = tasks[0] || { org: '', repo: '' };
+    // 타임라인: 신청(created)·승인(approved)·배포(deployed)·진행(progress, 없을 수 있음)·수정(modified)
+    const timeline = {
+      created:  { key: 'created',  label: '신청', at: (dep && dep.created_at) || null,  by: (dep && dep.created_by) || (t && t.created_by) || '' },
+      approved: { key: 'approved', label: '승인', at: (dep && dep.approved_at) || null, by: (dep && dep.approved_by) || '' },
+      deployed: { key: 'deployed', label: '배포', at: (dep && (dep.deployed_at || dep.release_at)) || (t && t.release_at) || null, by: '' },
+      progress: { key: 'progress', label: '진행', at: (dep && dep.progress_at) || null, by: (dep && dep.progress_by) || '' },
+      modified: { key: 'modified', label: '수정', at: (dep && dep.modified_at) || null, by: '' },
     };
-    for (const t of (pr && pr.by_ticket) || []) { seen.add(t.release_ticket_id); tickets.push(model(t, depByTicket.get(t.release_ticket_id))); }
-    for (const d of deployList) { if (!seen.has(d.release_ticket_id)) tickets.push(model(null, d)); }
-    return tickets;
+    return {
+      id: (t && t.release_ticket_id) || (dep && dep.release_ticket_id),
+      summary: (t && t.summary) || (dep && dep.summary) || '(제목 없음)',
+      phase: (dep && dep.phase) || (t && t.phase) || '',
+      platform: (dep && dep.platform) || (t && t.platform) || '',
+      releaseAt: timeline.deployed.at || '',
+      createdBy: timeline.created.by, approvedBy: timeline.approved.by,
+      verifier: (dep && dep.verifier) || '', monitorBy: (dep && dep.monitor_by) || '',
+      businessMonitorBy: (dep && dep.business_monitor_by) || '',
+      org: primary.org, repo: primary.repo, projectName: cat.project_name || '',
+      status: normStatus((dep && dep.ticket_step) || (t && t.ticket_step)),
+      prs: tasks.flatMap((x) => x.prs), tasks, timeline,
+      service: mapRepoToService(primary.repo, cat.project_name || '', projs),
+    };
   }
   function serviceEdges() {
     const agg = new Map();
@@ -286,7 +318,7 @@
     let scrollRaf = 0;
     main.addEventListener('scroll', () => {
       if (scrollRaf) return;
-      scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; FM.drawConnectors(); });
+      scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; FM.drawConnectors(); drawPrConnector(); });
     });
     attachStickyHScroll(main);
     rail.innerHTML = '<div class="dep-loading">불러오는 중…</div>';
@@ -426,6 +458,7 @@
 
   /* ───────── 우측 메인: 선택 배포의 PR 목록 + 서비스 영향도 (풀폭) ───────── */
   function renderMain(main, byDate, eff, seq) {
+    depMain = main;
     main.innerHTML = '';
     const y = curYear();
     const d = eff && eff.date, tk = eff && eff.ticket;
@@ -456,6 +489,15 @@
       (peopleHtml ? `<div class="dep-mh-people">${peopleHtml}</div>` : '');
     main.appendChild(head);
 
+    // 타임라인 — 배포 진행(신청/승인/배포/진행/수정) + PR(신청 전 최대 5개 + 신청~배포 구간 전체)
+    const tlSec = el('div', 'dep-section dep-timeline-sec');
+    tlSec.appendChild(el('div', 'dep-sec-head', '타임라인'));
+    const tlHost = el('div', 'dep-timeline-host');
+    tlHost.innerHTML = '<div class="dep-loading">타임라인 불러오는 중…</div>';
+    tlSec.appendChild(tlHost);
+    main.appendChild(tlSec);
+    renderTimelines(tlHost, tk, { y, d, t: eff.ticketId, sel: eff.prNumber }, seq);
+
     // PR 목록 — deploy_list 의 prs 가 number 만 있어도, pulls 인덱스에서 title/author/mergedAt/url 보강.
     const prSec = el('div', 'dep-section');
     const prHead = el('div', 'dep-sec-head', `PR 목록 (${tk.prs.length})`);
@@ -464,32 +506,77 @@
     main.appendChild(prSec);
     renderPrList(prHead, prHost, tk, { y, d, t: eff.ticketId, sel: eff.prNumber }, seq);
 
-    // 서비스 영향도 (풀폭) — 서비스 단위 연관관계
-    const impSec = el('div', 'dep-section');
-    impSec.appendChild(el('div', 'dep-sec-head', '서비스 영향도 · 연관관계'));
-    if (!tk.service) {
-      impSec.appendChild(el('div', 'dep-imp-note',
-        `이 배포(<code>${FM.esc(repo)}</code>)는 분석 그래프에 매칭되는 서비스가 없습니다. 메서드 단위 영향은 아래 “PR 커밋 영향도”에서 확인하세요.`));
-    } else {
-      const wrap = el('div', 'dep-svc-graph');
-      impSec.appendChild(wrap);
-      renderServiceGraph(wrap, touchedServicesFor(tk));   // 모노레포면 모듈 서비스 전체를 기준으로
-    }
-    main.appendChild(impSec);
+    // 하단 탭 — 서비스 영향도·연관관계 / PR 커밋 영향도 / 변경 파일 (한 번에 하나만 표시).
+    buildBottomTabs(main, tk, eff, seq, repo);
+  }
 
-    // PR 커밋 영향도 (하단 임베드) — 커밋 영향도 뷰로 이동하지 않고 같은 콘텐츠를 여기서 렌더.
-    renderPrImpact(main, eff, seq);
-    // 변경 파일 + 변경 전후 코드(diff) — 배포 영향도가 있어도 항상 하단에 노출.
-    renderPrFiles(main, eff, seq);
+  // 하단 3개 콘텐츠(서비스 영향도·연관관계 / PR 커밋 영향도 / 변경 파일)를 탭으로 묶는다.
+  //   각 패널은 처음 활성화될 때 지연 렌더(빌드)하고, 전환 시 커넥터를 재계산한다.
+  function buildBottomTabs(main, tk, eff, seq, repo) {
+    const sec = el('div', 'dep-section dep-tabs-sec');
+    const bar = el('div', 'dep-tabbar');
+    const body = el('div', 'dep-tab-body');
+    const hasPr = eff && eff.prNumber != null;
+    const tabs = [
+      { key: 'svc', label: '서비스 영향도 · 연관관계', build: (host) => {
+          if (!tk.service) host.appendChild(el('div', 'dep-imp-note',
+            `이 배포(<code>${FM.esc(repo)}</code>)는 분석 그래프에 매칭되는 서비스가 없습니다. 메서드 단위 영향은 “PR 커밋 영향도” 탭에서 확인하세요.`));
+          else { const wrap = el('div', 'dep-svc-graph'); host.appendChild(wrap); renderServiceGraph(wrap, touchedServicesFor(tk)); }
+        } },
+      { key: 'impact', label: 'PR 커밋 영향도', disabled: !hasPr, build: (host) => renderPrImpact(host, eff, seq) },
+      { key: 'files', label: '변경 파일', disabled: !hasPr, build: (host) => renderPrFiles(host, eff, seq) },
+    ];
+    const btns = {}, panels = {};
+    let active = null;
+    // remember=true(사용자 클릭)면 선택 탭을 bottomTab 에 저장 → PR 전환(재렌더) 후에도 같은 탭 유지.
+    function activate(key, remember) {
+      if (active === key) return;
+      active = key;
+      if (remember) bottomTab = key;
+      for (const t of tabs) {
+        const on = t.key === key;
+        btns[t.key].classList.toggle('on', on);
+        panels[t.key].classList.toggle('show', on);
+        if (on && !panels[t.key].dataset.built) { panels[t.key].dataset.built = '1'; t.build(panels[t.key]); }
+      }
+      requestAnimationFrame(() => { FM.drawConnectors(); drawPrConnector(); });
+    }
+    for (const t of tabs) {
+      const btn = el('button', 'dep-tab' + (t.disabled ? ' disabled' : ''), t.label);
+      if (t.disabled) btn.disabled = true; else btn.onclick = () => activate(t.key, true);
+      btns[t.key] = btn; bar.appendChild(btn);
+      const panel = el('div', 'dep-tabpanel' + (t.key === 'impact' ? ' dep-impact' : t.key === 'files' ? ' dep-files' : ''));
+      panels[t.key] = panel; body.appendChild(panel);
+    }
+    sec.append(bar, body); main.appendChild(sec);
+    // 직전에 보던 탭 복원 — 단, 이 배포에서 비활성(PR 없음)인 탭이면 기본 'svc' 로 폴백(선호는 유지).
+    const want = tabs.find((t) => t.key === bottomTab && !t.disabled) ? bottomTab : 'svc';
+    activate(want, false);
   }
 
   // 선택 PR 의 변경 파일 목록 + 변경 전/후 코드(unified diff)를 하단에 노출.
   //   데이터: <project>.pulls 인덱스 → <project>.pulls/<번호>.json 샤드(files[].patch).
   function pullsRelFor(tk) {
-    const cands = [tk && tk.service, tk && tk.repo, tk && tk.projectName].filter(Boolean);
+    return pullsRelByRepo(tk && tk.org, tk && tk.repo, tk);
+  }
+  // PR pulls 인덱스 경로. 분석 매니페스트에 있으면 그 경로, 없으면 git namespace/repo 규약
+  //   `projects/<org>/<repo>/<repo>/<repo>.pulls.json` (배포가 가리키는 repo 가 그래프 분석 대상이 아닐 수 있음).
+  function pullsRelByRepo(org, repo, tk) {
+    const cands = [tk && tk.service, repo, tk && tk.projectName].filter(Boolean);
     for (const p of (FM.MANIFEST && FM.MANIFEST.projects) || [])
       if (p && p.pulls && cands.includes(p.name)) return p.pulls;
-    return null;
+    return (org && repo) ? `projects/${org}/${repo}/${repo}/${repo}.pulls.json` : null;
+  }
+  // impact 인덱스 경로 — 매니페스트에 있으면 그 경로, 없으면 규약 경로.
+  function impactRelByRepo(org, repo) {
+    for (const p of (FM.MANIFEST && FM.MANIFEST.projects) || [])
+      if (p && p.impact && (p.name === repo)) return p.impact;
+    return (org && repo) ? `projects/${org}/${repo}/${repo}/${repo}.impact.json` : null;
+  }
+  // 선택된 PR 의 소속 repo(멀티 task — PR 마다 repo 다를 수 있음). 못 찾으면 티켓 대표 repo.
+  function prRepoOf(tk, number) {
+    const p = ((tk && tk.prs) || []).find((x) => String(x.number) === String(number));
+    return { org: (p && p._org) || (tk && tk.org), repo: (p && p._repo) || (tk && tk.repo) };
   }
   function renderPatch(patch) {
     if (!patch) return '<div class="dep-dl ctx">(diff 없음 — 바이너리이거나 너무 큰 파일)</div>';
@@ -517,15 +604,14 @@
     row.append(head, body);
     return row;
   }
-  function renderPrFiles(main, eff, seq) {
-    if (!eff || eff.prNumber == null) return;
-    const pullsRel = pullsRelFor(eff.ticket);
-    const sec = el('div', 'dep-section dep-files');
-    sec.appendChild(el('div', 'dep-sec-head', `PR #${FM.esc(String(eff.prNumber))} 변경 파일`));
+  function renderPrFiles(panel, eff, seq) {
+    if (!eff || eff.prNumber == null) { panel.innerHTML = '<div class="dep-hint">선택된 PR이 없습니다.</div>'; return; }
+    const { org, repo } = prRepoOf(eff.ticket, eff.prNumber);
+    const pullsRel = pullsRelByRepo(org, repo, eff.ticket);
+    panel.innerHTML = '';
     const host = el('div', 'dep-files-host');
     host.innerHTML = '<div class="dep-loading">변경 파일 불러오는 중…</div>';
-    sec.appendChild(host);
-    main.appendChild(sec);
+    panel.appendChild(host);
     if (!pullsRel) { host.innerHTML = '<div class="dep-hint">이 PR의 변경 파일 데이터(pulls)가 없습니다.</div>'; return; }
     const baseDir = 'data/' + pullsRel.replace(/[^/]*$/, '');   // 'data/projects/<proj>/'
     FM.fetchData('data/' + pullsRel)
@@ -547,19 +633,18 @@
 
   // 선택된 PR 의 커밋 영향도(분석 바 + 경계 투영 그래프)를 하단에 임베드한다.
   // impact.js 의 공개 API(FM.impact.renderInto)를 재사용 — 커밋 영향도 뷰와 동일한 컴포넌트.
-  function renderPrImpact(main, eff, seq) {
-    if (!eff || eff.prNumber == null) return;
-    const sec = el('div', 'dep-section dep-impact');
-    sec.appendChild(el('div', 'dep-sec-head', `PR #${FM.esc(String(eff.prNumber))} 커밋 영향도`));
+  function renderPrImpact(panel, eff, seq) {
+    if (!eff || eff.prNumber == null) { panel.innerHTML = '<div class="dep-hint">선택된 PR이 없습니다.</div>'; return; }
+    panel.innerHTML = '';
     const host = el('div', 'dep-impact-host');
     host.innerHTML = '<div class="dep-loading">커밋 영향도 불러오는 중…</div>';
-    sec.appendChild(host);
-    main.appendChild(sec);
+    panel.appendChild(host);
+    const { org, repo } = prRepoOf(eff.ticket, eff.prNumber);   // 선택 PR 소속 repo — impact _project 와 매칭
     FM.loadFeature('impact')
       .then(() => FM.impact && FM.impact.ensure())   // 커밋 인덱스 로드(commitBySha 채움) — prKey 조회 전 필수
+      .then(() => FM.impact && FM.impact.ensureSource(impactRelByRepo(org, repo)))   // deploy repo impact 추가 병합
       .then(() => {
         if (renderSeq !== seq) return;                  // 그 사이 다른 배포/PR로 재렌더됨
-        const repo = eff.ticket && eff.ticket.repo;   // 배포 git_repository — impact _project(=repoUrl 끝segment) 와 매칭
         const key = FM.impact && FM.impact.prKey(eff.prNumber, repo);
         if (!key) { host.innerHTML = '<div class="dep-hint">이 PR의 커밋 영향도 데이터가 없습니다 (impact 미수집).</div>'; return; }
         FM.impact.renderInto(host, [key]);
@@ -607,31 +692,43 @@
   //   number 별 title/author/mergedAt/url 이 모두 있으므로, deploy_list 의 prs 가 number 만
   //   있어도 여기서 채운다. 인덱스는 ticket(repo)당 1회 로드 후 캐시.
   const pullsMetaCache = new Map();
-  function pullsMeta(tk) {
-    const rel = pullsRelFor(tk);
+  const RK = (org, repo) => (org || '') + ' ' + (repo || '');   // repo 키
+  function pullsMetaByRepo(org, repo, tk) {
+    const rel = pullsRelByRepo(org, repo, tk);
     if (!rel) return Promise.resolve(null);
     if (pullsMetaCache.has(rel)) return pullsMetaCache.get(rel);
     const p = FM.fetchData('data/' + rel).then((idx) => {
-      const m = new Map();
-      for (const e of (idx && idx.pulls) || []) m.set(String(e.number), e);
-      return m;
+      const byNum = new Map();
+      for (const e of (idx && idx.pulls) || []) byNum.set(String(e.number), e);
+      return { byNum, list: (idx && idx.pulls) || [] };
     }).catch(() => null);
     pullsMetaCache.set(rel, p);
     return p;
+  }
+  // 티켓의 모든 task repo pulls 인덱스를 로드 → repo키 → {byNum,list}
+  async function loadPullsForTicket(tk) {
+    const keys = [...new Set((tk.tasks || []).map((x) => RK(x.org, x.repo)))];
+    const out = new Map();
+    await Promise.all(keys.map(async (k) => {
+      const [org, repo] = k.split(' ');
+      out.set(k, await pullsMetaByRepo(org, repo, tk));
+    }));
+    return out;
   }
   // 보강 전(number 만) PR 은 "미머지"로 단정하지 않는다 — 메타가 하나라도 있는데 mergedAt 만 없을 때만.
   function isUnmergedPr(p) { return !p.merged_at && !!(p.title || p.user || p.html_url); }
   async function renderPrList(headEl, host, tk, ctx, seq) {
     let prs = tk.prs || [];
-    // number 만 있고 표시 메타가 빠진 PR 이 하나라도 있으면 pulls 인덱스에서 보강
+    // number 만 있고 표시 메타가 빠진 PR 이 하나라도 있으면 각 PR 소속 repo 의 pulls 인덱스에서 보강
     if (prs.some((p) => p.number != null && (!p.title || !p.user || !p.merged_at || !p.html_url))) {
-      const meta = await pullsMeta(tk);
+      const metaByRepo = await loadPullsForTicket(tk);
       if (renderSeq !== seq) return;
-      if (meta) prs = prs.map((p) => {
-        const m = meta.get(String(p.number));
-        return m ? { number: p.number,
+      prs = prs.map((p) => {
+        const meta = metaByRepo.get(RK(p._org, p._repo));
+        const m = meta && meta.byNum.get(String(p.number));
+        return m ? { number: p.number, _org: p._org, _repo: p._repo,
           title: p.title || m.title, user: p.user || m.author,
-          merged_at: p.merged_at || m.mergedAt, html_url: p.html_url || m.url } : p;
+          merged_at: p.merged_at || m.mergedAt, html_url: p.html_url || m.url, status: p.status || m.status } : p;
       });
     }
     const unmergedCount = prs.filter(isUnmergedPr).length;
@@ -640,6 +737,136 @@
     host.innerHTML = '';
     if (!prs.length) { host.appendChild(el('div', 'dep-hint', '연결된 PR이 없습니다.')); return; }
     for (const p of prs) host.appendChild(prCard(p, ctx));
+    requestAnimationFrame(() => drawPrConnector());   // 보강 후 PR 카드 ↔ 타임라인 점 연결선 갱신
+  }
+
+  // ───────── 타임라인 (배포 진행 + PR) ─────────
+  function tms(iso) { if (!iso) return null; const t = new Date(iso).getTime(); return isNaN(t) ? null : t; }
+  function fmtMs(ms) { return fmtTime(new Date(ms).toISOString()); }
+  const TL_WEEK = 7 * 24 * 3600 * 1000;
+  async function renderTimelines(host, tk, ctx, seq) {
+    const tl = tk.timeline || {};
+    const reqAt = tms(tl.created && tl.created.at);     // 신청 시간
+    const depAt = tms(tl.deployed && tl.deployed.at);   // 배포 시간
+    const metaByRepo = await loadPullsForTicket(tk);
+    if (renderSeq !== seq) return;
+
+    // PR 타임라인은 release_task 건별 — 단, 같은 repo 인 task 는 합쳐 1개로 본다(task order 순).
+    //   pulls 인덱스 조회는 PR 목록과 동일하게 metaByRepo.get(RK(org,repo)) 로 통일(접근 불일치 방지).
+    const repoTasks = [];
+    for (const t of (tk.tasks || [])) if (t.repo && !repoTasks.some((x) => x.repo === t.repo)) repoTasks.push({ org: t.org, repo: t.repo });
+    const perRepo = repoTasks.map(({ org, repo }) => {
+      const meta = metaByRepo.get(RK(org, repo));
+      const indexList = (meta && meta.list) || [];                      // pulls 인덱스(신청 전 컨텍스트용)
+      const idxByNum = new Map(indexList.map((e) => [String(e.number), e]));
+      // 후보 PR = pulls 인덱스 전체 ∪ 이 repo 의 deploy PR(number-only면 인덱스로 보강, full이면 merged_at 그대로).
+      //   → 인덱스가 없어도 deploy PR 에 시각이 있으면 타임라인에 표시된다.
+      const cand = new Map();
+      for (const e of indexList) { const at = tms(e.mergedAt); if (at != null) cand.set(String(e.number), { number: e.number, title: e.title, at }); }
+      for (const t of (tk.tasks || [])) if (t.repo === repo) for (const p of t.prs) {
+        const k = String(p.number), m = idxByNum.get(k), prev = cand.get(k);
+        const at = tms(p.merged_at) || (m ? tms(m.mergedAt) : null) || (prev ? prev.at : null);
+        if (at == null) continue;
+        cand.set(k, { number: p.number, title: p.title || (m && m.title) || (prev && prev.title) || '', at });
+      }
+      const prs = [...cand.values()].sort((a, b) => a.at - b.at);
+      let shown;
+      if (reqAt != null && depAt != null) {
+        const before = prs.filter((p) => p.at < reqAt && p.at >= reqAt - TL_WEEK).slice(-5);  // 신청 전 1주 이내 · 최대 5건
+        const within = prs.filter((p) => p.at >= reqAt && p.at <= depAt);                     // 신청~배포 구간 전체
+        shown = [...before, ...within];
+      } else shown = prs.slice(-8);   // 타임라인 시각(신청/배포) 부족 시 최근 8개
+      return { repo, shown };
+    });
+
+    // 배포 진행 노드
+    const dnodes = ['created', 'approved', 'deployed', 'progress', 'modified']
+      .map((key) => tl[key]).filter((n) => n && tms(n.at) != null)
+      .map((n) => ({ key: n.key, label: n.label, by: n.by, at: tms(n.at) }));
+
+    // 시간축 — 배포 신청(reqAt)을 정가운데(50%)에 고정.
+    //   왼쪽 [신청-1주, 신청] → [0,50] (1주 이내 PR), 오른쪽 [신청, 우측끝] → [50,100] (승인/배포/수정 + 구간 PR)
+    let pos;
+    if (reqAt != null) {
+      const rightAts = [depAt, ...dnodes.map((n) => n.at), ...perRepo.flatMap((r) => r.shown.map((p) => p.at))]
+        .filter((v) => v != null && v > reqAt);
+      const rightMax = Math.max(reqAt + 3600e3, ...rightAts);
+      const L0 = (reqAt - TL_WEEK) - TL_WEEK * 0.05, R1 = rightMax + (rightMax - reqAt) * 0.06;
+      pos = (t) => t <= reqAt
+        ? Math.max(0, Math.min(50, 50 * (t - L0) / (reqAt - L0)))
+        : Math.max(50, Math.min(100, 50 + 50 * (t - reqAt) / (R1 - reqAt)));
+    } else {
+      const stamps = [...dnodes.map((n) => n.at), ...perRepo.flatMap((r) => r.shown.map((p) => p.at))];
+      if (depAt != null) stamps.push(depAt);
+      if (!stamps.length) { host.innerHTML = '<div class="dep-hint">타임라인 데이터가 없습니다.</div>'; return; }
+      let t0 = Math.min(...stamps), t1 = Math.max(...stamps); if (t1 === t0) t1 = t0 + 1;
+      const pad = (t1 - t0) * 0.05; t0 -= pad; t1 += pad;
+      pos = (t) => Math.max(0, Math.min(100, ((t - t0) / (t1 - t0)) * 100));
+    }
+
+    host.innerHTML = '';
+    // 배포 진행 타임라인 — 캡션을 위/아래 번갈아 배치(텍스트 겹침 방지)
+    const dRow = el('div', 'dep-tl-row dep-tl-deploy');
+    dRow.appendChild(el('div', 'dep-tl-rowlabel', '배포'));
+    const dAxis = el('div', 'dep-tl-axis');
+    dAxis.appendChild(el('div', 'dep-tl-line'));
+    dnodes.forEach((n, i) => {
+      const node = el('div', 'dep-tl-node st-' + n.key);
+      node.style.left = pos(n.at) + '%';
+      node.innerHTML = `<span class="dep-tl-dot"></span>` +
+        `<span class="dep-tl-cap ${i % 2 ? 'up' : 'down'}"><b>${FM.esc(n.label)}</b>${n.by ? ' · ' + FM.esc(n.by) : ''}` +
+        `<span class="dep-tl-t">${FM.esc(fmtMs(n.at))}</span></span>`;
+      dAxis.appendChild(node);
+    });
+    dRow.appendChild(dAxis);
+    host.appendChild(dRow);
+
+    // repo 별 PR 타임라인 ("{repo} pr")
+    for (const { repo, shown } of perRepo) {
+      const pRow = el('div', 'dep-tl-row');
+      pRow.appendChild(el('div', 'dep-tl-rowlabel', `${repo} pr`));
+      const pAxis = el('div', 'dep-tl-axis');
+      pAxis.appendChild(el('div', 'dep-tl-line'));
+      if (reqAt != null) { const m = el('div', 'dep-tl-bound req'); m.style.left = pos(reqAt) + '%'; m.title = '신청'; pAxis.appendChild(m); }
+      if (depAt != null) { const m = el('div', 'dep-tl-bound dep'); m.style.left = pos(depAt) + '%'; m.title = '배포'; pAxis.appendChild(m); }
+      if (!shown.length) pAxis.appendChild(el('div', 'dep-tl-empty', 'PR 없음'));
+      for (const p of shown) {
+        const isBefore = reqAt != null && p.at < reqAt;
+        const dot = el('div', 'dep-tl-pr-dot' + (isBefore ? ' before' : ' within') + (String(p.number) === String(ctx.sel) ? ' sel' : ''));
+        dot.style.left = pos(p.at) + '%';
+        dot.dataset.pr = p.number;   // 하단 PR 목록 카드(data-pr)와 연결용
+        dot.title = `#${p.number} ${p.title || ''}\n${repo} · ${fmtMs(p.at)}`;
+        dot.onclick = () => nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) });
+        pAxis.appendChild(dot);
+      }
+      pRow.appendChild(pAxis);
+      host.appendChild(pRow);
+    }
+    host.appendChild(el('div', 'dep-tl-legend',
+      `<span class="dep-tl-lg before">●</span> 신청 전(1주·최대 5) &nbsp; <span class="dep-tl-lg within">●</span> 신청~배포 구간`));
+    requestAnimationFrame(() => drawPrConnector());   // 타임라인 점 ↔ PR 목록 카드 연결선
+  }
+
+  // 선택된 PR 의 타임라인 점과 하단 PR 목록 카드를 곡선으로 잇는다(같은 data-pr). dep-main 스크롤/리사이즈 시 재계산.
+  function drawPrConnector() {
+    const main = depMain; if (!main) return;
+    let svg = main.querySelector(':scope > svg.dep-conn');
+    const dot = main.querySelector('.dep-tl-pr-dot.sel');
+    const card = main.querySelector('.dep-prc.sel');
+    if (!dot || !card) { if (svg) svg.remove(); return; }
+    if (!svg) { svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'dep-conn'); main.appendChild(svg); }
+    svg.setAttribute('width', main.scrollWidth); svg.setAttribute('height', main.scrollHeight);
+    // 화면 좌표(getBoundingClientRect)를 SVG user 좌표로 역변환 — 조상 zoom(줌 컨트롤)·스크롤·transform 을 한 번에 보정.
+    //   (예전엔 getBoundingClientRect 차이를 그대로 user 좌표로 썼는데, SVG 가 zoom 으로 또 축소돼 선이 점·카드에서 어긋났음.)
+    const ctm = svg.getScreenCTM(); if (!ctm) return;
+    const inv = ctm.inverse(), pt = svg.createSVGPoint();
+    const toLocal = (cx, cy) => { pt.x = cx; pt.y = cy; const p = pt.matrixTransform(inv); return p; };
+    const dr = dot.getBoundingClientRect(), cr = card.getBoundingClientRect();
+    const a = toLocal(dr.left + dr.width / 2, dr.bottom), b = toLocal(cr.left + 18, cr.top);
+    const x1 = a.x, y1 = a.y, x2 = b.x, y2 = b.y;
+    const my = (y1 + y2) / 2;
+    svg.innerHTML = `<path d="M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 3"/>`
+      + `<circle cx="${x1}" cy="${y1}" r="3.5" fill="#f59e0b"/><circle cx="${x2}" cy="${y2}" r="3.5" fill="#f59e0b"/>`;
   }
 
   function prCard(p, ctx) {
@@ -647,15 +874,17 @@
     const merged = !!p.merged_at;       // 머지 시각이 있으면 머지된 PR
     const unmerged = isUnmergedPr(p);   // 메타가 있는데 mergedAt 만 없을 때만 "미머지"로 확정(number-only 는 미확정)
     const card = el('div', 'dep-prc' + (on ? ' sel' : '') + (unmerged ? ' warn' : ''));
+    card.dataset.pr = p.number;   // 타임라인 점(data-pr)과 연결용
     const num = p.number != null ? '#' + p.number : '';
-    const warnBadge = unmerged ? '<span class="dep-prc-warn" title="Not merged — verify it is actually included in this deploy">⚠️ Unmerged</span>' : '';
-    const byLine = merged ? FM.esc(fmtTime(p.merged_at)) : (unmerged ? '<span class="dep-prc-unmerged">Unmerged</span>' : '');
+    const warnBadge = unmerged ? '<span class="dep-prc-warn" title="Not merged — verify it is actually included in this deploy">⚠️</span>' : '';
+    const time = merged ? FM.esc(fmtTime(p.merged_at)) : '';
+    const meta = [p.user ? FM.esc(p.user) : '', time].filter(Boolean).join(' · ');
+    // 얇은 1줄: PR번호 · 이름(제목) · 작성자·시간 · GitHub
     card.innerHTML =
-      (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '') +
-      `<div class="dep-prc-top"><span class="dep-prc-numwrap"><span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}</span>` +
-      `<span class="dep-prc-detail" data-act="detail">${on ? '▾ 영향도' : '영향도 보기 ↓'}</span></div>` +
-      `<div class="dep-prc-title">${FM.esc(p.title || '')}</div>` +
-      `<div class="dep-prc-by">${p.user ? FM.esc(p.user) + (byLine ? ' · ' : '') : ''}${byLine}</div>`;
+      `<span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}` +
+      `<span class="dep-prc-title">${FM.esc(p.title || '')}</span>` +
+      `<span class="dep-prc-by">${meta}</span>` +
+      (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '');
     // PR 클릭 → 배포 영향도 안에서 pr= 선택 (커밋 영향도 뷰로 이동하지 않음). GitHub 링크는 통과.
     const go = (ev) => { if (ev.target.closest('.dep-prc-gh')) return; if (p.number != null) nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) }); };
     card.onclick = go;
