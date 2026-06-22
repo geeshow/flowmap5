@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 연결성/고아 검증 (tester): docs/web/data/ 의 manifest + 프로젝트 그래프를 로드해
+// 연결성/고아 검증 (tester): web/data/ 의 manifest + 프로젝트 그래프를 로드해
 // 앱(app.js)의 병합 → reconcileS2S → loadAndApplyJoins(gatewayMatch) 를 헤드리스로 재현한 뒤,
 // 데모 프로젝트(DEMO_PROJECTS)의 화면/엔드포인트/호출이 모두 연결되어 고아가 없는지 검사한다.
 //
@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DATA = join(ROOT, 'docs', 'web', 'data');
+const DATA = join(ROOT, 'web', 'data');
 const DEMO = new Set((process.env.DEMO_PROJECTS ?? 'shopflow,shopflow-web').split(',').map(s => s.trim()).filter(Boolean));
 
 let failCount = 0;

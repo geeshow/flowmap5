@@ -23,7 +23,7 @@
 # two-level `<root>/<category>/<svc>/…` tree with a different category dir (spring=projects,
 # nexcore=service, react=frontend) and different internal filenames (`<svc>.*`, bare
 # `openapi.json`, `graph.*`); spring's `sync` discovers each per-service dir and NORMALIZES
-# its files into `docs/web/data/projects/<svc>/<svc>.*`, then rebuilds the app-facing
+# its files into `web/data/projects/<svc>/<svc>.*`, then rebuilds the app-facing
 # manifest.json by scanning that dir. No separate nexcore self-sync step is needed.
 set -euo pipefail
 

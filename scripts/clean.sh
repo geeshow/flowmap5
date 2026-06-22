@@ -6,7 +6,7 @@
 # 대상 (모두 gitignore 된 생성물):
 #   1) flowmap-spring/json   — 백엔드 그래프/_combined/openapi/impact/pulls/manifest
 #   2) flowmap-react/json           — graph-<root>.json / .screens.json / .join.json / _manifest
-#   3) flowmap/docs/web/data        — 위 산출물이 조립된 웹 데이터 + manifest.json (+ *.json.gz)
+#   3) flowmap/web/data             — 위 산출물이 조립된 웹 데이터 + manifest.json (+ *.json.gz)
 #
 # 사용: scripts/clean.sh            # 바로 삭제
 #       scripts/clean.sh --dry-run  # 지울 대상만 출력
@@ -39,5 +39,5 @@ clean_dir() {  # $1 = dir
 [ "$DRY" = "1" ] && echo "== DRY RUN (실제 삭제 안 함) =="
 echo "== [1/3] spring out: $SK/json =="; clean_dir "$SK/json"
 echo "== [2/3] react out:  $RA/json =="; clean_dir "$RA/json"
-echo "== [3/3] web data:   $FM/docs/web/data =="; clean_dir "$FM/docs/web/data"
+echo "== [3/3] web data:   $FM/web/data =="; clean_dir "$FM/web/data"
 echo "done."

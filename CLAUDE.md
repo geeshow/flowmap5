@@ -4,9 +4,10 @@
 
 ## 웹앱 경로 / 실행
 
-- **앱 소스**: `docs/web/` — **정적 파일**(빌드 단계 없음). 파일 저장 후 새로고침이면 반영.
+- **앱 소스**: `index.html`(**저장소 루트**) + `web/`(자산·데이터) — **정적 파일**(빌드 단계 없음). 파일 저장 후 새로고침이면 반영.
+  - `index.html` 만 루트에 있고 `<base href="web/">` 로 모든 상대경로(style.css·app.js·`features/`·`data/`)를 `web/` 아래로 해석. GitHub Pages 소스 = **저장소 루트**(루트 `.nojekyll`).
 - **dev server**: `.claude/launch.json` 의 `flowmap`
-  = `python3 -m http.server 8770 --directory docs/web` → http://localhost:8770
+  = `python3 -m http.server 8770 --directory .` → http://localhost:8770
   (preview 도구 사용 시 `preview_start` name=`flowmap`. Bash 로 서버 띄우지 말 것.)
 - **주요 화면(URL 파라미터)**: `?view=overview`(전체보기·기본 홈), `?view=commits`(커밋/PR 영향도),
   `?view=deploy`(배포 영향도 — 년도→일별 배포→PR+서비스 영향), `?view=api`(API 문서), `?view=structure`(어플리케이션구조).
@@ -16,20 +17,20 @@
 ## ⚠️ 캐시 버스팅 (코드 고치면 반드시 버전 올릴 것)
 
 정적 자산은 버전 쿼리로 캐시 관리. 안 올리면 브라우저가 옛 파일을 씀.
-- `docs/web/index.html`: `style.css?v=NN`, `app.js?v=NN`
-- `docs/web/app.js`: `const FEATURE_VER = 'NN'` — `features/*.js`·`features/*.css` 모듈 캐시키
-- **현재 값**: style.css `v=78`, app.js `v=198`, FEATURE_VER `98`
+- `index.html`(루트): `style.css?v=NN`, `app.js?v=NN`
+- `web/app.js`: `const FEATURE_VER = 'NN'` — `features/*.js`·`features/*.css` 모듈 캐시키
+- **현재 값**: style.css `v=78`, app.js `v=198`, FEATURE_VER `99`
 
 ## 핵심 파일
 
-- `docs/web/index.html` — 레이아웃(사이드바/메인/독), 버전 쿼리
-- `docs/web/style.css` — 전역 테마(`--c-*` 노드색, `--e-*` 선색), 노드카드, 범례
-- `docs/web/app.js` — 데이터 로드/전체보기/서비스·경로 드릴/SVG 커넥터/줌
-- `docs/web/features/impact.js`, `impact.css` — 커밋/PR 영향도(지연 로드 기능 모듈)
+- `index.html`(루트) — 레이아웃(사이드바/메인/독), 버전 쿼리, `<base href="web/">`
+- `web/style.css` — 전역 테마(`--c-*` 노드색, `--e-*` 선색), 노드카드, 범례
+- `web/app.js` — 데이터 로드/전체보기/서비스·경로 드릴/SVG 커넥터/줌
+- `web/features/impact.js`, `impact.css` — 커밋/PR 영향도(지연 로드 기능 모듈)
 
 ## 데이터
 
-- **위치**: `docs/web/data/` (**`.gitignore` 대상 — git 추적 안 됨, 파이프라인 재생성 산출물**).
+- **위치**: `web/data/` (**`.gitignore` 대상 — git 추적 안 됨, 파이프라인 재생성 산출물**).
   `data/manifest.json` 을 로드(프로젝트별 독립 그래프 병합),
   없으면 `data/graph.json` 폴백(현재 없음). `.gz` 있으면 우선 사용(DecompressionStream).
 - **레이아웃(중요)**: 산출물은 실제 git namespace/repo 를 따라 중첩됨 —
@@ -51,7 +52,7 @@
   (backend pull→analyze→merge→~~openapi~~→impact → **nexcore refresh** → frontend refresh→analyze→screens→join→**impact** → sync → **deploy-sync** → verify).
   - **04 openapi 는 비활성** — `sh/04-backend-openapi.sh.disabled` 로 이름 변경되어 글롭 제외(되돌리려면 `.disabled` 제거).
   세 분석기(spring-kotlin·nexcore·react)가 각자 `json/` 에 산출물을 만들고, **sync(12)** 가 그
-  세 디렉터리를 한 번에 `docs/web/data` 로 취합 + `manifest.json` 재생성(spring-kotlin `sync` 의
+  세 디렉터리를 한 번에 `web/data` 로 취합 + `manifest.json` 재생성(spring-kotlin `sync` 의
   `--frontend-dir` CSV 로 nexcore·react json 을 동시 투입).
   - **13 deploy-sync**(`13-deploy-sync.sh`): 배포 영향도 데이터(`data/deploy/`)를 생성하는 별도 분석
     프로그램. **sync(12) 다음**이라야 방금 재생성된 `manifest.json` 과 deploy 의 `git_repository` 가

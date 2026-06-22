@@ -382,7 +382,7 @@
     const box = el('div', 'browse-empty dep-empty',
       '<div class="be-ico">🚀</div>' +
       '<div class="be-msg">배포 영향도 데이터가 없습니다<br>' +
-      '<span class="hint"><code>docs/web/data/deploy/</code> 에 <code>index.json</code> ·' +
+      '<span class="hint"><code>web/data/deploy/</code> 에 <code>index.json</code> ·' +
       ' <code>&lt;년도&gt;/&lt;날짜&gt;/deploy_list.json</code>(PR·git 정보 포함) 을 넣은 뒤 새로고침하세요.</span></div>' +
       '<div class="be-actions"><button class="btn" data-dep-home>🗺️ 전체보기로</button></div>');
     box.querySelector('[data-dep-home]').onclick = () => FM.setOverview(true);

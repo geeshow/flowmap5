@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// 데이터 계약 검증: docs/web/data/ (매니페스트 + 프로젝트별 파일)
+// 데이터 계약 검증: web/data/ (매니페스트 + 프로젝트별 파일)
 // 사용법: node tests/check-data.mjs
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DATA = join(ROOT, 'docs', 'web', 'data');
+const DATA = join(ROOT, 'web', 'data');
 
 let failCount = 0;
 const pass = (msg) => console.log(`✅ ${msg}`);

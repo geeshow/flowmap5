@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""웹 데이터(docs/web/data/*.json) 전송 최적화.
+"""웹 데이터(web/data/*.json) 전송 최적화.
 
 기본: 모든 *.json 을 minify(공백 제거)해 제자리 갱신 (-15~22%).
 --gzip: 추가로 <file>.json.gz (gzip -9) 도 생성하고 manifest.json 에 "compressed": true 를 기록.
@@ -18,7 +18,7 @@ import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(ROOT, "docs", "web", "data")
+DATA_DIR = os.path.join(ROOT, "web", "data")
 # 평문으로만 받는 파일(클라이언트가 compressed 플래그를 읽기 전에 fetch) → .gz 생성 제외
 NO_GZIP = {"manifest.json", "_manifest.json"}
 
