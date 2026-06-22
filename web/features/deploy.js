@@ -1145,12 +1145,14 @@
     const stBadge = ST[stKey] ? `<span class="dep-prc-st st-${stKey}">${ST[stKey]}</span>` : '';
     const time = merged ? FM.esc(fmtTime(p.merged_at)) : '';
     const meta = [p.user ? FM.esc(p.user) : '', time].filter(Boolean).join(' · ');
-    // 얇은 1줄: PR번호 · 상태 · 이름(제목) · 작성자·시간 · GitHub
+    // 2줄 카드 — 위: PR번호·상태·배지 + (배포자·시간) + GitHub / 아래: 제목
     card.innerHTML =
-      `<span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}${deployBadge}${stBadge}` +
-      `<span class="dep-prc-title">${FM.esc(p.title || '')}</span>` +
-      `<span class="dep-prc-by">${meta}</span>` +
-      (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '');
+      `<div class="dep-prc-top">` +
+        `<span class="dep-prc-num">PR ${FM.esc(num)}</span>${warnBadge}${deployBadge}${stBadge}` +
+        `<span class="dep-prc-by">${meta}</span>` +
+        (p.html_url ? `<a class="dep-prc-gh" href="${FM.escAttr(p.html_url)}" target="_blank" rel="noopener noreferrer" title="GitHub에서 PR 보기">↗</a>` : '') +
+      `</div>` +
+      `<div class="dep-prc-title">${FM.esc(p.title || '')}</div>`;
     // PR 클릭 → 배포 영향도 안에서 pr= 선택 (커밋 영향도 뷰로 이동하지 않음). GitHub 링크는 통과.
     const go = (ev) => { if (ev.target.closest('.dep-prc-gh')) return; if (p.number != null) nav({ y: ctx.y, d: ctx.d, t: ctx.t, pr: String(p.number) }); };
     card.onclick = go;
