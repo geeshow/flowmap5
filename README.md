@@ -40,18 +40,18 @@ cp flowmap.config.example flowmap.config
 
 ## 빠른 시작
 
-웹 데이터(`docs/web/data/`)는 저장소에 포함되어 있어 **분석 없이 바로** 띄울 수 있습니다.
+웹 데이터(`web/data/`)는 저장소에 포함되어 있어 **분석 없이 바로** 띄울 수 있습니다.
 
 ```bash
-# 정적 서버로 docs/web 을 서빙 (아무 정적 서버나 가능)
-python3 -m http.server 8770 --directory docs/web
+# 정적 서버로 저장소 루트를 서빙 (아무 정적 서버나 가능) — index.html 이 루트에 있음
+python3 -m http.server 8770 --directory .
 # → http://localhost:8770/
 ```
 
 데이터를 새로 뽑으려면 분석 파이프라인을 돌립니다(위 **설정** 완료 후):
 
 ```bash
-./sh/run-all.sh   # 3개 분석기 → json/projects/ → sync → docs/web/data/manifest.json
+./sh/run-all.sh   # 3개 분석기 → json/projects/ → sync → web/data/manifest.json
 ```
 
 ## GitHub Pages 배포
@@ -59,12 +59,13 @@ python3 -m http.server 8770 --directory docs/web
 이 저장소는 GitHub Pages로 바로 서비스됩니다.
 
 1. 저장소 **Settings → Pages → Build and deployment → Source**를 `Deploy from a branch`로,
-   **Branch**를 `main` / 폴더를 **`/docs`**로 설정합니다.
-2. 게시되면 앱 주소는 **`https://<사용자>.github.io/<저장소>/web/`** 입니다
-   (예: `https://geeshow.github.io/flowmap5/web/`).
+   **Branch**를 `main` / 폴더를 **`/ (root)`**로 설정합니다.
+2. 게시되면 앱 주소는 **`https://<사용자>.github.io/<저장소>/`** 입니다
+   (예: `https://geeshow.github.io/flowmap5/`).
 
-`docs/.nojekyll`이 있어 Jekyll 가공 없이 정적 파일을 그대로 서빙합니다.
-앱은 모두 상대 경로를 쓰므로 로컬 서버·Pages 어디서든 동일하게 동작합니다.
+루트의 `.nojekyll`이 있어 Jekyll 가공 없이 정적 파일을 그대로 서빙합니다.
+`index.html`만 루트에 있고 `<base href="web/">`로 자산·데이터(`web/`)를 해석하므로,
+로컬 서버(루트 서빙)·Pages 어디서든 동일하게 동작합니다.
 
 ## 주요 기능
 
@@ -93,9 +94,10 @@ flowmap5/
 ├── flowmap-spring/     # 분석기 ① Spring Kotlin/Java (자체 json/ 산출)
 ├── flowmap-nexcore/    # 분석기 ② NEXCORE
 ├── flowmap-react/      # 분석기 ③ React/프론트
-└── docs/web/                    # 시각화 웹 앱 (바닐라 JS, 의존성 없음)
-    ├── index.html  app.js  style.css  features/
-    └── data/                    # 렌더러 입력 (sync 산출)
+├── index.html                  # 시각화 웹 앱 진입점 (저장소 루트, <base href="web/">)
+└── web/                         # 시각화 웹 앱 자산 (바닐라 JS, 의존성 없음)
+    ├── app.js  style.css  features/
+    └── data/                    # 렌더러 입력 (sync 산출, gitignore)
         ├── manifest.json        # 프로젝트 카탈로그 (렌더러의 진입점)
         └── projects/<name>/     # 프로젝트별 graph/openapi/impact (+ 지연로드 샤드)
 ```
@@ -107,9 +109,9 @@ flowmap5/
         │  각자 자기 json/ 에 프로젝트별 산출물(projects/<name>/ · service/ · frontend/)
         ▼
 sh/run-all.sh → sync (flowmap-spring 의 sync 가 세 json/ 를 한 번에 취합)
-        │  모든 프로젝트를 docs/web/data/projects/<name>/<name>.* 로 통합 + manifest.json 재생성
+        │  모든 프로젝트를 web/data/projects/<name>/<name>.* 로 통합 + manifest.json 재생성
         ▼
-docs/web/ (브라우저 렌더링 — manifest.json 로드 후 프로젝트별 그래프 병합)
+index.html + web/ (브라우저 렌더링 — manifest.json 로드 후 프로젝트별 그래프 병합)
 ```
 
 노드 `id`(예: `com.acme.user.UserController#getUser`, `kafka:order.created`)가
@@ -132,7 +134,7 @@ cd flowmap-spring && ./gradlew run      # → flowmap-spring/json/projects/<name
 ```
 
 - 각 분석기는 프로젝트별 산출물을 자기 `json/` 에 쓰고, **sync** 단계가 셋을
-  `docs/web/data/` 로 취합합니다(`flowmap-spring/MANUAL.md` 의 sync/manifest 규약 참고).
+  `web/data/` 로 취합합니다(`flowmap-spring/MANUAL.md` 의 sync/manifest 규약 참고).
 - API 한글 설명을 붙이려면 분석 대상에 REST Docs `generated-snippets` 가 있으면 자동 반영됩니다.
 - 분석기별 상세 문서: `flowmap-spring/README.md` · `flowmap-react/README.md` · `flowmap-nexcore/README.md`
 

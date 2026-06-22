@@ -1,7 +1,7 @@
 .claude/
 .DS_Store
 # 분석 산출물(샘플 포함) — 로컬/생성물로 취급, git 추적 제외
-docs/web/data/
+web/data/
 
 # --- 머신별 실행 설정(real). 템플릿 flowmap.config.example 만 추적 ---
 /flowmap.config

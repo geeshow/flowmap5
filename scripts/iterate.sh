@@ -25,7 +25,7 @@ echo "================ [2/4] react: ./flowmap pipeline (reads spring _combined.j
 ( cd "$RA" && ./flowmap pipeline ) || { echo "❌ react pipeline FAILED"; exit 2; }
 
 echo "================ [3/4] spring: sync — assemble web data from FRESH artifacts (+prune +manifest) ================"
-( cd "$SK" && ./gradlew --console=plain --quiet run --args="sync --out-dir json --sync-dir ../flowmap/docs/web/data --frontend-dir ../flowmap-react/json" ) \
+( cd "$SK" && ./gradlew --console=plain --quiet run --args="sync --out-dir json --sync-dir ../flowmap/web/data --frontend-dir ../flowmap-react/json" ) \
   || { echo "❌ spring sync FAILED"; exit 2; }
 
 echo "================ [4/4] flowmap: connectivity verifier ================"

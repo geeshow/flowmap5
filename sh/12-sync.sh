@@ -7,7 +7,7 @@
 # source dirs). All three analyzers now stage the SAME nested tree
 # `<root>/projects/<git-namespace>/<git-repo>/<per-root>/…`; spring's `sync` recurses each
 # source's `projects/` to its leaf per-root dirs and MIRRORS them into
-# docs/web/data/projects/<ns>/<repo>/<per-root>/<per-root>.*, then rebuilds the app-facing
+# web/data/projects/<ns>/<repo>/<per-root>/<per-root>.*, then rebuilds the app-facing
 # manifest.json (each entry carries `namespace` + `repo` from the graph meta). We add
 # BOTH react's and nexcore's json to FRONTEND_DIR so one sync assembles all three — the
 # departed-file prune is type-scoped, so spring + nexcore backend graphs coexist (both are

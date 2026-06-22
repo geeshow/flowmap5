@@ -1,6 +1,6 @@
 # flowmap 기능 모듈 계약 (FEATURE-API)
 
-기능 모듈은 `docs/web/features/<이름>.js` + `docs/web/features/<이름>.css` 한 쌍이다.
+기능 모듈은 `web/features/<이름>.js` + `web/features/<이름>.css` 한 쌍이다.
 **메뉴 진입 시에만** 코어가 js/css를 동적으로 주입한다(lazy load). 모듈은 코어 파일(app.js 등)을 수정하지 않는다.
 
 ## 데이터 소스 (매니페스트 기반 멀티-프로젝트)
