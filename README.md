@@ -79,6 +79,8 @@ python3 -m http.server 8770 --directory .
   역방향 추적으로 영향받는 엔드포인트/화면을 산출, 변경→영향 경계 투영
 - **배포 영향도**(`?view=deploy`) — 년도→일별 배포→PR. 진입 시 첫 배포·첫 PR이 선택되고, PR을 고르면
   그 PR의 커밋 영향도가 같은 화면 하단에 임베드됨(커밋 영향도 컴포넌트 재사용)
+- **API 문서**(`?view=api`) — 분석된 OpenAPI 3.1 스펙을 화면별로 탐색(요청/응답 스키마)
+- **어플리케이션구조**(`?view=structure`) — 프로젝트(서비스)를 골라 패키지/레이어 단위 구조와 경로 드릴
 - **검색** — 메서드/클래스/엔드포인트/한글 설명으로 전체 노드 검색
 - **공유 링크** — 모든 화면 상태가 URL에 동기화되어 그대로 공유 가능
 
@@ -99,17 +101,21 @@ flowmap5/
     ├── app.js  style.css  features/
     └── data/                    # 렌더러 입력 (sync 산출, gitignore)
         ├── manifest.json        # 프로젝트 카탈로그 (렌더러의 진입점)
-        └── projects/<name>/     # 프로젝트별 graph/openapi/impact (+ 지연로드 샤드)
+        ├── projects/<ns>/<repo>/<root>/   # 프로젝트별 graph/openapi/impact (실제 git ns/repo 로 중첩, +지연로드 샤드)
+        └── deploy/              # 배포 영향도 데이터 (index.json + <년>/<날짜>/deploy_list.json)
 ```
+
+> 산출물은 실제 git namespace/repo 를 따라 `projects/<namespace>/<repo>/<per-root>/<per-root>.{json,openapi.json,impact.json,…}`
+> 로 중첩됩니다. manifest 의 각 엔트리가 이 경로를 가리키고, 웹앱은 그 경로를 그대로 따라가 로드합니다.
 
 ## 데이터 흐름
 
 ```
 3개 분석기 (flowmap-spring · flowmap-nexcore · flowmap-react)
-        │  각자 자기 json/ 에 프로젝트별 산출물(projects/<name>/ · service/ · frontend/)
+        │  각자 자기 json/projects/<ns>/<repo>/<root>/ 에 프로젝트별 산출물
         ▼
 sh/run-all.sh → sync (flowmap-spring 의 sync 가 세 json/ 를 한 번에 취합)
-        │  모든 프로젝트를 web/data/projects/<name>/<name>.* 로 통합 + manifest.json 재생성
+        │  모든 프로젝트를 web/data/projects/<ns>/<repo>/<root>/ 로 통합 + manifest.json 재생성
         ▼
 index.html + web/ (브라우저 렌더링 — manifest.json 로드 후 프로젝트별 그래프 병합)
 ```
@@ -126,11 +132,14 @@ index.html + web/ (브라우저 렌더링 — manifest.json 로드 후 프로젝
 ## 산출물 재생성
 
 ```bash
-# 전체 (권장): 3개 분석기 pull→analyze→openapi→impact→combine + sync + verify
+# 전체 (권장): sh/run-all.sh 가 단계 01~14 를 오케스트레이션
+#   backend(pull→analyze→merge→impact) → nexcore refresh → frontend(refresh→analyze→screens→join→impact)
+#   → sync(12) → deploy-sync(13, 스크립트 있으면) → verify(14)
+#   ※ 04 backend-openapi 는 비활성(`04-backend-openapi.sh.disabled`) — 글롭에서 제외됨
 ./sh/run-all.sh
 
 # 분석기 하나만: 각 분석기 디렉터리에서 (flowmap.config 기준 zero-arg 실행)
-cd flowmap-spring && ./gradlew run      # → flowmap-spring/json/projects/<name>/
+cd flowmap-spring && ./gradlew run      # → flowmap-spring/json/projects/<ns>/<repo>/<root>/
 ```
 
 - 각 분석기는 프로젝트별 산출물을 자기 `json/` 에 쓰고, **sync** 단계가 셋을
