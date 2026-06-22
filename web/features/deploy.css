@@ -262,18 +262,21 @@
 .dep-dl.ctx { color: var(--text); }
 
 /* ───────── 타임라인 (배포 진행 + PR) ───────── */
-.dep-timeline-host { position: relative; padding: 10px 6px 4px; }
-/* 일별 구간 띠 — 행 뒤(z-index:0). 가로 위치(left/width)는 JS 가 시간축(axis)에 맞춰 px 보정 */
-.dep-tl-days { position: absolute; top: 0; bottom: 0; z-index: 0; pointer-events: none; }
+/* 타임라인 레이아웃 단일 출처: padding·라벨폭·gap. 일별 띠를 axis 컬럼에 calc 로 정렬(반응형 자동 추종) */
+.dep-timeline-host { position: relative; --tl-pad-x: 6px; --tl-label-w: 108px; --tl-gap: 10px;
+  padding: 10px var(--tl-pad-x) 4px; }
+/* 일별 구간 띠 — 행 뒤(z-index:0). 가로 위치는 axis 컬럼(라벨폭+gap ~ 우측 padding)에 맞춤 */
+.dep-tl-days { position: absolute; top: 0; bottom: 0; z-index: 0; pointer-events: none;
+  left: calc(var(--tl-pad-x) + var(--tl-label-w) + var(--tl-gap)); right: var(--tl-pad-x); }
 .dep-tl-day { position: absolute; top: 0; bottom: 0; }
 .dep-tl-day.alt { background: color-mix(in srgb, var(--text-dim) 7%, transparent); }
 .dep-tl-day:not(.first) { border-left: 1px dashed var(--border); }
 .dep-tl-day-label { position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%);
   font-size: 9px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.dep-tl-row { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; }
+.dep-tl-row { position: relative; z-index: 1; display: flex; align-items: center; gap: var(--tl-gap); }
 .dep-tl-row + .dep-tl-row { margin-top: 16px; }
 .dep-tl-deploy { padding: 30px 0; }   /* 캡션 위/아래 번갈이 공간 확보(겹침 방지) */
-.dep-tl-rowlabel { flex: none; width: 108px; text-align: right; font-size: 11px; font-weight: 800;
+.dep-tl-rowlabel { flex: none; width: var(--tl-label-w); text-align: right; font-size: 11px; font-weight: 800;
   color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dep-tl-axis { position: relative; flex: 1; height: 24px; }
 .dep-tl-empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 10px; color: var(--text-dim); }
