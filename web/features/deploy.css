@@ -140,10 +140,12 @@
 .dep-sec-head { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 7px; }
 
 /* PR 목록 — 얇은 1줄 행(번호·이름·시간), 한 줄에 여러 개 배치 */
-.dep-pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 5px 8px; }
-.dep-prc { position: relative; display: flex; align-items: baseline; gap: 9px;
+.dep-pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 6px 8px; }
+/* 2줄 카드: 위(번호·상태·배포자·시간·GitHub) / 아래(제목) */
+.dep-prc { position: relative; display: flex; flex-direction: column; gap: 3px;
   border: 1px solid var(--border); border-radius: 7px; background: var(--bg-panel);
-  padding: 5px 11px; cursor: pointer; transition: border-color .12s; }
+  padding: 6px 11px; cursor: pointer; transition: border-color .12s; }
+.dep-prc-top { display: flex; align-items: center; gap: 9px; }
 .dep-prc:hover { border-color: #4f46e5; box-shadow: 0 1px 6px rgba(79,70,229,.10); }
 .dep-prc.sel { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5 inset; background: var(--bg-input); }
 .dep-prc.deployed { box-shadow: inset 2px 0 0 #16a34a; }
@@ -156,9 +158,10 @@
 .dep-prc-st.st-open   { background: #1a7f37; }
 .dep-prc-st.st-closed { background: #cf222e; }
 .dep-prc-st.st-draft  { background: #6e7781; }
-.dep-prc-title { flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--text);
+.dep-prc-title { min-width: 0; font-size: 12.5px; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dep-prc-by { flex: none; font-size: 10.5px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* 배포자·시간은 윗줄 오른쪽 끝(시간이 잘리지 않도록 nowrap + 우측 정렬). GitHub 링크가 그 뒤. */
+.dep-prc-by { flex: none; margin-left: auto; font-size: 10.5px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* 미머지 PR 경고 — merged_at 없는 PR(아직 머지 안 됨)을 배포 영향도에서 눈에 띄게 표시 */
 .dep-prc.warn { border-color: var(--c-warn, #d97706); background: rgba(217,119,6,.06); }
