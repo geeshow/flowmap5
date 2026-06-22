@@ -40,7 +40,11 @@
   let scrollMemo = null;         // 같은 컨텍스트(년/월/상태) 안 재렌더 시 복원할 {rail, main} 스크롤 위치
   const siExpanded = new Set();  // 서비스 영향도: 펼친 이웃 서비스 키('lo:'/'ro:' + svc) — 기본 접힘
   let depMain = null;            // 우측 메인 패널(.dep-main) — PR 타임라인↔목록 커넥터 앵커
-  window.addEventListener('resize', () => { if (depMain) requestAnimationFrame(drawPrConnector); });
+  window.addEventListener('resize', () => { if (!depMain) return; requestAnimationFrame(() => {
+    const dAxis = depMain.querySelector('.dep-tl-deploy .dep-tl-axis');   // 폭 변동 → 캡션 겹침 재계산
+    if (dAxis) layoutDeployCaps(dAxis);
+    drawPrConnector();
+  }); });
   window.addEventListener('fm:zoom', () => { if (depMain) requestAnimationFrame(drawPrConnector); });  // 줌 변경 시 커넥터 좌표 재계산
 
   function el(tag, cls, html) {
@@ -966,16 +970,54 @@
     }
     return i ? layer : null;
   }
+  // 배포 진행 캡션 겹침 방지: 캡션 실제 너비를 측정해 가로로 충돌하면 위/아래 + 여러 단(lane)으로 쌓는다.
+  //   낮은 단·아래쪽을 선호(cost)해 평소엔 한 줄, 몰릴 때만 번갈아 위/아래로 분산 → 가로 겹침 제거.
+  //   단 수에 맞춰 행(dep-tl-deploy) padding 을 키워 캡션이 인접 행을 침범하지 않게 한다.
+  function layoutDeployCaps(axis) {
+    const caps = [...axis.querySelectorAll('.dep-tl-cap')];
+    if (!caps.length) return;
+    const arect = axis.getBoundingClientRect();
+    const capH = caps[0].offsetHeight || 28, ROW = capH + 4;
+    const items = caps.map((c) => { const r = c.getBoundingClientRect();
+      return { c, center: r.left + r.width / 2 - arect.left, half: r.width / 2 + 6 }; })
+      .sort((a, b) => a.center - b.center);
+    const lanes = { down: [], up: [] };
+    let maxDown = 0, maxUp = 0;
+    for (const it of items) {
+      const min = it.center - it.half, max = it.center + it.half;
+      let pick = null;
+      for (const side of ['down', 'up']) {
+        const L = lanes[side]; let li = 0;
+        for (; li < L.length; li++) if (L[li].every(([a, b]) => max < a || min > b)) break;
+        const cost = li * 2 + (side === 'up' ? 1 : 0);
+        if (!pick || cost < pick.cost) pick = { side, li, cost };
+      }
+      const { side, li } = pick;
+      (lanes[side][li] || (lanes[side][li] = [])).push([min, max]);
+      it.c.classList.remove('up', 'down'); it.c.classList.add(side);
+      const off = 14 + li * ROW;
+      if (side === 'down') { it.c.style.top = off + 'px'; it.c.style.bottom = ''; maxDown = Math.max(maxDown, li); }
+      else { it.c.style.bottom = off + 'px'; it.c.style.top = ''; maxUp = Math.max(maxUp, li); }
+    }
+    const row = axis.closest('.dep-tl-row');
+    if (row) { row.style.paddingTop = (14 + maxUp * ROW + capH) + 'px';
+      row.style.paddingBottom = (14 + maxDown * ROW + capH) + 'px'; }
+  }
   // 타임라인·PR목록 공통 선택: 각 repo 의 pulls 인덱스(<repo>.pulls.json 의 pulls[])에서 표시할 PR 을 고른다.
   //   deploy_list 의 prs 는 사용하지 않는다. 후보 시각: status=merged → mergedAt, status=open → updatedAt
   //   (status 없는 구포맷은 mergedAt→updatedAt 폴백).
   //   선택 규칙: release_version 에 배포 커밋 SHA 가 있고 그 PR(mergeCommit)을 찾으면 → 그 배포 PR + 직전 2개 = 총 3개.
-  //     그 외(latest/미매칭): 신청 전 1주 이내·최대 5건 + 신청~배포 구간 전체(신청/배포 시각 부족 시 최근 8건).
+  //     그 외(latest/미매칭): 신청 전 1주 이내·최대 5건 + 신청~배포(진행/수정 중 가장 미래) 구간 전체
+  //     (신청==배포 로 구간이 0 이 되는 경우 진행/수정까지 봐서 끝을 늘림. 신청/끝 시각 부족 시 최근 8건).
   //   repo 목록은 배포 task 에서 도출(같은 repo task 는 합쳐 1개, order 순).
   async function selectTimelinePulls(tk, seq) {
     const tl = tk.timeline || {};
     const reqAt = tms(tl.created && tl.created.at);     // 신청 시간
     const depAt = tms(tl.deployed && tl.deployed.at);   // 배포 시간
+    // 구간 끝 경계: created_at==release_at 처럼 신청==배포 라 구간이 0 이 되면 PR 이 안 잡히므로
+    //   진행(progress)·수정(modified)까지 보고 가장 미래 시각을 끝으로 쓴다.
+    const laterAts = [depAt, tms(tl.progress && tl.progress.at), tms(tl.modified && tl.modified.at)].filter((v) => v != null);
+    const endAt = laterAts.length ? Math.max(...laterAts) : null;
     const metaByRepo = await loadPullsForTicket(tk);
     if (renderSeq !== seq) return null;
     const repoTasks = [];
@@ -1005,9 +1047,9 @@
       if (di >= 0) {
         // release_version 이 가리키는 배포 커밋 PR + 직전 2개 = 총 3개만 표시.
         shown = prs.slice(Math.max(0, di - 2), di + 1);
-      } else if (reqAt != null && depAt != null) {
+      } else if (reqAt != null && endAt != null) {
         const before = prs.filter((p) => p.at < reqAt && p.at >= reqAt - TL_WEEK).slice(-5);  // 신청 전 1주 이내 · 최대 5건
-        const within = prs.filter((p) => p.at >= reqAt && p.at <= depAt);                     // 신청~배포 구간 전체
+        const within = prs.filter((p) => p.at >= reqAt && p.at <= endAt);                     // 신청~배포(진행/수정 중 최후) 구간 전체
         shown = [...before, ...within];
       } else shown = prs.slice(-8);   // 타임라인 시각(신청/배포) 부족 시 최근 8개
       return { org, repo, deployedCommit, shown };
@@ -1098,12 +1140,11 @@
     if (legendEl) legendEl.innerHTML =
       `<span class="dep-tl-lg before">●</span> 신청 전(1주·최대 5) &nbsp; <span class="dep-tl-lg within">●</span> 신청~배포 구간` +
       (anyDeployed ? ` &nbsp; <span class="dep-tl-lg deployed">●</span> 🚀 배포된 이미지(commit)` : '');
-    // 타임라인이 비동기로 채워지며 레이아웃이 밀리면 서비스 영향도 커넥터도 어긋난다 → 확정 후 함께 재그리기.
-    //   + 일별 구간 띠를 시간축(axis) 영역에 맞춰 가로 정렬.
+    // 타임라인이 비동기로 채워지며 레이아웃이 밀리면 서비스 영향도 커넥터도 어긋난다 → 확정 후 재그리기.
+    //   (일별 띠 가로정렬은 CSS calc 로 axis 컬럼에 고정 — 리사이즈 자동 추종, JS px 보정 불필요)
     requestAnimationFrame(() => {
-      const axis = host.querySelector('.dep-tl-axis'), dl = host.querySelector('.dep-tl-days');
-      if (axis && dl) { const hr = host.getBoundingClientRect(), ar = axis.getBoundingClientRect();
-        dl.style.left = (ar.left - hr.left) + 'px'; dl.style.width = ar.width + 'px'; }
+      const dAxis = host.querySelector('.dep-tl-deploy .dep-tl-axis');
+      if (dAxis) layoutDeployCaps(dAxis);    // 배포 진행 캡션 겹침 해소(행 높이 변동 → 커넥터보다 먼저)
       FM.drawConnectors(); drawPrConnector();
     });
   }
