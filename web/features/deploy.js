@@ -449,7 +449,7 @@
         const row = el('div', 'dep-ditem' + (on ? ' sel' : ''));
         row.dataset.search = [t.id, t.summary, t.service, t.platform, t.createdBy, ...(t.prs || []).map((p) => p.title)]
           .filter(Boolean).join(' ').toLowerCase();
-        const svc = t.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(t.service)}</span>` : (t.repo ? `<span class="dep-svc-tag no">미매핑</span>` : '');
+        const svc = t.service ? FM.svcBadge(t.service) : (t.repo ? `<span class="dep-svc-tag no">미매핑</span>` : '');
         const tWarn = (t.prs || []).some(isUnmergedPr) ? '<span class="dep-di-warn" title="Has un-merged PR(s)">⚠️</span>' : '';
         row.innerHTML =
           `<div class="dep-di-top"><span class="dep-di-id">#${FM.esc(String(t.id || ''))}</span><span class="dep-di-pr">${tWarn}🔀${t.prs.length}</span></div>` +
@@ -527,7 +527,7 @@
     const metaHtml = `${tk.platform ? `<span class="dep-chip">${FM.esc(tk.platform)}</span>` : ''}` +
       `${tk.phase ? `<span class="dep-chip">${FM.esc(tk.phase)}</span>` : ''}` +
       `${repo ? `<span class="dep-repo">${FM.esc(repo)}</span>` : ''}` +
-      `${tk.service ? `<span class="dep-svc-tag ok">🔗${FM.esc(tk.service)}</span>` : (tk.repo ? `<span class="dep-svc-tag no">그래프 미매핑</span>` : '')}`;
+      `${tk.service ? FM.svcBadge(tk.service) : (tk.repo ? `<span class="dep-svc-tag no">그래프 미매핑</span>` : '')}`;
     // 좌우 공간을 활용한 2줄 헤더: (1) #번호·제목 ───── 날짜·시간, (2) 메타칩 ───── 담당자
     head.innerHTML =
       `<div class="dep-mh-r1">` +
