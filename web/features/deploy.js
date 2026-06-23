@@ -808,27 +808,35 @@
     const colC = el('div', 'dep-si-col center', '<div class="dep-si-coltitle">수정된 서비스</div>');
     const colR = el('div', 'dep-si-col right', '<div class="dep-si-coltitle">호출 서비스 ▶</div>');
 
-    const svcCard = (key, svc, sub, cls, onClick) => {
-      const hue = serviceHue(svc);
-      const card = el('div', 'node-card dep-si-card ' + cls + (onClick ? ' clickable' : ''));
-      card.dataset.node = key;
-      card.style.borderLeftColor = `hsl(${hue} 60% 50%)`;
-      card.innerHTML = `<div class="dep-si-name"><span class="dep-si-dot" style="background:hsl(${hue} 60% 50%)"></span>${FM.esc(svc)}</div>` +
-        `<div class="dep-si-sub">${sub}</div>`;
-      if (onClick) card.addEventListener('click', onClick);
-      FM.cardEls.set(key, card);
-      return card;
+    // 서비스 = 테두리로 묶인 그룹 영역(별도 노드 아님). 헤더(이름·개수·캐럿) 토글로 body 접기/펼치기.
+    //   collapsible=false → 항상 펼침(가운데 '수정된 서비스'). 헤더 element 를 그 서비스의 커넥터 앵커로 등록.
+    //   반환 {box, body}: 호출부가 body 에 endpoint 카드를 채운다(접힘이면 비워 두면 됨).
+    const svcGroupBox = (key, svc, countLabel, opts) => {
+      const o = opts || {};
+      const expanded = o.expanded !== false;
+      const box = el('div', 'dep-si-grp' + (o.changed ? ' changed' : '') + (expanded ? ' open' : ' closed'));
+      box.style.setProperty('--svc-h', serviceHue(svc));
+      const head = el('div', 'dep-si-ghead' + (o.collapsible && o.onToggle ? ' clickable' : ''));
+      head.dataset.node = key;   // 접힘 시 endpoint↔서비스 커넥터가 이 헤더로 붙는다
+      head.innerHTML =
+        (o.collapsible ? '<span class="dep-si-caret">▶</span>' : '') +
+        '<span class="dep-si-dot"></span>' +
+        `<span class="dep-si-gname">${FM.esc(svc)}</span>` +
+        `<span class="dep-si-gcount">${FM.esc(countLabel)}</span>`;
+      if (o.collapsible && o.onToggle) head.addEventListener('click', o.onToggle);
+      box.appendChild(head);
+      FM.cardEls.set(key, head);
+      const body = el('div', 'dep-si-gbody');
+      box.appendChild(body);
+      return { box, body };
     };
 
     // 가운데: "수정노드를 가진 endpoint(앵커)" 박스 — 서비스별 헤더(라벨) + 앵커 endpoint 카드(+수정 자식). 클릭 시 프로세스 흐름.
     const labelOf = (id) => { const n = FM.nodeById.get(id); return (n && (n.endpoint || n.method)) || id; };
     for (const svc of [...anchorBySvc.keys()].sort()) {
       const eps = [...anchorBySvc.get(svc)].sort((a, b) => String(labelOf(a)).localeCompare(String(labelOf(b))));
-      const box = el('div', 'dep-si-cbox');
-      box.appendChild(svcCard('si:c:' + svc, svc, `${fallback ? '변경' : '수정 endpoint'} ${eps.length}`, 'changed cbox-head'));
-      const body = el('div', 'dep-si-cbody');
+      const { box, body } = svcGroupBox('si:c:' + svc, svc, `${fallback ? '변경' : '수정 endpoint'} ${eps.length}`, { changed: true });
       eps.forEach((id) => { const card = nodeCard(id); if (!fallback) appendKids(card, id); body.appendChild(card); });
-      box.appendChild(body);
       colC.appendChild(box);
     }
     // 왼쪽=피호출(앵커가 호출) / 오른쪽=호출(앵커를 호출) — 기본은 서비스 그룹 카드로 접고, 누르면 개별 endpoint 로 펼친다.
@@ -836,16 +844,13 @@
       if (!map.size) { col.appendChild(el('div', 'dep-si-empty', '없음')); return; }
       for (const svc of [...map.keys()].sort()) {
         const key = prefix + ':' + svc, ids = [...map.get(svc)].sort((a, b) => String(labelOf(a)).localeCompare(String(labelOf(b))));
-        if (siExpanded.has(key)) {
-          const box = el('div', 'dep-si-cbox nb');
-          box.appendChild(svcCard('si:' + prefix + ':' + svc, svc, `endpoint ${ids.length} · 접기 ▲`, 'nb expanded', () => { siExpanded.delete(key); redraw(); }));
-          const body = el('div', 'dep-si-cbody');
-          ids.forEach((id) => body.appendChild(nodeCard(id)));
-          box.appendChild(body);
-          col.appendChild(box);
-        } else {
-          col.appendChild(svcCard('si:' + prefix + ':' + svc, svc, `endpoint ${ids.length} · 펼치기 ▼`, 'nb', () => { siExpanded.add(key); redraw(); }));
-        }
+        const expanded = siExpanded.has(key);
+        const { box, body } = svcGroupBox('si:' + key, svc, `endpoint ${ids.length}`, {
+          collapsible: true, expanded,
+          onToggle: () => { if (expanded) siExpanded.delete(key); else siExpanded.add(key); redraw(); },
+        });
+        if (expanded) ids.forEach((id) => body.appendChild(nodeCard(id)));
+        col.appendChild(box);
       }
     };
     renderNeighbors(colL, calleeBySvc, 'lo');
