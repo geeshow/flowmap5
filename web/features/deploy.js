@@ -36,7 +36,7 @@
   const yearCache = new Map();   // year → Promise<Map<date,{date,rec,tickets}>>
   let renderSeq = 0;
   let railFilter = '';           // 레일 텍스트 필터(담당자/요약/서비스/#ID) — 재렌더 간 유지
-  let bottomTab = 'impact';      // 하단 탭 선택 기억 — PR 전환(재렌더) 후에도 같은 탭을 유지
+  let bottomTab = 'ai';          // 하단 탭 선택 기억 — PR 전환(재렌더) 후에도 같은 탭을 유지(기본=AI 영향도 분석)
   let scrollMemo = null;         // 같은 컨텍스트(년/월/상태) 안 재렌더 시 복원할 {rail, main} 스크롤 위치
   const siExpanded = new Set();  // 서비스 영향도: 펼친 이웃 서비스 키('lo:'/'ro:' + svc) — 기본 접힘
   let depMain = null;            // 우측 메인 패널(.dep-main) — PR 타임라인↔목록 커넥터 앵커
@@ -572,7 +572,9 @@
     const bar = el('div', 'dep-tabbar');
     const body = el('div', 'dep-tab-body');
     const hasPr = eff && eff.prNumber != null;
+    // AI 영향도 분석은 PR 단위 산출물(<base>.AI분석결과/<PR번호>.md) → PR 선택 필요.
     const tabs = [
+      { key: 'ai', label: '🤖 AI 영향도 분석', disabled: !hasPr, build: (host) => renderAiAnalysis(host, eff, seq) },
       { key: 'impact', label: '서비스 영향도', disabled: !hasPr, build: (host) => renderServiceImpact(host, eff, seq) },
       { key: 'files', label: '변경 파일', disabled: !hasPr, build: (host) => renderPrFiles(host, eff, seq) },
     ];
@@ -595,12 +597,13 @@
       const btn = el('button', 'dep-tab' + (t.disabled ? ' disabled' : ''), t.label);
       if (t.disabled) btn.disabled = true; else btn.onclick = () => activate(t.key, true);
       btns[t.key] = btn; bar.appendChild(btn);
-      const panel = el('div', 'dep-tabpanel' + (t.key === 'impact' ? ' dep-impact' : t.key === 'files' ? ' dep-files' : ''));
+      const panel = el('div', 'dep-tabpanel' + (t.key === 'ai' ? ' dep-ai' : t.key === 'impact' ? ' dep-impact' : t.key === 'files' ? ' dep-files' : ''));
       panels[t.key] = panel; body.appendChild(panel);
     }
     sec.append(bar, body); main.appendChild(sec);
-    // 직전에 보던 탭 복원 — 단, 이 배포에서 비활성(PR 없음)인 탭이면 기본 'svc' 로 폴백(선호는 유지).
-    const want = tabs.find((t) => t.key === bottomTab && !t.disabled) ? bottomTab : 'impact';
+    // 직전에 보던 탭 복원 — 단, 이 배포에서 비활성인 탭이면 첫 활성 탭으로 폴백(선호는 유지).
+    const want = tabs.find((t) => t.key === bottomTab && !t.disabled)
+      ? bottomTab : (tabs.find((t) => !t.disabled) || tabs[0]).key;
     activate(want, false);
   }
 
@@ -685,6 +688,97 @@
         });
       })
       .catch(() => { host.innerHTML = '<div class="dep-hint">변경 파일 로드 실패.</div>'; });
+  }
+
+  /* ───────── AI 영향도 분석 — PR 단위 <base>.AI분석결과/<PR번호>.md(마크다운) 임베드 ───────── */
+  // AI 산출물 경로: impact 경로(impactRelByRepo)의 .impact.json 을 .AI분석결과/<PR번호>.md 로 치환.
+  function aiRelForPr(org, repo, tk, prNumber) {
+    const imp = impactRelByRepo(org, repo, tk);
+    return imp ? imp.replace(/\.impact\.json$/, `.AI분석결과/${prNumber}.md`) : null;
+  }
+  // 최소 마크다운 렌더러(안전: 모든 텍스트 FM.esc 후 인라인 변환). 지원: 제목/목록/인용/구분선/
+  //   표/코드펜스/문단 + 인라인(코드·굵게·기울임·링크). AI 리포트의 고정 스켈레톤에 맞춘 범위.
+  function inlineMd(s) {
+    let h = FM.esc(s);
+    h = h.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
+    h = h.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, u) =>
+      /^https?:\/\//.test(u) ? `<a href="${FM.escAttr(u)}" target="_blank" rel="noopener">${t}</a>` : t);
+    h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    h = h.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    return h;
+  }
+  function mdToHtml(md, selPr) {
+    const lines = String(md).replace(/\r\n?/g, '\n').replace(/^<!--[\s\S]*?-->\s*/m, '').split('\n');
+    const out = [];
+    let i = 0, inList = false, inCode = false;
+    const closeList = () => { if (inList) { out.push('</ul>'); inList = false; } };
+    while (i < lines.length) {
+      const ln = lines[i];
+      if (/^```/.test(ln)) {                       // 코드 펜스
+        if (!inCode) { closeList(); out.push('<pre class="dep-md-pre"><code>'); inCode = true; }
+        else { out.push('</code></pre>'); inCode = false; }
+        i++; continue;
+      }
+      if (inCode) { out.push(FM.esc(ln)); i++; continue; }
+      if (/^\s*$/.test(ln)) { closeList(); i++; continue; }
+      if (/^#{1,6}\s/.test(ln)) {                  // 제목
+        closeList();
+        const lvl = ln.match(/^#+/)[0].length;
+        const txt = ln.replace(/^#+\s/, '');
+        const m = txt.match(/PR\s*#(\d+)/i);        // PR 섹션 → 앵커 id + 선택 PR 하이라이트
+        const idAttr = m ? ` id="dep-ai-pr-${m[1]}"` : '';
+        const hot = m && selPr != null && String(m[1]) === String(selPr) ? ' dep-ai-sel' : '';
+        out.push(`<h${lvl}${idAttr} class="dep-md-h${lvl}${hot}">${inlineMd(txt)}</h${lvl}>`);
+        i++; continue;
+      }
+      if (/^\s*>\s?/.test(ln)) { closeList(); out.push(`<blockquote class="dep-md-bq">${inlineMd(ln.replace(/^\s*>\s?/, ''))}</blockquote>`); i++; continue; }
+      if (/^\s*([-*]{3,}|_{3,})\s*$/.test(ln)) { closeList(); out.push('<hr class="dep-md-hr">'); i++; continue; }
+      if (/^\s*\|.*\|\s*$/.test(ln) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || '')) {   // 표
+        closeList();
+        const row = (l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+        const head = row(ln); i += 2; const body = [];
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { body.push(row(lines[i])); i++; }
+        out.push('<table class="dep-md-table"><thead><tr>' + head.map((c) => `<th>${inlineMd(c)}</th>`).join('') + '</tr></thead><tbody>' +
+          body.map((r) => '<tr>' + r.map((c) => `<td>${inlineMd(c)}</td>`).join('') + '</tr>').join('') + '</tbody></table>');
+        continue;
+      }
+      if (/^\s*[-*]\s+/.test(ln)) {                 // 목록
+        if (!inList) { out.push('<ul class="dep-md-ul">'); inList = true; }
+        out.push(`<li>${inlineMd(ln.replace(/^\s*[-*]\s+/, ''))}</li>`);
+        i++; continue;
+      }
+      closeList(); out.push(`<p class="dep-md-p">${inlineMd(ln)}</p>`); i++;
+    }
+    if (inCode) out.push('</code></pre>');
+    closeList();
+    return out.join('\n');
+  }
+  function renderAiAnalysis(panel, eff, seq) {
+    panel.innerHTML = '';
+    const host = el('div', 'dep-ai-host');
+    panel.appendChild(host);
+    if (!eff || eff.prNumber == null) { host.innerHTML = '<div class="dep-hint">선택된 PR이 없습니다.</div>'; return; }
+    host.innerHTML = '<div class="dep-loading">AI 영향도 분석 불러오는 중…</div>';
+    const { org, repo } = prRepoOf(eff.ticket, eff.prNumber);
+    const rel = aiRelForPr(org, repo, eff.ticket, eff.prNumber);
+    if (!rel) { host.innerHTML = '<div class="dep-hint">이 PR 의 AI 분석 결과 경로를 찾을 수 없습니다.</div>'; return; }
+    // 한글 파일명 포함 — encodeURI 로 안전하게. 문서 base(web/) 기준 상대경로.
+    fetch(encodeURI('data/' + rel))
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.text(); })
+      .then((md) => {
+        if (renderSeq !== seq) return;
+        host.innerHTML = '';
+        const note = el('div', 'dep-ai-note',
+          `🤖 PR #${FM.esc(String(eff.prNumber))} · 로컬 Claude CLI 가 PR diff·호출그래프·repo 소스를 분석한 결과 <span class="dep-ai-hint">(${FM.esc(rel.replace(/^.*\//, ''))})</span>`);
+        const md_ = el('div', 'dep-md dep-ai-md', mdToHtml(md));
+        host.append(note, md_);
+      })
+      .catch((e) => {
+        if (renderSeq !== seq) return;
+        host.innerHTML = String(e.message) === '404'
+          ? '<div class="dep-hint">이 PR 의 AI 분석 결과가 아직 생성되지 않았습니다.<br><span class="dep-ai-hint">생성: <code>node flowmap-ai/run-batch.js</code></span></div>'
+          : '<div class="dep-hint">AI 분석 결과 로드 실패.</div>';
+      });
   }
 
   // 선택된 PR 의 커밋 영향도(분석 바 + 경계 투영 그래프)를 하단에 임베드한다.
