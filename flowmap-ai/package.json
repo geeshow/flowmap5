@@ -1,0 +1,12 @@
+{
+  "name": "flowmap-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AI change-impact analysis step for flowmap (local claude-CLI stand-in for the production AI-model API).",
+  "scripts": {
+    "index": "node build-index.js",
+    "server": "node server.js",
+    "analyze": "node run-batch.js"
+  }
+}
