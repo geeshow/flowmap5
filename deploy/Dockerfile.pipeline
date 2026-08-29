@@ -1,0 +1,60 @@
+# =============================================================================
+# flowmap 분석 파이프라인 이미지 (CronJob/Job 용)
+#   - JDK 17 (flowmap-spring / flowmap-nexcore : Kotlin·Java, Gradle)
+#   - Node 20 (flowmap-react/ts-analyzer, flowmap-ai : TS·ESM)  ※ engines: node>=18
+#   - git/bash (분석 대상 repo pull, sh/run-all.sh 오케스트레이션)
+#
+# 빌드 시점에 세 분석기를 미리 빌드(gradle installDist + tsc)해 의존성을 이미지에
+# 굽는다 → 런타임(CronJob)에는 "대상 repo pull → 빌드된 CLI 실행 → web/data 생성"만
+# 남아 외부 네트워크 의존을 git pull 로 최소화한다.
+#
+# ── 폐쇄망(사내) 적용 포인트 ──────────────────────────────────────────────
+#   * FROM 베이스 이미지는 사내 미러 경로로 교체 (예: registry.corp/library/...).
+#   * apt / NodeSource / gradle / npm 은 사내 미러(Nexus·Artifactory)로 향하게 한다.
+#     - gradle:  GRADLE_USER_HOME 에 init.gradle 로 repository mirror 주입,
+#     - npm:     ARG NPM_REGISTRY 로 .npmrc registry 교체.
+# =============================================================================
+
+ARG BASE_JDK=eclipse-temurin:17-jdk-jammy
+FROM ${BASE_JDK}
+
+# --- 폐쇄망에서 바꿀 수 있는 미러/레지스트리 인자 ---
+ARG NODE_MAJOR=20
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG NODESOURCE_URL=https://deb.nodesource.com/setup_20.x
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    GRADLE_USER_HOME=/opt/gradle-cache \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_AUDIT=false
+
+# git + curl + Node 20 (NodeSource). 폐쇄망에선 apt source 를 사내 미러로 교체할 것.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends git curl ca-certificates bash rsync; \
+    curl -fsSL "${NODESOURCE_URL}" | bash -; \
+    apt-get install -y --no-install-recommends nodejs; \
+    npm config set registry "${NPM_REGISTRY}"; \
+    rm -rf /var/lib/apt/lists/*; \
+    node -v; npm -v; java -version; git --version
+
+WORKDIR /work
+
+# 저장소 전체를 복사(분석기 3종이 형제 디렉터리로 존재해야 함 — sh/_common.sh 가정).
+# .dockerignore 가 web/data·node_modules·.git 등 무거운/생성물 경로를 제외한다.
+COPY . /work
+
+# --- 분석기 사전 빌드(의존성을 이미지에 굽는다) ---
+# spring/nexcore : gradle installDist (~/.gradle 캐시 포함)
+# react          : ts-analyzer npm install + tsc build
+# ai             : npm install
+RUN set -eux; \
+    chmod +x flowmap-spring/gradlew flowmap-nexcore/gradlew sh/*.sh; \
+    ( cd flowmap-spring  && ./gradlew --no-daemon -q installDist ); \
+    ( cd flowmap-nexcore && ./gradlew --no-daemon -q installDist ); \
+    ( cd flowmap-react   && npm run build ); \
+    ( cd flowmap-ai      && npm install --no-audit --no-fund )
+
+# 런타임: 전체 파이프라인(01~14) 실행. 인자로 단계 부분지정 가능 (예: 12 13 14).
+# 산출물 web/data 는 PV 마운트(아래 k8s/40-pipeline-cronjob.yaml)로 영속화한다.
+ENTRYPOINT ["bash", "sh/run-all.sh"]

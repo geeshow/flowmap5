@@ -1,0 +1,21 @@
+# =============================================================================
+# flowmap 정적 웹앱 이미지 (nginx)
+#   - index.html(루트) + web/(style.css·app.js·features·자산) — 빌드 단계 없는 정적 파일.
+#   - 데이터(web/data)는 이미지에 굽지 않는다 → 런타임에 PV(파이프라인 CronJob 산출물)를
+#     /usr/share/nginx/html/web/data 로 마운트한다. (.dockerignore 가 web/data 제외)
+#
+# 폐쇄망: FROM 을 사내 미러로 교체 (예: registry.corp/library/nginx:1.27-alpine).
+# =============================================================================
+ARG BASE_NGINX=nginx:1.27-alpine
+FROM ${BASE_NGINX}
+
+# index.html 은 <base href="web/"> 로 모든 상대경로를 web/ 아래로 해석한다.
+# 따라서 docroot 루트에 index.html, 그 아래 web/ 가 그대로 있어야 한다.
+COPY index.html /usr/share/nginx/html/index.html
+COPY web/       /usr/share/nginx/html/web/
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+
+# web/data 는 비워둔 채(PV 마운트 지점). 최초 seed Job 전엔 비어있을 수 있다.
+RUN mkdir -p /usr/share/nginx/html/web/data
+
+EXPOSE 80

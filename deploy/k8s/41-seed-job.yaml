@@ -1,0 +1,42 @@
+# 최초 1회 — web 배포 전에 데이터를 채워 빈 화면을 방지.
+# 내용은 CronJob 과 동일. `kubectl create -f 41-seed-job.yaml` 로 수동 1회 실행.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flowmap-pipeline-seed
+  namespace: flowmap
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pipeline
+          image: registry.corp.example.com/flowmap/pipeline:latest
+          env:
+            - { name: HOME, value: /work }
+            - { name: TZ, value: Asia/Seoul }
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              set -euo pipefail
+              git config --global credential.helper store
+              install -m600 /secrets/git-credentials /work/.git-credentials
+              cp /config/spring.config  flowmap-spring/flowmap.config
+              cp /config/nexcore.config flowmap-nexcore/flowmap.config
+              cp /config/react.config   flowmap-react/flowmap.config
+              exec bash sh/run-all.sh
+          volumeMounts:
+            - { name: data,      mountPath: /work/web/data }
+            - { name: config,    mountPath: /config,  readOnly: true }
+            - { name: git-creds, mountPath: /secrets, readOnly: true }
+            - { name: sources,   mountPath: /sources }
+          resources:
+            requests: { cpu: "1", memory: 2Gi }
+            limits:   { cpu: "2", memory: 4Gi }
+      volumes:
+        - { name: data,      persistentVolumeClaim: { claimName: flowmap-data } }
+        - { name: config,    configMap: { name: flowmap-pipeline-config } }
+        - { name: git-creds, secret: { secretName: flowmap-git-credentials } }
+        - { name: sources,   emptyDir: {} }

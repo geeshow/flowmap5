@@ -1,0 +1,18 @@
+# 분석 산출물(web/data) 공유 볼륨.
+#   - 파이프라인 CronJob 이 write, web nginx 가 read.
+#   - 둘이 서로 다른 노드에 스케줄될 수 있으므로 ReadWriteMany(RWX) 가 필요하다.
+#     RWX 를 지원하는 사내 스토리지클래스(NFS/CephFS/Trident 등)로 storageClassName 지정.
+#   - RWX 가 불가하면: web 과 cronjob 의 nodeAffinity 를 같은 노드로 고정하고 RWO 사용
+#     (또는 CronJob 이 web Pod 안에 데이터를 rsync 하는 구조로 변경).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flowmap-data
+  namespace: flowmap
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: ""   # ← 사내 RWX 스토리지클래스명으로 채울 것 (예: nfs-client)
