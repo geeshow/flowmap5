@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowmap-web
+  namespace: flowmap
+  labels: { app: flowmap-web }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: flowmap-web }
+  template:
+    metadata:
+      labels: { app: flowmap-web }
+    spec:
+      containers:
+        - name: web
+          # 폐쇄망 사내 레지스트리 경로로 교체.
+          image: registry.corp.example.com/flowmap/web:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            # 파이프라인이 생성한 데이터를 read-only 로 서빙.
+            - name: data
+              mountPath: /usr/share/nginx/html/web/data
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /index.html, port: 80 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: flowmap-data

@@ -458,6 +458,148 @@ body.detail-collapsed #detail, body.detail-collapsed #detail-resizer { display: 
 /* 어플리케이션구조 — 서비스 목록 picker (전체보기와 동일한 진입/1차/2차/제공 컬럼) */
 #columns.structure-picker { display: flex; gap: 48px; align-items: flex-start; padding: 4px 2px; }
 #columns.structure-picker .column { gap: 14px; min-width: 220px; }
+/* ── ① 어플리케이션구조 시작 화면 — 노드 검색 → 호출/피호출 확장 탐험 ───────────── */
+@property --sx-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+#columns.sx-home { display: flex; flex-direction: column; align-items: center; width: 100%; padding: 24px 8px 60px; }
+.sx-hero { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 5vh; }
+/* 떠다니는 레이어 이모지 — 은은한 부유 */
+.sx-orbits { display: flex; gap: 28px; font-size: 24px; opacity: .75; }
+.sx-orbits span { animation: sx-float 3.4s ease-in-out infinite; }
+.sx-orbits span:nth-child(2) { animation-delay: .5s; }
+.sx-orbits span:nth-child(3) { animation-delay: 1s; }
+.sx-orbits span:nth-child(4) { animation-delay: 1.5s; }
+.sx-orbits span:nth-child(5) { animation-delay: 2s; }
+@keyframes sx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+/* 반짝이는 타이틀 */
+.sx-title {
+  font-size: 24px; font-weight: 800; letter-spacing: -.02em;
+  background: linear-gradient(90deg, #312e81, #6366f1, #0ea5e9, #312e81);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: sx-shimmer 5s linear infinite;
+}
+@keyframes sx-shimmer { to { background-position: 250% 0; } }
+/* 회전 글로우 링 검색창 */
+.sx-search {
+  position: relative; z-index: 0; display: flex; align-items: center; gap: 10px;
+  width: min(580px, 82vw); border-radius: 999px; padding: 14px 22px;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, .10);
+}
+/* 음수 z-index 자식은 부모 배경 "위"에 그려지므로, 링(::before) 위에 흰 알약(::after)을 겹쳐 내부를 가린다 */
+.sx-search::before {
+  content: ''; position: absolute; inset: -3px; border-radius: 999px; z-index: -1;
+  background: conic-gradient(from var(--sx-a), #6366f1, #22d3ee, #a78bfa, #f472b6, #6366f1);
+  animation: sx-spin 3.5s linear infinite; filter: blur(5px); opacity: .8;
+}
+.sx-search::after { content: ''; position: absolute; inset: 0; border-radius: 999px; background: #fff; z-index: -1; }
+@keyframes sx-spin { to { --sx-a: 360deg; } }
+.sx-search:focus-within::before { opacity: 1; filter: blur(7px); }
+.sx-lens { font-size: 18px; animation: sx-float 2.8s ease-in-out infinite; }
+#sx-input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 16px; color: var(--text, #0f172a); }
+#sx-input::placeholder { color: #94a3b8; }
+.sx-count { min-height: 18px; font-size: 12px; font-weight: 600; color: var(--text-dim, #64748b); }
+/* 검색 결과 — 뿅뿅 팝 */
+.sx-results { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; max-width: 1240px; margin-top: 22px; }
+.sx-card, #columns.sx-home .node-card { width: 260px; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease; }
+.sx-card:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 10px 26px rgba(99, 102, 241, .22); }
+.sx-pop { animation: sx-pop .5s cubic-bezier(.34, 1.56, .64, 1) backwards; }
+@keyframes sx-pop {
+  0% { opacity: 0; transform: scale(.25) rotate(-4deg); }
+  60% { opacity: 1; transform: scale(1.12) rotate(1.5deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+.sx-idle { margin-top: 30px; font-size: 14px; color: var(--text-dim, #64748b); display: flex; align-items: center; gap: 8px; }
+.sx-idle-emo { font-size: 20px; animation: sx-float 2.6s ease-in-out infinite; }
+.sx-none { animation: sx-shake .45s ease; }
+@keyframes sx-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+/* 호출/피호출 확장 칩 */
+.sx-chips { display: flex; gap: 8px; margin-top: 10px; }
+.sx-chip {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: 11px; font-weight: 700; padding: 5px 8px; border-radius: 8px;
+  border: 1px solid var(--border, #d6dee8); background: #fff; color: #334155; cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+}
+.sx-chip b { color: #4f46e5; }
+.sx-chip:hover:not(:disabled) { transform: translateY(-2px) scale(1.05); box-shadow: 0 4px 12px rgba(99, 102, 241, .28); border-color: #818cf8; background: #eef2ff; }
+.sx-chip:active:not(:disabled) { transform: scale(.94); }
+.sx-chip:disabled { opacity: .35; cursor: default; }
+.sx-chip.done { background: #ecfdf5; border-color: #34d399; color: #047857; }
+.sx-chip.done b { color: #047857; }
+.sx-chip.done::after { content: '✓'; }
+/* 탐험 모드 — 단계(depth) 컬럼 */
+#columns.sx-explore { display: flex; gap: 64px; align-items: flex-start; padding: 8px 4px; }
+#columns.sx-explore .column { gap: 12px; min-width: 244px; }
+.sx-xcard, #columns.sx-explore .node-card { width: 244px; position: relative; }
+/* DB 테이블 "한 줄 얇은 카드" 스타일이 칩 달린 검색/탐험 카드를 찌그러뜨리지 않게 — 블록 카드로 복원 */
+#columns.sx-home .node-card.nc-r-db-table:not(.ov-infra),
+#columns.sx-explore .node-card.nc-r-db-table:not(.ov-infra) { display: block; padding: 10px 12px; }
+#columns.sx-home .node-card.nc-r-db-table:not(.ov-infra) .nc-top,
+#columns.sx-explore .node-card.nc-r-db-table:not(.ov-infra) .nc-top { margin-bottom: 4px; }
+.sx-seed { box-shadow: 0 0 0 2px #6366f1, 0 8px 22px rgba(99, 102, 241, .25); }
+.sx-seed::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 12px; border: 2px solid #6366f1;
+  animation: sx-ping 1.1s cubic-bezier(0, 0, .2, 1) 2; opacity: 0; pointer-events: none;
+}
+@keyframes sx-ping { 0% { opacity: .9; transform: scale(1); } 100% { opacity: 0; transform: scale(1.14); } }
+/* 네트워크 보기 — 서비스 클러스터 + 점 노드 + 관계선 */
+#columns.sx-net { display: block; width: 100%; padding: 4px 2px; }
+#sx-net-wrap { position: relative; }
+#sx-net-svg, #sx-net-nodes { position: absolute; inset: 0; }
+#sx-net-nodes { pointer-events: none; }
+.sxn { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; cursor: grab; pointer-events: auto; will-change: transform; transition: opacity .2s ease; touch-action: none; user-select: none; }
+.sxn.dragging { cursor: grabbing; }
+.sxn.dragging .sxn-dot { transform: scale(1.35); box-shadow: 0 4px 14px rgba(15, 23, 42, .45); }
+.sxn-dot {
+  position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%;
+  border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(15, 23, 42, .35); display: block;
+  transition: transform .15s ease;
+}
+.sxn:hover .sxn-dot { transform: scale(1.35); }
+.sxn-lab {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  font-size: 10px; font-weight: 600; color: #334155; white-space: nowrap;
+  max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(255, 255, 255, .78); padding: 0 4px; border-radius: 4px;
+}
+.sxn:hover .sxn-lab { font-weight: 800; color: #1e293b; max-width: 240px; z-index: 5; }
+.sxn.seed .sxn-dot { width: 20px; height: 20px; left: -10px; top: -10px; box-shadow: 0 0 0 4px rgba(99, 102, 241, .3), 0 1px 6px rgba(15, 23, 42, .4); animation: sx-seed-pulse 2s ease-in-out infinite; }
+@keyframes sx-seed-pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(99, 102, 241, .3), 0 1px 6px rgba(15, 23, 42, .4); } 50% { box-shadow: 0 0 0 8px rgba(99, 102, 241, .15), 0 1px 6px rgba(15, 23, 42, .4); } }
+.sxn.sel .sxn-dot { outline: 2px solid #6366f1; outline-offset: 1.5px; }
+.sxn.dim { opacity: .22; }
+.sxl { opacity: .5; }
+.sxl.async { stroke-dasharray: 6 5; }
+.sxl.hot { opacity: .95; }
+.sxl.dim { opacity: .07; }
+.sxn-cluster-lab { font-size: 11px; font-weight: 700; }
+/* View Mode 세그먼트 토글 */
+.sx-viewmode { display: flex; border: 1px solid var(--border, #d6dee8); border-radius: 999px; overflow: hidden; background: #fff; }
+.sx-vm { font-size: 12px; font-weight: 700; padding: 5px 12px; border: 0; background: transparent; color: #64748b; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.sx-vm.on { background: #4f46e5; color: #fff; }
+.sx-vm:not(.on):hover { background: #eef2ff; color: #4f46e5; }
+/* 상단 전체 확장/축소 버튼 (탐험 모드 브레드크럼 우측) */
+.sx-tools { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+.sx-tool {
+  font-size: 12px; font-weight: 700; padding: 5px 13px; border-radius: 999px;
+  border: 1px solid var(--border, #d6dee8); background: #fff; color: #334155; cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+}
+#sx-expand-all:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(99, 102, 241, .28); border-color: #818cf8; background: #eef2ff; }
+#sx-collapse-all:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(244, 63, 94, .22); border-color: #fda4af; background: #fff1f2; }
+.sx-tool:active { transform: scale(.94); }
+/* 접기 — 확장으로 나왔던 노드가 뿅 하고 사라진다 */
+.sx-pop-out { animation: sx-pop-out .26s ease-in forwards; pointer-events: none; }
+@keyframes sx-pop-out { to { opacity: 0; transform: scale(.2) rotate(3deg); } }
+#connectors { transition: opacity .45s ease; }
+/* 확장 안내 토스트 */
+#sx-toast {
+  position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); z-index: 80;
+  background: #1e293b; color: #fff; font-size: 13px; font-weight: 600; padding: 10px 18px; border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+  animation: sx-toast-in .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+#sx-toast.out { opacity: 0; transition: opacity .5s ease; }
+@keyframes sx-toast-in { from { opacity: 0; transform: translate(-50%, 16px); } }
+
 /* ② {path1}/{path2} 경로 그룹 카드 (감싸는 그리드) */
 #columns.struct-paths { display: flex; flex-wrap: wrap; gap: 14px; align-content: flex-start; width: 100%; max-width: 980px; padding: 4px 2px; }
 .struct-path-card { width: 220px; padding: 12px 14px; border-left: 4px solid var(--c-controller); background: linear-gradient(180deg, #ffffff, #f3f6fa); }

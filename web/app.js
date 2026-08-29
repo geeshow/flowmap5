@@ -582,10 +582,11 @@ function setOverview(on, repo) {
   if (on) { state.structure = false; state.structSvc = null; state.structPath = null; state.structFile = null; state.focus = null; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null; }
   pushUrl(); render(); renderDetail();
 }
-function setStructure(on) {                     // 어플리케이션구조 메뉴 — ① 프로젝트 유형별 서비스 picker
+function setStructure(on) {                     // 어플리케이션구조 메뉴 — ① 노드 검색(탐험 시작) 화면
   state.view = null;
   state.structure = !!on;
   state.structSvc = null; state.structPath = null; state.structFile = null;
+  if (on && typeof sxExitExplore === 'function') sxExitExplore();   // 탐험 중이었으면 검색 화면으로(검색어는 유지)
   if (on) { state.overview = false; state.focus = null; state.service = null; state.infraType = null; state.svcPick = null; state.fromService = null; state.fromOverview = false; state.expanded = false; state.sel = null; }
   pushUrl(); render(); renderDetail();
 }
@@ -2208,7 +2209,7 @@ function makeComponentCard(sup, info, showSvc) {
 function renderStructure() {
   document.getElementById('analysis-bar').classList.add('hidden');
   document.getElementById('flow-canvas').querySelector('#grid-toolbar')?.remove();
-  if (!state.structSvc) renderStructurePicker();
+  if (!state.structSvc) renderStructHome();          // ① 검색 → 호출/피호출 확장 탐험
   else if (!state.structPath) renderStructPaths();
   else if (!state.structFile) renderStructFiles();   // ③ 파일 단위 그래프
   else renderStructFlow();                            // ④ 파일이 쓰는 메서드 구조
@@ -2243,9 +2244,21 @@ function pathKeyOf(node) {
   return '/';
 }
 
-// ① 프로젝트 유형(프론트엔드/백엔드)별 서비스 picker
-const STRUCT_TYPE = { frontend: '🖥 프론트엔드', backend: '⚙️ 백엔드', other: '기타' };
-function renderStructurePicker() {
+// ① 시작 화면 — 노드 검색 → 결과 카드의 호출/피호출 버튼으로 그래프를 확장해 가는 탐험 모드.
+//   SX 는 세션 한정 상태(URL 미보존): mode(search|explore), q(검색어), seed(기준 노드),
+//   depth(노드→기준 대비 단계; 피호출 음수/호출 양수), grown(이미 펼친 "id|방향"), fresh(방금 추가 — 뿅 애니 대상)
+//   addedBy(노드→그 노드를 추가한 "id|방향" — 접기(토글)에서 연쇄 제거 기준)
+//   viewMode(card=카드 컬럼 / net=네트워크 — 서비스 클러스터·관계 위주), netPos(네트워크 좌표 캐시)
+const SX = { mode: 'search', q: '', seed: null, depth: new Map(), grown: new Set(), fresh: new Set(), addedBy: new Map(), note: '', viewMode: 'card', netPos: new Map() };
+function sxExitExplore() { SX.mode = 'search'; SX.seed = null; SX.depth = new Map(); SX.grown = new Set(); SX.fresh = new Set(); SX.addedBy = new Map(); SX.netPos = new Map(); }
+
+function renderStructHome() {
+  if (SX.mode === 'explore' && SX.seed && nodeById.has(SX.seed)) renderStructExplore();
+  else renderStructSearch();
+}
+
+// ①-a 검색 화면 — 입력할 때마다 매칭 노드가 뿅뿅 나타난다
+function renderStructSearch() {
   currentEdges = []; buildCurrentAdj();
   document.getElementById('connectors').innerHTML = '';
 
@@ -2253,29 +2266,500 @@ function renderStructurePicker() {
   bc.style.display = 'flex';
   bc.innerHTML = `<span class="bc-focus">🏗️ 어플리케이션구조</span>`
     + `<span class="bc-sep">·</span>`
-    + `<span class="ov-hint">프로젝트 유형별 서비스 — 선택하면 <b>endpoint 경로({path1}/{path2})</b>로 나눠 보여줍니다</span>`;
-
-  const stats = structStats();
-  const typeOf = {};
-  (MANIFEST?.projects || []).forEach(p => { typeOf[p.name] = p.type; });
+    + `<span class="ov-hint">노드를 검색한 뒤 <b>⬅ 피호출 / 호출 ➡</b> 버튼으로 연결을 따라 그래프를 펼쳐 보세요</span>`;
 
   const colsEl = document.getElementById('columns');
-  colsEl.className = 'structure-picker';
+  colsEl.className = 'sx-home';
+  colsEl.innerHTML = `
+    <div class="sx-hero">
+      <div class="sx-orbits" aria-hidden="true"><span>🖥️</span><span>⚙️</span><span>🗄️</span><span>📡</span><span>🧩</span></div>
+      <div class="sx-title">어떤 노드부터 탐험할까요?</div>
+      <div class="sx-search"><span class="sx-lens">🔍</span><input id="sx-input" type="text" spellcheck="false" autocomplete="off"
+        placeholder="메서드 · 클래스 · 엔드포인트 · 화면 이름 검색" value="${escAttr(SX.q)}"></div>
+      <div class="sx-count" id="sx-count"></div>
+    </div>
+    <div class="sx-results" id="sx-results"></div>`;
+  const input = colsEl.querySelector('#sx-input');
+  let tm = null;
+  input.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { SX.q = input.value; sxRenderResults(); }, 120); });
+  input.addEventListener('keydown', e => {   // 입력 중 Esc = 입력만 비움(화면 이탈 방지)
+    if (e.key === 'Escape' && input.value) { e.stopPropagation(); input.value = ''; SX.q = ''; sxRenderResults(); }
+  });
+  setTimeout(() => input.focus(), 0);
+  sxRenderResults();
+}
+
+// 검색: 공백 분리 AND 매칭 + 필드 가중치(이름 > 클래스 > 엔드포인트 > 기타), 동점은 연결 많은 노드 우선
+function sxSearch(q) {
+  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return null;
+  const out = [];
+  for (const n of NODES) {
+    const name = String(n.screenName || n.method || n.id).toLowerCase();
+    const cls = String(n.fqcn || '').toLowerCase();
+    const ep = String(n.endpoint || n.externalUrl || '').toLowerCase();
+    const etc = (String(n.id) + ' ' + String(n.description || '') + ' ' + String(n.project || '')).toLowerCase();
+    let score = 0;
+    for (const t of terms) {
+      let s = 0;
+      if (name.startsWith(t)) s = 100;
+      else if (name.includes(t)) s = 60;
+      else if (cls.includes(t)) s = 40;
+      else if (ep.includes(t)) s = 32;
+      else if (etc.includes(t)) s = 12;
+      if (!s) { score = 0; break; }
+      score += s;
+    }
+    if (score) out.push({ id: n.id, score, deg: sxDegree(n.id) });
+  }
+  out.sort((a, b) => b.score - a.score || b.deg - a.deg);
+  return out;
+}
+function sxDegree(id) { return (outEdges.get(id) || []).length + (inEdges.get(id) || []).length; }
+// 중복 상대(같은 노드로 여러 엣지)를 제외한 실제 연결 노드 수
+function sxDistinct(id, dir) {
+  const list = dir === 'out' ? (outEdges.get(id) || []) : (inEdges.get(id) || []);
+  const s = new Set();
+  for (const e of list) s.add(dir === 'out' ? e.target : e.source);
+  s.delete(id);
+  return s.size;
+}
+
+const SX_MAX_RESULTS = 36;
+function sxRenderResults() {
+  const box = document.getElementById('sx-results'), cnt = document.getElementById('sx-count');
+  if (!box) return;
+  cardEls.clear();
+  box.innerHTML = '';
+  const hits = sxSearch(SX.q);
+  if (!hits) {           // 빈 검색어 — 대기 상태
+    cnt.textContent = '';
+    box.innerHTML = `<div class="sx-idle"><span class="sx-idle-emo">👀</span> 검색어를 입력하면 노드가 <b>뿅뿅</b> 나타납니다</div>`;
+    return;
+  }
+  if (!hits.length) {
+    cnt.textContent = '0개';
+    box.innerHTML = `<div class="sx-idle sx-none"><span class="sx-idle-emo">🙈</span> "${esc(SX.q.trim())}" 에 맞는 노드가 없어요</div>`;
+    return;
+  }
+  cnt.textContent = `${hits.length}개 발견` + (hits.length > SX_MAX_RESULTS ? ` — 상위 ${SX_MAX_RESULTS}개 표시` : '');
+  hits.slice(0, SX_MAX_RESULTS).forEach((h, i) => {
+    const card = makeCard(h.id, { showProject: true, onActivate: id => sxStart(id, null) });
+    card.classList.add('sx-card', 'sx-pop');
+    card.style.animationDelay = Math.min(i * 45, 700) + 'ms';
+    card.appendChild(sxChipBar(h.id));
+    box.appendChild(card);
+  });
+}
+
+// 호출/피호출 확장 칩 — 검색 결과에선 탐험 시작, 탐험 중엔 그 방향으로 계속 펼치기
+function sxChipBar(id) {
+  const bar = document.createElement('div');
+  bar.className = 'sx-chips';
+  for (const dir of ['in', 'out']) {
+    const n = sxDistinct(id, dir);
+    const b = document.createElement('button');
+    b.className = 'sx-chip ' + dir;
+    b.disabled = !n;
+    b.innerHTML = dir === 'in' ? `⬅ 피호출 <b>${n}</b>` : `호출 <b>${n}</b> ➡`;
+    const grown = SX.mode === 'explore' && SX.grown.has(id + '|' + dir);
+    if (grown) { b.classList.add('done'); b.title = '다시 누르면 펼친 노드들을 접습니다'; }
+    else b.title = dir === 'in' ? '이 노드를 호출하는 노드들을 왼쪽으로 펼칩니다' : '이 노드가 호출하는 노드들을 오른쪽으로 펼칩니다';
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      if (SX.mode !== 'explore') sxStart(id, dir);
+      else if (SX.grown.has(id + '|' + dir)) sxCollapseAndRender(id, dir);   // 토글 — 한번 더 누르면 접기
+      else sxGrowAndRender(id, dir);
+    });
+    bar.appendChild(b);
+  }
+  return bar;
+}
+
+// 탐험 시작 — seed 를 기준(depth 0)으로 놓고, 방향이 주어지면 그쪽 1단계를 바로 펼친다
+function sxStart(id, dir) {
+  SX.mode = 'explore'; SX.seed = id;
+  SX.depth = new Map([[id, 0]]); SX.grown = new Set(); SX.fresh = new Set([id]); SX.addedBy = new Map(); SX.note = '';
+  state.sel = id;
+  if (dir) sxGrow(id, dir);
+  pushUrl(); renderStructure(); renderDetail();
+}
+
+const SX_MAX_GROW = 24;   // 한 번에 펼치는 최대 노드 수 (과밀 방지)
+function sxGrow(id, dir) {   // 데이터만 갱신 — 연결 노드를 기준 대비 ±1 단계 컬럼에 추가
+  const key = id + '|' + dir;
+  if (SX.grown.has(key)) return;
+  SX.grown.add(key);
+  const d0 = SX.depth.get(id) ?? 0, step = dir === 'out' ? 1 : -1;
+  const list = dir === 'out' ? (outEdges.get(id) || []) : (inEdges.get(id) || []);
+  const seen = new Set();
+  let added = 0, skipped = 0;
+  for (const e of list) {
+    const other = dir === 'out' ? e.target : e.source;
+    if (other === id || seen.has(other)) continue;
+    seen.add(other);
+    if (SX.depth.has(other) || !nodeById.has(other)) continue;
+    if (added >= SX_MAX_GROW) { skipped++; continue; }
+    SX.depth.set(other, d0 + step);
+    SX.fresh.add(other);
+    SX.addedBy.set(other, key);   // 접기(토글) 때 이 확장이 데려온 노드를 되짚기 위한 기록
+    added++;
+  }
+  SX.note = skipped ? `연결 노드가 많아 ${added}개만 펼쳤어요 (+${skipped}개 생략)`
+    : (added ? '' : '새로 펼칠 노드가 없어요 — 연결 노드가 모두 이미 화면에 있습니다');
+}
+function sxGrowAndRender(id, dir) { sxGrow(id, dir); state.sel = id; pushUrl(); renderStructure(); renderDetail(); }
+
+// 전체 확장 — 화면의 모든 노드에서 아직 안 펼친 호출·피호출을 한 단계씩 펼친다 (반복 클릭 = 다음 겹)
+const SX_MAX_TOTAL = 300;   // 전체 노드 상한 (폭발 방지)
+function sxExpandAllAndRender() {
+  const before = SX.depth.size;
+  let capped = false;
+  outer: for (const id of [...SX.depth.keys()]) {
+    for (const dir of ['in', 'out']) {
+      if (SX.depth.size >= SX_MAX_TOTAL) { capped = true; break outer; }
+      if (!SX.grown.has(id + '|' + dir) && sxDistinct(id, dir)) sxGrow(id, dir);
+    }
+  }
+  const added = SX.depth.size - before;
+  SX.note = added
+    ? (capped ? `노드가 너무 많아 ${added}개까지만 펼쳤어요 (화면 ${SX.depth.size}개)` : `${added}개 노드를 새로 펼쳤어요`)
+    : '더 펼칠 연결이 없어요 — 모두 확장됐습니다';
+  renderStructure();
+}
+
+// 전체 축소 — 가장 바깥 단계(|depth| 최대) 노드부터 한 단계씩 접는다 (반복 클릭 = 안쪽으로)
+function sxCollapseAllAndRender() {
+  const others = [...SX.depth.keys()].filter(id => id !== SX.seed);
+  if (!others.length) { sxToast('이미 기준 노드만 남아 있어요'); return; }
+  const maxAbs = Math.max(...others.map(id => Math.abs(SX.depth.get(id))));
+  const removed = maxAbs === 0 ? others : others.filter(id => Math.abs(SX.depth.get(id)) === maxAbs);
+  for (const r of removed) {
+    const by = SX.addedBy.get(r);
+    if (by) SX.grown.delete(by);   // 이 노드를 데려온 확장 표시(✓) 해제 → 다시 펼칠 수 있게
+    SX.addedBy.delete(r);
+    SX.grown.delete(r + '|in'); SX.grown.delete(r + '|out');
+    SX.depth.delete(r);
+  }
+  if (state.sel && !SX.depth.has(state.sel)) state.sel = SX.seed;
+  sxToast(maxAbs === 0 ? `기준 주변 ${removed.length}개를 접었어요` : `바깥 ${maxAbs}단계 ${removed.length}개를 접었어요`);
+  const els = removed.map(r => cardEls.get(r)).filter(Boolean);
+  for (const el of els) el.classList.add('sx-pop-out');
+  sxAnimateEdges(260);
+  setTimeout(() => { pushUrl(); renderStructure(); renderDetail(); }, 240);
+}
+
+// 접기 — 그 확장이 추가한 노드를 제거하되, 제거될 노드가 다시 펼친 것들도 연쇄로 접는다
+function sxCollapse(id, dir) {
+  const removed = [];
+  (function drop(key) {
+    if (!SX.grown.has(key)) return;
+    SX.grown.delete(key);
+    for (const [nid, by] of [...SX.addedBy]) {
+      if (by !== key) continue;
+      drop(nid + '|in'); drop(nid + '|out');
+      SX.addedBy.delete(nid);
+      SX.depth.delete(nid);
+      removed.push(nid);
+    }
+  })(id + '|' + dir);
+  return removed;
+}
+function sxCollapseAndRender(id, dir) {
+  const removed = sxCollapse(id, dir);
+  if (state.sel && !SX.depth.has(state.sel)) state.sel = id;   // 선택 노드가 접혀 사라지면 접은 노드로
+  const els = removed.map(r => cardEls.get(r)).filter(Boolean);
+  if (!els.length) { pushUrl(); renderStructure(); renderDetail(); return; }   // 새로 데려온 노드가 없던 확장 — 표시만 해제
+  for (const el of els) el.classList.add('sx-pop-out');   // 뿅 하고 사라지는 애니메이션 후 재렌더
+  sxAnimateEdges(260);                                    // 선이 줄어드는 카드를 따라가게
+  setTimeout(() => { pushUrl(); renderStructure(); renderDetail(); }, 240);
+}
+
+// ①-b 탐험 화면 — 단계(depth)별 컬럼, 새 노드는 뿅뿅 팝 + 커넥터가 따라 자란다
+function renderStructExplore() {
+  const seedN = nodeById.get(SX.seed);
+  const bc = document.getElementById('breadcrumb');
+  bc.style.display = 'flex';
+  bc.innerHTML = `<a class="bc-link" id="bc-struct">🏗️ 어플리케이션구조</a>`
+    + `<span class="bc-sep">›</span>`
+    + `<a class="bc-link" id="bc-sxq">🔍 ${esc(SX.q.trim() || '검색')}</a>`
+    + `<span class="bc-sep">›</span>`
+    + `<span class="bc-focus">✨ ${esc(seedN ? (seedN.screenName || seedN.method || seedN.id) : SX.seed)}</span>`
+    + `<span class="bc-sep">·</span>`
+    + `<span class="ov-hint">${SX.viewMode === 'net'
+        ? '서비스 위치·호출 관계 중심 — 노드를 <b>더블클릭</b>하면 호출·피호출이 함께 펼쳐집니다'
+        : '카드의 <b>⬅ 피호출 / 호출 ➡</b> 버튼으로 연결을 계속 펼칠 수 있어요'}</span>`
+    + `<span class="sx-tools">`
+    + `<span class="sx-viewmode" title="보기 모드">`
+    + `<button id="sx-vm-card" class="sx-vm${SX.viewMode !== 'net' ? ' on' : ''}">▦ 카드</button>`
+    + `<button id="sx-vm-net" class="sx-vm${SX.viewMode === 'net' ? ' on' : ''}">◉ 네트워크</button>`
+    + `</span>`
+    + `<button id="sx-expand-all" class="sx-tool" title="화면의 모든 노드에서 호출·피호출을 한 단계씩 더 펼칩니다">⊞ 전체 확장</button>`
+    + `<button id="sx-collapse-all" class="sx-tool" title="가장 바깥 단계부터 한 단계씩 접습니다">⊟ 전체 축소</button>`
+    + `</span>`;
+  bc.querySelector('#bc-struct').addEventListener('click', () => setStructure(true));
+  bc.querySelector('#bc-sxq').addEventListener('click', () => { SX.mode = 'search'; renderStructure(); });
+  bc.querySelector('#sx-vm-card').addEventListener('click', () => { if (SX.viewMode !== 'card') { SX.viewMode = 'card'; renderStructure(); } });
+  bc.querySelector('#sx-vm-net').addEventListener('click', () => { if (SX.viewMode !== 'net') { SX.viewMode = 'net'; renderStructure(); } });
+  bc.querySelector('#sx-expand-all').addEventListener('click', sxExpandAllAndRender);
+  bc.querySelector('#sx-collapse-all').addEventListener('click', sxCollapseAllAndRender);
+
+  if (SX.viewMode === 'net') { renderStructNet(); return; }   // 네트워크 보기 — 서비스 클러스터 + 관계 위주
+
+  const colsEl = document.getElementById('columns');
+  colsEl.className = 'sx-explore';
   colsEl.innerHTML = '';
-  for (const t of ['frontend', 'backend', 'other']) {
-    const inType = META.projects.filter(s => (typeOf[s] || 'other') === t)
-      .sort((a, b) => stats[b].eps - stats[a].eps || stats[b].nodes - stats[a].nodes);
-    if (!inType.length) continue;
+  const depths = [...new Set(SX.depth.values())].sort((a, b) => a - b);
+  const layerIdx = id => { const i = LAYER_FLOW.indexOf((nodeById.get(id) || {}).layer); return i < 0 ? 99 : i; };
+  let freshIdx = 0;
+  for (const d of depths) {
+    const ids = [...SX.depth.keys()].filter(id => SX.depth.get(id) === d)
+      .sort((a, b) => layerIdx(a) - layerIdx(b) || byNodeName(nodeById.get(a), nodeById.get(b)));
     const col = document.createElement('div');
-    col.className = 'column';
-    const head = document.createElement('div');
-    head.className = 'column-head';
-    head.textContent = STRUCT_TYPE[t];
-    col.appendChild(head);
-    for (const svc of inType)
-      col.appendChild(makeServiceCard(svc, stats[svc], () => setStructSvc(svc)));
+    col.className = 'column sx-col';
+    col.appendChild(mkHead(d === 0 ? '🎯 기준' : d < 0 ? `⬅ 피호출 ${-d}단계` : `호출 ${d}단계 ➡`));
+    for (const id of ids) {
+      const card = makeCard(id, { showProject: true });
+      card.classList.add('sx-xcard');
+      if (id === SX.seed) card.classList.add('sx-seed');
+      if (SX.fresh.has(id)) { card.classList.add('sx-pop'); card.style.animationDelay = Math.min(freshIdx++ * 40, 480) + 'ms'; }
+      card.appendChild(sxChipBar(id));
+      col.appendChild(card);
+    }
     colsEl.appendChild(col);
   }
+  SX.fresh.clear();
+  if (SX.note) { sxToast(SX.note); SX.note = ''; }
+
+  currentEdges = EDGES.filter(e => SX.depth.has(e.source) && SX.depth.has(e.target));
+  buildCurrentAdj();
+  // 커넥터: 팝 애니메이션 동안 매 프레임 다시 그려 카드가 커지는 걸 선이 따라가게 — 끝나면 정리
+  const svg = document.getElementById('connectors');
+  svg.style.opacity = '0';
+  requestAnimationFrame(() => {
+    svg.style.opacity = '';
+    sxAnimateEdges(freshIdx ? Math.min(freshIdx * 40, 480) + 550 : 220);
+  });
+}
+
+// ①-d 네트워크 보기 — 서비스별 클러스터에 노드를 점으로 배치하고 호출 관계(선) 위주로 표시.
+//   가벼운 포스 시뮬레이션(반발 + 엣지 스프링 + 클러스터 앵커 인력)이 rAF 로 굳어간다.
+let sxNetRaf = 0, sxNetHoverId = null;
+function sxNetClusterKey(id) { const n = nodeById.get(id) || {}; return n.project || '인프라 · 외부'; }
+
+function renderStructNet() {
+  cancelAnimationFrame(sxNetRaf);
+  sxNetHoverId = null;
+  currentEdges = []; buildCurrentAdj();
+  document.getElementById('connectors').innerHTML = '';
+
+  const colsEl = document.getElementById('columns');
+  colsEl.className = 'sx-net';
+  colsEl.innerHTML = `<div id="sx-net-wrap"><svg id="sx-net-svg"></svg><div id="sx-net-nodes"></div></div>`;
+  const wrap = colsEl.querySelector('#sx-net-wrap');
+  let W = Math.max(760, colsEl.clientWidth - 8), H = Math.max(520, (window.innerHeight || 800) - 230);
+  // 노드가 많으면 캔버스를 키워 간격 확보(넘치면 스크롤) — 노드당 목표 면적 기준
+  const N = SX.depth.size;
+  const sc = Math.sqrt((N * 26000) / (W * H));
+  if (sc > 1) { W = Math.min(3200, Math.round(W * sc)); H = Math.min(2400, Math.round(H * sc)); }
+  wrap.style.width = W + 'px'; wrap.style.height = H + 'px';
+  const svg = wrap.querySelector('#sx-net-svg');
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+
+  const ids = [...SX.depth.keys()];
+  // 서비스 클러스터 앵커 — 원둘레 배치(서비스 "위치"가 한눈에 들어오게)
+  const byCluster = new Map();
+  for (const id of ids) {
+    const k = sxNetClusterKey(id);
+    if (!byCluster.has(k)) byCluster.set(k, []);
+    byCluster.get(k).push(id);
+  }
+  const ckeys = [...byCluster.keys()].sort();
+  const cx = W / 2, cy = H / 2;
+  const RX = ckeys.length > 1 ? Math.max(220, cx - 230) : 0;   // 타원 배치 — 넓은 화면을 활용해 클러스터를 벌린다
+  const RY = ckeys.length > 1 ? Math.max(140, cy - 120) : 0;
+  const anchors = new Map();
+  ckeys.forEach((k, i) => {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / ckeys.length;
+    anchors.set(k, { x: cx + RX * Math.cos(a), y: cy + RY * Math.sin(a) });
+  });
+  // 좌표: 기존 노드는 유지(확장이 이어지는 느낌), 새 노드는 소속 클러스터 근처에서 시작
+  const pos = SX.netPos;
+  for (const id of ids) if (!pos.has(id)) {
+    const a = anchors.get(sxNetClusterKey(id));
+    pos.set(id, { x: a.x + (Math.random() - .5) * 140, y: a.y + (Math.random() - .5) * 140, vx: 0, vy: 0 });
+  }
+  for (const k of [...pos.keys()]) if (!SX.depth.has(k)) pos.delete(k);
+
+  // 엣지 집계(source|target 단위) — 겹선 대신 count 로 굵기
+  const agg = new Map();
+  for (const e of EDGES) {
+    if (!SX.depth.has(e.source) || !SX.depth.has(e.target) || e.source === e.target) continue;
+    const key = e.source + '|' + e.target;
+    let a = agg.get(key);
+    if (!a) { a = { s: e.source, t: e.target, kc: kindClass(e), n: 0, async: e.async || e.mode === 'async' }; agg.set(key, a); }
+    a.n++;
+  }
+  const links = [...agg.values()];
+  const linked = new Map();   // hover 강조용 이웃
+  for (const l of links) {
+    if (!linked.has(l.s)) linked.set(l.s, new Set());
+    if (!linked.has(l.t)) linked.set(l.t, new Set());
+    linked.get(l.s).add(l.t); linked.get(l.t).add(l.s);
+  }
+
+  // 노드 DOM — 점 + 작은 라벨(정보는 최소한만)
+  const nodesEl = wrap.querySelector('#sx-net-nodes');
+  const nodeEl = new Map();
+  let freshIdx = 0;
+  for (const id of ids) {
+    const n = nodeById.get(id) || {};
+    const el = document.createElement('div');
+    el.className = 'sxn' + (id === SX.seed ? ' seed' : '') + (id === state.sel ? ' sel' : '');
+    const fresh = SX.fresh.has(id);
+    const dotStyle = `background:${(layerColor(n) || '#94a3b8').trim()};`
+      + (fresh ? `animation-delay:${Math.min(freshIdx++ * 40, 480)}ms;` : '');
+    el.innerHTML = `<span class="sxn-dot${fresh ? ' sx-pop' : ''}" style="${dotStyle}"></span>`
+      + `<span class="sxn-lab">${esc(n.screenName || n.method || id)}</span>`;
+    el.title = (n.fqcn || id) + (n.endpoint ? `\n${n.endpoint}` : '') + '\n드래그 = 이동 고정 · 더블클릭 = 호출·피호출 펼치기';
+    el.addEventListener('click', () => {
+      if (el._dragged) { el._dragged = false; return; }   // 드래그 직후의 click 은 선택으로 취급 안 함
+      state.sel = id; renderDetail();
+      nodesEl.querySelectorAll('.sxn.sel').forEach(x => x.classList.remove('sel'));
+      el.classList.add('sel');
+    });
+    el.addEventListener('dblclick', () => { if (el._dragged) return; sxGrow(id, 'in'); sxGrow(id, 'out'); state.sel = id; renderStructure(); renderDetail(); });
+    el.addEventListener('mouseenter', () => { sxNetHoverId = id; draw(); });
+    el.addEventListener('mouseleave', () => { sxNetHoverId = null; draw(); });
+    // 드래그로 노드 이동 — 놓은 자리에 고정(fixed). 4px 미만 움직임은 클릭으로 취급.
+    el.addEventListener('pointerdown', ev => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      const p = pos.get(id), z = state.zoom || 1;
+      const sx0 = ev.clientX, sy0 = ev.clientY, ox = p.x, oy = p.y;
+      let moved = false;
+      el.setPointerCapture(ev.pointerId);
+      const onMove = mv => {
+        const dx = (mv.clientX - sx0) / z, dy = (mv.clientY - sy0) / z;
+        if (!moved && Math.hypot(dx, dy) < 4) return;
+        moved = true; el._dragged = true; el.classList.add('dragging');
+        p.x = Math.max(40, Math.min(W - 40, ox + dx));
+        p.y = Math.max(40, Math.min(H - 40, oy + dy));
+        p.vx = 0; p.vy = 0; p.fixed = true;
+        draw();
+      };
+      const onUp = () => {
+        el.classList.remove('dragging');
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup', onUp);
+        el.removeEventListener('pointercancel', onUp);
+      };
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+      el.addEventListener('pointercancel', onUp);
+    });
+    nodesEl.appendChild(el);
+    nodeEl.set(id, el);
+  }
+  SX.fresh.clear();
+  if (SX.note) { sxToast(SX.note); SX.note = ''; }
+
+  // 클러스터 외곽 + 엣지 + 노드 좌표를 한 프레임에 그림
+  function draw() {
+    const hi = sxNetHoverId, neigh = hi ? (linked.get(hi) || new Set()) : null;
+    let hulls = '', lines = '';
+    const usedKinds = new Set();
+    for (const k of ckeys) {
+      const members = byCluster.get(k);
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      for (const id of members) { const p = pos.get(id); x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+      const pad = 30, hue = k === '인프라 · 외부' ? null : serviceHue(k);
+      const fill = hue == null ? 'rgb(100 116 139 / .07)' : `hsl(${hue} 60% 45% / .08)`;
+      const stroke = hue == null ? 'rgb(100 116 139 / .3)' : `hsl(${hue} 60% 45% / .35)`;
+      const lab = hue == null ? '#64748b' : `hsl(${hue} 55% 38%)`;
+      hulls += `<rect x="${(x0 - pad).toFixed(1)}" y="${(y0 - pad).toFixed(1)}" width="${(x1 - x0 + pad * 2).toFixed(1)}" height="${(y1 - y0 + pad * 2).toFixed(1)}"`
+        + ` rx="20" fill="${fill}" stroke="${stroke}" stroke-dasharray="5 4"/>`
+        + `<text x="${(x0 - pad + 10).toFixed(1)}" y="${(y0 - pad + 17).toFixed(1)}" class="sxn-cluster-lab" fill="${lab}">${esc(k)} · ${members.length}</text>`;
+    }
+    for (const l of links) {
+      const a = pos.get(l.s), b = pos.get(l.t);
+      if (!a || !b) continue;
+      usedKinds.add(l.kc);
+      const st = hi ? (l.s === hi || l.t === hi ? ' hot' : ' dim') : '';
+      const w = Math.min(3.2, 1 + l.n * .3).toFixed(1);
+      lines += `<line class="sxl${st}${l.async ? ' async' : ''}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"`
+        + ` stroke="${KIND_COLOR[l.kc] || '#94a3b8'}" stroke-width="${w}" marker-end="url(#sxarr-${l.kc})"/>`;
+    }
+    let defs = '<defs>';
+    for (const kc of usedKinds)
+      defs += `<marker id="sxarr-${kc}" viewBox="0 0 10 10" refX="17" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${KIND_COLOR[kc] || '#94a3b8'}"/></marker>`;
+    svg.innerHTML = defs + '</defs>' + hulls + lines;
+    for (const [id, el] of nodeEl) {
+      const p = pos.get(id);
+      el.style.transform = `translate(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px)`;
+      el.classList.toggle('dim', !!hi && id !== hi && !(neigh && neigh.has(id)));
+    }
+  }
+
+  // 포스 시뮬레이션 — alpha 가 식으면 정지
+  let alpha = 1;
+  const arr = ids.map(id => pos.get(id));
+  function tick() {
+    if (!document.getElementById('sx-net-wrap')) return;   // 뷰 이탈 시 중단
+    alpha *= .96;
+    for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) {   // 반발
+      let dx = arr[j].x - arr[i].x, dy = arr[j].y - arr[i].y;
+      const d2 = dx * dx + dy * dy || 1;
+      if (d2 > 64000) continue;
+      const d = Math.sqrt(d2), f = Math.min(8, 4200 / d2);
+      dx /= d; dy /= d;
+      arr[i].vx -= dx * f; arr[i].vy -= dy * f;
+      arr[j].vx += dx * f; arr[j].vy += dy * f;
+    }
+    for (const l of links) {   // 엣지 스프링
+      const a = pos.get(l.s), b = pos.get(l.t);
+      if (!a || !b) continue;
+      let dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1, f = (d - 150) * .015;
+      dx /= d; dy /= d;
+      a.vx += dx * f; a.vy += dy * f;
+      b.vx -= dx * f; b.vy -= dy * f;
+    }
+    for (const id of ids) {   // 소속 클러스터 앵커로 인력 + 적분 (드래그로 고정된 노드는 제자리)
+      const p = pos.get(id), a = anchors.get(sxNetClusterKey(id));
+      if (p.fixed) { p.vx = 0; p.vy = 0; continue; }
+      p.vx += (a.x - p.x) * .018; p.vy += (a.y - p.y) * .018;
+      p.vx *= .8; p.vy *= .8;
+      p.x = Math.max(40, Math.min(W - 40, p.x + p.vx * alpha));
+      p.y = Math.max(40, Math.min(H - 40, p.y + p.vy * alpha));
+    }
+    draw();
+    if (alpha > .02) sxNetRaf = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+let sxEdgeUntil = 0, sxEdgeLoop = false;
+function sxAnimateEdges(ms) {
+  sxEdgeUntil = performance.now() + ms;
+  if (sxEdgeLoop) return;
+  sxEdgeLoop = true;
+  (function loop() {
+    if (!document.querySelector('#columns.sx-explore')) { sxEdgeLoop = false; return; }   // 뷰 이탈 시 중단
+    drawConnectors();
+    if (performance.now() < sxEdgeUntil) requestAnimationFrame(loop);
+    else { sxEdgeLoop = false; applyHighlight(); }
+  })();
+}
+
+function sxToast(msg) {
+  document.getElementById('sx-toast')?.remove();
+  const t = document.createElement('div');
+  t.id = 'sx-toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('out'), 2600);
+  setTimeout(() => t.remove(), 3200);
 }
 
 // ② 선택 서비스의 endpoint 를 {path1}/{path2} 그룹 카드로
@@ -3641,6 +4125,7 @@ function onKeydown(e) {
     if (state.structPath) { setStructSvc(state.structSvc); return; }   // 흐름 → 경로 그룹
     if (state.structSvc) { setStructure(true); return; }               // 경로 그룹 → picker
     if (state.service || state.infraType) { setOverview(true); return; }
+    if (state.structure && SX.mode === 'explore') { SX.mode = 'search'; render(); return; }   // 탐험 → 검색 결과로
     if (state.structure) { setStructure(false); return; }
     if (state.focus && state.fromService && state.fromSvcPath) { setSvcPath(state.fromService, state.fromSvcPath, state.fromSvcRepo); return; }
     if (state.focus && state.fromOverview) { setOverview(true); return; }
@@ -3656,6 +4141,7 @@ function onKeydown(e) {
     if (state.structPath) { e.preventDefault(); setStructSvc(state.structSvc); return; }
     if (state.structSvc) { e.preventDefault(); setStructure(true); return; }
     if (state.service || state.infraType) { e.preventDefault(); setOverview(true); return; }
+    if (state.structure && SX.mode === 'explore') { e.preventDefault(); SX.mode = 'search'; render(); return; }   // 탐험 → 검색 결과로
     if (state.structure) { e.preventDefault(); setStructure(false); return; }
     if (state.focus && state.fromService && state.fromSvcPath) { e.preventDefault(); setSvcPath(state.fromService, state.fromSvcPath, state.fromSvcRepo); return; }
     if (state.focus && state.fromOverview) { e.preventDefault(); setOverview(true); return; }
